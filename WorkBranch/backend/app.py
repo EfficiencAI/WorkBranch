@@ -1,2 +1,5 @@
 from fastapi import FastAPI
-app = FastAPI(port=8000)
+from controller.settings_api import router as settings_router
+
+app = FastAPI()
+app.include_router(settings_router)
