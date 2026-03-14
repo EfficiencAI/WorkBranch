@@ -1,13 +1,16 @@
-class Result:
-    def __init__(self, code: int, message: str = "", data: object = None):
-        self.code = code
-        self.message = message
-        self.data = data or None
+from typing import Any, Optional
+from pydantic import BaseModel
 
-    def success(self,code:int = 200, message: str = "Success", data: object = None) -> 'Result':
-        self = self.__init__(code, message, data)
-        return self
 
-    def error(self, code: int = 500, message: str = "Error", data: object = None) -> 'Result':
-        self = self.__init__(code, message, data)
-        return self
+class Result(BaseModel):
+    code: int = 200
+    message: str = "Success"
+    data: Optional[Any] = None
+
+    @classmethod
+    def success(cls, data: Any = None, message: str = "Success") -> "Result":
+        return cls(code=200, message=message, data=data)
+
+    @classmethod
+    def error(cls, message: str = "Error", code: int = 500, data: Any = None) -> "Result":
+        return cls(code=code, message=message, data=data)

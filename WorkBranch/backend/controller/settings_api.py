@@ -1,29 +1,56 @@
-from typing import Annotated
-from fastapi import Depends
-from backend.app import app
-from backend.data.settings import Settings
-from backend.singleton import get_settings
-from backend.controller.VO import Result
+from typing import Annotated, Optional
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from singleton import get_settings_service
+from service.settings_service.settings_service import SettingsService
+from controller.VO.result import Result
+
+router = APIRouter(prefix="/settings", tags=["settings"])
 
 
-class SettingsController:
-    @app.get("/setting")
-    def get_setting(settings: Annotated[Settings, Depends(get_settings)]) -> Result:
-        return Result.success(settings.load_all_data())
+class UpdateSettingBody(BaseModel):
+    key: str
+    value: str
 
-    @app.post("/setting")
-    def save_setting(key: str, value: str, settings: Annotated[Settings, Depends(get_settings)]) -> Result:
-        return Result.success(settings.save_data(key, value))
 
-    @app.delete("/setting")
-    def delete_setting(key: str, settings: Annotated[Settings, Depends(get_settings)]) -> Result:
-        return Result.success(settings.delete_data(key))
+@router.get("")
+def get_settings(
+    key: Optional[str] = None,
+    service: SettingsService = Depends(get_settings_service),
+) -> Result:
+    """不传 key 返回全部设置；传 key 返回对应值，支持 'groupA:settingA' 格式。"""
+    if key:
+        try:
+            return Result.success(data=service.get(key))
+        except KeyError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+    return Result.success(data=service.get_all())
 
-    @app.put("/setting")
-    def update_setting(key: str, value: str, settings: Annotated[Settings, Depends(get_settings)]) -> Result:
-        return Result.success(settings.update_data(key, value))
 
-    @app.post("/setting/reload")
-    def reload_setting(settings: Annotated[Settings, Depends(get_settings)]) -> Result:
-        settings.relaod_data()
-        return Result.success()
+@router.put("")
+def update_setting(
+    body: UpdateSettingBody,
+    service: SettingsService = Depends(get_settings_service),
+) -> Result:
+    """修改单个顶层设置项。"""
+    service.update_setting(body.key, body.value)
+    return Result.success()
+
+
+@router.patch("")
+def update_settings(
+    updates: dict,
+    service: SettingsService = Depends(get_settings_service),
+) -> Result:
+    """批量修改设置项。"""
+    service.update_settings(updates)
+    return Result.success()
+
+
+@router.post("/reload")
+def reload_settings(
+    service: SettingsService = Depends(get_settings_service),
+) -> Result:
+    """从文件重新加载设置。"""
+    service.reload()
+    return Result.success()
