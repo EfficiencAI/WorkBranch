@@ -1,12 +1,19 @@
 from data.file_storage_system import FileStorageSystem
 
 
+DEFAULT_SETTINGS = {
+    "database": {
+        "path": "workbranch.db"
+    }
+}
+
+
 class SettingsService:
     """设置服务层：解析配置文件并对外提供读取与修改接口。"""
 
     def __init__(self):
         self._fs = FileStorageSystem()
-        self._fs.ensure_setting_file({})
+        self._fs.ensure_setting_file(DEFAULT_SETTINGS)
         self._reload()
 
     # ── 私有工具 ────────────────────────────────────────────────────────────────
