@@ -2,12 +2,8 @@ import json
 from data.file_storage_system import FileStorageSystem, SETTING_FILE_PATH
 
 
-class SettingsParseService:
-    """解析并管理应用设置。
-
-    初始化时若设置文件不存在会自动创建并写入默认值；
-    其他服务通过 get() 读取配置，无需直接操作文件。
-    """
+class SettingsParse:
+    """设置数据访问层：负责设置文件的读取、解析与持久化。"""
 
     def __init__(self):
         FileStorageSystem().ensure_setting_file({})
@@ -23,7 +19,7 @@ class SettingsParseService:
         with open(SETTING_FILE_PATH, "w", encoding="utf-8") as f:
             json.dump(self._data, f, indent=4, ensure_ascii=False)
 
-    # ── 读取设置 ────────────────────────────────────────────────────────────────
+    # ── 读取 ────────────────────────────────────────────────────────────────────
 
     def get(self, key: str) -> str:
         """读取设置项，支持用 ':' 访问嵌套层级。
@@ -43,28 +39,24 @@ class SettingsParseService:
             node = node[part]
         return node
 
-    # ── 修改设置 ────────────────────────────────────────────────────────────────
+    def get_all(self) -> dict:
+        """返回所有设置项的副本。"""
+        return dict(self._data)
 
-    def update_setting(self, key: str, value) -> bool:
-        """修改单个顶层设置项并持久化到文件。"""
+    # ── 写入 ────────────────────────────────────────────────────────────────────
+
+    def update(self, key: str, value) -> bool:
+        """修改单个顶层设置项并持久化。"""
         self._data[key] = value
         self._persist()
         return True
 
-    def update_settings(self, updates: dict) -> bool:
-        """批量修改顶层设置项并持久化到文件。"""
+    def update_batch(self, updates: dict) -> bool:
+        """批量修改顶层设置项并持久化。"""
         self._data.update(updates)
         self._persist()
         return True
 
     def reload(self):
-        """从文件重新加载设置（外部修改文件后调用）。"""
+        """从文件重新加载设置。"""
         self._reload()
-
-    def get_all(self) -> dict:
-        """返回所有设置项的副本。"""
-        return dict(self._data)
-    
-if __name__ == "__main__":
-    service = SettingsParseService()
-    print(service.get_all())
