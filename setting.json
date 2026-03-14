@@ -1,4 +1,8 @@
 {
+    "groupA": {
+        "settingA": "valueA",
+        "settingB": "valueB"
+    },
     "apikey": "your_api_key_here",
     "base_url": "https://api.openai.com/v1",
     "model": "gpt-3.5-turbo",
