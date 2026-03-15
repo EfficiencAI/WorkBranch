@@ -4,6 +4,13 @@ from data.file_storage_system import FileStorageSystem
 DEFAULT_SETTINGS = {
     "database": {
         "path": "workbranch.db"
+    },
+    "llm": {
+        "api_key": "",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "max_tokens": 4096
     }
 }
 
