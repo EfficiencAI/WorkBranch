@@ -9,7 +9,7 @@ from service.user_service.user import UserService
 from service.user_service.session_history import SessionHistory
 from service.session_service.session import SessionService
 from service.session_service.conversation_creator import ConversationCreator
-from service.agent_service.agent_service import AgentService
+from service.agent_service.agent_service import AgentService, ConversationStatus, Conversation
 from service.agent_service.workspace import WorkspaceService
 from service.agent_service.llm_service import LLMService
 from service.settings_service.settings_service import SettingsService
