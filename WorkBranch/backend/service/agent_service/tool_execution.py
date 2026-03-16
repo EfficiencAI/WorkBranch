@@ -1,4 +1,4 @@
-from typing import TypedDict, List, Optional, Literal
+from typing import TypedDict, List, Optional, Literal, Callable
 from langgraph.graph import StateGraph, END
 
 
@@ -19,9 +19,19 @@ class ToolExecutionState(TypedDict):
     error: Optional[str]
     doom_loop_detected: bool
     previous_calls: List[ToolCall]
+    task_description: Optional[str]
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
+
+THINK_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。
+
+请针对当前任务进行思考和执行：
+1. 分析任务目标
+2. 思考如何完成
+3. 给出你的思考过程和结论
+
+请简洁清晰地回答，不要过于冗长。"""
 
 
 def check_permission(state: ToolExecutionState, workspace_service=None) -> dict:
@@ -77,16 +87,18 @@ def deny_execution(state: ToolExecutionState) -> dict:
     return {"error": error, "result": None}
 
 
-def execute_tool(state: ToolExecutionState, workspace_service=None) -> dict:
+def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
     """执行工具"""
     print("[ToolExec] 执行工具...")
     
     tool_name = state["tool_name"]
     tool_args = state["tool_args"].copy()
     workspace_id = state["workspace_id"]
+    task_description = state.get("task_description", "")
     
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 参数: {tool_args}")
+    print(f"[ToolExec] 任务描述: {task_description}")
 
     if tool_name in FILE_TOOLS and workspace_service:
         path_key = "path" if "path" in tool_args else "file_path"
@@ -102,6 +114,27 @@ def execute_tool(state: ToolExecutionState, workspace_service=None) -> dict:
                 elif "directory" in tool_args:
                     tool_args["directory"] = resolved_path
                 print(f"[ToolExec] 路径已解析: {resolved_path}")
+    
+    if tool_name == "default_tool":
+        if llm_service:
+            print("[ToolExec] 调用 LLM 进行思考...")
+            try:
+                prompt = f"当前任务: {task_description}\n\n请思考并执行这个任务。"
+                messages = [{"role": "user", "content": prompt}]
+                
+                result = ""
+                for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, token_callback):
+                    result += chunk
+                
+                print(f"[ToolExec] 思考完成")
+                return {"result": result, "error": None}
+            except Exception as e:
+                print(f"[ToolExec] LLM 调用失败: {e}")
+                return {"result": f"思考失败: {e}", "error": str(e)}
+        else:
+            result = f"思考任务: {task_description} (LLM 服务未配置)"
+            print(f"[ToolExec] 结果: {result}")
+            return {"result": result, "error": None}
     
     result = f"工具 {tool_name} 执行成功"
     print(f"[ToolExec] 结果: {result}")
@@ -130,7 +163,7 @@ def check_doom_loop(state: ToolExecutionState) -> dict:
     return {"doom_loop_detected": False}
 
 
-def create_tool_execution_subgraph(workspace_service=None):
+def create_tool_execution_subgraph(workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
     """创建工具执行子图"""
     graph = StateGraph(ToolExecutionState)
     
@@ -138,7 +171,7 @@ def create_tool_execution_subgraph(workspace_service=None):
         return check_permission(state, workspace_service)
     
     def execute_tool_node(state: ToolExecutionState) -> dict:
-        return execute_tool(state, workspace_service)
+        return execute_tool(state, workspace_service, llm_service, token_callback)
     
     graph.add_node("check_permission", check_permission_node)
     graph.add_node("ask_user", ask_user)
@@ -167,7 +200,10 @@ def run_tool_execution(
     tool_args: dict,
     workspace_id: str,
     previous_calls: List[ToolCall] = None,
-    workspace_service=None
+    workspace_service=None,
+    llm_service=None,
+    token_callback: Optional[Callable[[str], None]] = None,
+    task_description: str = ""
 ) -> dict:
     """
     运行工具执行子图
@@ -178,6 +214,9 @@ def run_tool_execution(
         workspace_id: 工作区ID
         previous_calls: 之前的工具调用记录
         workspace_service: 工作区服务实例
+        llm_service: LLM 服务实例
+        token_callback: 流式输出回调
+        task_description: 任务描述（用于思考工具）
         
     Returns:
         执行结果
@@ -195,9 +234,10 @@ def run_tool_execution(
         "error": None,
         "doom_loop_detected": False,
         "previous_calls": previous_calls or [],
+        "task_description": task_description,
     }
     
-    graph = create_tool_execution_subgraph(workspace_service)
+    graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback)
     result = graph.invoke(initial_state)
     
     print("="*60)

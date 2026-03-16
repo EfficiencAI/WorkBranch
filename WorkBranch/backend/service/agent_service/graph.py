@@ -61,7 +61,7 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
     return plan_node
 
 
-def create_build_flow(llm_service=None):
+def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
     """创建 Build 流程"""
     def build_flow(state: AgentState) -> dict:
         print("\n" + "="*60)
@@ -86,7 +86,10 @@ def create_build_flow(llm_service=None):
             tool_name=tool_name,
             tool_args=tool_args,
             workspace_id=state["workspace_id"],
-            previous_calls=tool_history
+            previous_calls=tool_history,
+            llm_service=llm_service,
+            token_callback=token_callback,
+            task_description=task.get("description", "")
         )
         
         if tool_result.get("error"):
@@ -135,7 +138,7 @@ def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str],
     graph = StateGraph(AgentState)
     
     graph.add_node("plan_flow", create_plan_node(llm_service, token_callback))
-    graph.add_node("build_flow", create_build_flow(llm_service))
+    graph.add_node("build_flow", create_build_flow(llm_service, token_callback))
     graph.add_node("compaction", compaction_node)
     
     graph.set_conditional_entry_point(check_state, {
