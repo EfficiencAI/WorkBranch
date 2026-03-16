@@ -1,4 +1,4 @@
-from typing import Literal, List
+from typing import Literal, List, Callable, Optional
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 from .state import AgentState, Task
@@ -53,7 +53,7 @@ def phase1_understand(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def phase2_design(state: AgentState, llm_service=None) -> dict:
+def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
     """Phase 2: 生成计划"""
     print("\n" + "="*60)
     print("[Plan] Phase 2/5: 生成计划")
@@ -90,7 +90,7 @@ def phase2_design(state: AgentState, llm_service=None) -> dict:
             messages = [{"role": "user", "content": prompt}]
             
             full_response = ""
-            for chunk in llm_service.chat_stream(messages, PLAN_SYSTEM_PROMPT):
+            for chunk in llm_service.chat_stream(messages, PLAN_SYSTEM_PROMPT, token_callback):
                 full_response += chunk
             
             plan = parse_plan_from_text(full_response)
@@ -184,14 +184,14 @@ def phase5_exit(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def create_plan_subgraph(llm_service=None):
+def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
     """创建 Plan 子图"""
     
     def _phase1(state):
         return phase1_understand(state, llm_service)
     
     def _phase2(state):
-        return phase2_design(state, llm_service)
+        return phase2_design(state, llm_service, token_callback)
     
     def _phase3(state):
         return phase3_review(state, llm_service)
@@ -220,13 +220,13 @@ def create_plan_subgraph(llm_service=None):
     return graph.compile()
 
 
-def run_plan_flow(state: AgentState, llm_service=None) -> dict:
+def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
     """运行 Plan 流程"""
     print("\n" + "="*60)
     print("[Flow] Plan 流程启动")
     print("="*60)
     
-    graph = create_plan_subgraph(llm_service)
+    graph = create_plan_subgraph(llm_service, token_callback)
     result = graph.invoke(state)
     
     print("="*60)

@@ -14,6 +14,9 @@ DEFAULT_SETTINGS = {
     },
     "workspace": {
         "base_dir": "workspaces"
+    },
+    "mq": {
+        "max_size": 1000
     }
 }
 

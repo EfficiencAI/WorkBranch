@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Callable, Optional
 from langgraph.graph import StateGraph, END
 from .state import AgentState, ToolCall
 from .plan import run_plan_flow
@@ -34,7 +34,7 @@ def check_state(state: AgentState) -> Literal["plan", "build", "compaction", "do
     return "done"
 
 
-def create_plan_node(llm_service=None):
+def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
     """创建 Plan 节点"""
     def plan_node(state: AgentState) -> dict:
         is_replan = state.get("plan_failed", False)
@@ -45,7 +45,7 @@ def create_plan_node(llm_service=None):
             print(f"[Graph] 重新规划 (第 {replan_count + 1} 次)，重置状态")
             print("="*60)
         
-        result = run_plan_flow(state, llm_service)
+        result = run_plan_flow(state, llm_service, token_callback)
         
         if is_replan:
             result["tool_history"] = []
@@ -130,11 +130,11 @@ def compaction_node(state: AgentState) -> dict:
     return {}
 
 
-def create_main_graph(llm_service=None):
+def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
     """创建主 Graph"""
     graph = StateGraph(AgentState)
     
-    graph.add_node("plan_flow", create_plan_node(llm_service))
+    graph.add_node("plan_flow", create_plan_node(llm_service, token_callback))
     graph.add_node("build_flow", create_build_flow(llm_service))
     graph.add_node("compaction", compaction_node)
     
@@ -164,7 +164,7 @@ def create_main_graph(llm_service=None):
     return graph.compile()
 
 
-def run_graph(user_message: str, workspace_id: str, llm_service=None) -> dict:
+def run_graph(user_message: str, workspace_id: str, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
     """运行主 Graph"""
     print("\n" + "="*60)
     print("[Graph] 主 Graph 启动")
@@ -189,7 +189,7 @@ def run_graph(user_message: str, workspace_id: str, llm_service=None) -> dict:
             "replan_count": 0,
         }
     
-    graph = create_main_graph(llm_service)
+    graph = create_main_graph(llm_service, token_callback)
     final_state = graph.invoke(initial_state)
     
     persistence.save(workspace_id, final_state)

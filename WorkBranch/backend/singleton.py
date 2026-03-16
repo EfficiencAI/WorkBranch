@@ -13,6 +13,7 @@ from service.agent_service.agent_service import AgentService, ConversationStatus
 from service.agent_service.workspace import WorkspaceService
 from service.agent_service.llm_service import LLMService
 from service.settings_service.settings_service import SettingsService
+from service.session_service.mq import MessageQueue
 from data.user_info_dao import UserInfoDAO
 from data.conversation_dao import ConversationDAO
 
@@ -53,7 +54,8 @@ def get_conversation_creator() -> ConversationCreator:
 def get_agent_service() -> AgentService:
     llm = get_llm_service()
     ws = get_workspace_service()
-    return AgentService(ws, llm)
+    mq = get_message_queue()
+    return AgentService(ws, llm, mq)
 
 @lru_cache(maxsize=1)
 def get_workspace_service() -> WorkspaceService:
@@ -77,6 +79,11 @@ def get_user_info_dao() -> UserInfoDAO:
 def get_conversation_dao() -> ConversationDAO:
     return ConversationDAO()
 
+@lru_cache(maxsize=1)
+def get_message_queue() -> MessageQueue:
+    settings = get_settings_service()
+    return MessageQueue(settings)
+
 
 def clear_all_singletons():
     """清除所有单例缓存（例如测试用例 teardown 时调用）"""
@@ -93,3 +100,4 @@ def clear_all_singletons():
     get_llm_service.cache_clear()
     get_user_info_dao.cache_clear()
     get_conversation_dao.cache_clear()
+    get_message_queue.cache_clear()

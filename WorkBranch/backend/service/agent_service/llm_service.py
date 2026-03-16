@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Generator
+from typing import List, Dict, Any, Optional, Generator, Callable, Awaitable
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 
@@ -91,7 +91,8 @@ class LLMService:
     def chat_stream(
         self,
         messages: List[Dict[str, str]],
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        stream_callback: Optional[Callable[[str], None]] = None
     ) -> Generator[str, None, None]:
         """
         流式聊天请求
@@ -99,6 +100,7 @@ class LLMService:
         Args:
             messages: 消息列表
             system_prompt: 系统提示词
+            stream_callback: 可选的流式回调函数，每个 token 调用一次
             
         Yields:
             AI 响应文本片段
@@ -128,6 +130,8 @@ class LLMService:
         for chunk in llm.stream(lc_messages):
             if chunk.content:
                 print(chunk.content, end="", flush=True)
+                if stream_callback:
+                    stream_callback(chunk.content)
                 yield chunk.content
         
         print()

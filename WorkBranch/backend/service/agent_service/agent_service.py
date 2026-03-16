@@ -1,6 +1,6 @@
 import uuid
 import asyncio
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
@@ -32,11 +32,12 @@ class Conversation:
 class AgentService:
     """Agent 服务：管理多个并发对话"""
 
-    def __init__(self, workspace_service: WorkspaceService = None, llm_service=None):
+    def __init__(self, workspace_service: WorkspaceService = None, llm_service=None, message_queue=None):
         if workspace_service is None:
             workspace_service = WorkspaceService()
         self.ws = workspace_service
         self._llm_service = llm_service
+        self._message_queue = message_queue
         self._conversations: Dict[str, Conversation] = {}
         self._lock = asyncio.Lock()
 
@@ -45,6 +46,13 @@ class AgentService:
             from .llm_service import get_llm_service
             self._llm_service = get_llm_service()
         return self._llm_service
+
+    def _get_message_queue(self):
+        if self._message_queue is None:
+            from service.session_service.mq import MessageQueue
+            from service.settings_service.settings_service import SettingsService
+            self._message_queue = MessageQueue(SettingsService())
+        return self._message_queue
 
     def _generate_id(self) -> str:
         return str(uuid.uuid4())
@@ -135,6 +143,22 @@ class AgentService:
         异步执行 Agent（将同步 run_graph 包装为异步）
         """
         llm_service = self._get_llm_service()
+        mq = self._get_message_queue()
+        
+        conv = self._conversations.get(conversation_id)
+        session_id = conv.session_id if conv else ""
+        
+        from service.session_service.mq import StreamMessage, MessageType
+        
+        def token_callback(token: str):
+            msg = StreamMessage(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                content=token,
+                message_type=MessageType.TEXT
+            )
+            mq.publish_sync(msg)
         
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -142,8 +166,18 @@ class AgentService:
             run_graph,
             message,
             workspace_id,
-            llm_service
+            llm_service,
+            token_callback
         )
+        
+        done_msg = StreamMessage(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            workspace_id=workspace_id,
+            content="",
+            message_type=MessageType.DONE
+        )
+        mq.publish_sync(done_msg)
         
         if stream_callback:
             await stream_callback(result)
