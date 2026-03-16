@@ -20,15 +20,20 @@ class ToolExecutionState(TypedDict):
     doom_loop_detected: bool
     previous_calls: List[ToolCall]
     task_description: Optional[str]
+    previous_results: List[str]
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
 
 THINK_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。
 
-请针对当前任务进行思考和执行：
+你会收到：
+1. 当前任务描述
+2. 之前任务的执行结果（如果有）
+
+请针对当前任务进行思考：
 1. 分析任务目标
-2. 思考如何完成
+2. 结合之前的执行结果（如果有）
 3. 给出你的思考过程和结论
 
 请简洁清晰地回答，不要过于冗长。"""
@@ -95,10 +100,12 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     tool_args = state["tool_args"].copy()
     workspace_id = state["workspace_id"]
     task_description = state.get("task_description", "")
+    previous_results = state.get("previous_results", [])
     
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 参数: {tool_args}")
     print(f"[ToolExec] 任务描述: {task_description}")
+    print(f"[ToolExec] 之前结果数量: {len(previous_results)}")
 
     if tool_name in FILE_TOOLS and workspace_service:
         path_key = "path" if "path" in tool_args else "file_path"
@@ -115,11 +122,21 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                     tool_args["directory"] = resolved_path
                 print(f"[ToolExec] 路径已解析: {resolved_path}")
     
-    if tool_name == "default_tool":
+    if tool_name == "thinking":
         if llm_service:
             print("[ToolExec] 调用 LLM 进行思考...")
             try:
-                prompt = f"当前任务: {task_description}\n\n请思考并执行这个任务。"
+                context_parts = [f"当前任务: {task_description}"]
+                
+                if previous_results:
+                    context_parts.append("\n--- 之前任务的执行结果 ---")
+                    for i, prev_result in enumerate(previous_results, 1):
+                        truncated = prev_result[:500] + "..." if len(prev_result) > 500 else prev_result
+                        context_parts.append(f"任务{i}结果:\n{truncated}")
+                    context_parts.append("---\n")
+                
+                context_parts.append("请思考并执行当前任务。")
+                prompt = "\n".join(context_parts)
                 messages = [{"role": "user", "content": prompt}]
                 
                 result = ""
@@ -203,7 +220,8 @@ def run_tool_execution(
     workspace_service=None,
     llm_service=None,
     token_callback: Optional[Callable[[str], None]] = None,
-    task_description: str = ""
+    task_description: str = "",
+    previous_results: List[str] = None
 ) -> dict:
     """
     运行工具执行子图
@@ -217,6 +235,7 @@ def run_tool_execution(
         llm_service: LLM 服务实例
         token_callback: 流式输出回调
         task_description: 任务描述（用于思考工具）
+        previous_results: 之前任务的执行结果（短期记忆）
         
     Returns:
         执行结果
@@ -235,6 +254,7 @@ def run_tool_execution(
         "doom_loop_detected": False,
         "previous_calls": previous_calls or [],
         "task_description": task_description,
+        "previous_results": previous_results or [],
     }
     
     graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback)

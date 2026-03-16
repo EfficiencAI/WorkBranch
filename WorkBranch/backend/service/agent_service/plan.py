@@ -22,7 +22,7 @@ PLAN_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。你的任�
 - write_file: 写入文件
 - search_code: 搜索代码
 - execute_command: 执行命令
-- default_tool: 默认工具（用于分析、设计等非工具操作）
+- thinking: 思考工具（用于分析、设计等需要思考的任务）
 
 请直接输出任务列表，不要有多余的解释。"""
 

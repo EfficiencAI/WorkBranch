@@ -17,6 +17,10 @@ DEFAULT_SETTINGS = {
     },
     "mq": {
         "max_size": 1000
+    },
+    "agent": {
+        "memory_mode": "accumulate",
+        "memory_window_size": 3
     }
 }
 

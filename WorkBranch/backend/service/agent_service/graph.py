@@ -1,4 +1,4 @@
-from typing import Literal, Callable, Optional
+from typing import Literal, Callable, Optional, List
 from langgraph.graph import StateGraph, END
 from .state import AgentState, ToolCall
 from .plan import run_plan_flow
@@ -10,6 +10,30 @@ MAX_REPLAN_COUNT = 3
 MAX_MESSAGES = 10
 
 persistence = PersistenceService()
+
+
+def get_previous_results(
+    tool_history: List[ToolCall],
+    memory_mode: str = "accumulate",
+    window_size: int = 3
+) -> List[str]:
+    """
+    根据配置获取之前任务的结果
+    
+    Args:
+        tool_history: 工具调用历史
+        memory_mode: 记忆模式 - "accumulate" 累加所有结果, "sliding" 滑动窗口
+        window_size: 滑动窗口大小（仅 sliding 模式生效）
+        
+    Returns:
+        之前任务的结果列表
+    """
+    all_results = [call.get("result", "") for call in tool_history if call.get("result")]
+    
+    if memory_mode == "sliding":
+        return all_results[-window_size:] if window_size > 0 else []
+    
+    return all_results
 
 
 def check_state(state: AgentState) -> Literal["plan", "build", "compaction", "done"]:
@@ -61,7 +85,7 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
     return plan_node
 
 
-def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
+def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3):
     """创建 Build 流程"""
     def build_flow(state: AgentState) -> dict:
         print("\n" + "="*60)
@@ -78,9 +102,12 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         task = plan[step]
         print(f"[Build] 执行任务 {step + 1}/{len(plan)}: {task['description']}")
         
-        tool_name = task.get("tool") or "default_tool"
+        tool_name = task.get("tool") or "thinking"
         tool_args = task.get("args") or {}
         tool_history = state.get("tool_history", [])
+        previous_results = get_previous_results(tool_history, memory_mode, window_size)
+        
+        print(f"[Build] 记忆模式: {memory_mode}, 传递 {len(previous_results)} 个之前结果")
         
         tool_result = run_tool_execution(
             tool_name=tool_name,
@@ -89,7 +116,8 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
             previous_calls=tool_history,
             llm_service=llm_service,
             token_callback=token_callback,
-            task_description=task.get("description", "")
+            task_description=task.get("description", ""),
+            previous_results=previous_results
         )
         
         if tool_result.get("error"):
@@ -133,12 +161,12 @@ def compaction_node(state: AgentState) -> dict:
     return {}
 
 
-def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
+def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3):
     """创建主 Graph"""
     graph = StateGraph(AgentState)
     
     graph.add_node("plan_flow", create_plan_node(llm_service, token_callback))
-    graph.add_node("build_flow", create_build_flow(llm_service, token_callback))
+    graph.add_node("build_flow", create_build_flow(llm_service, token_callback, memory_mode, window_size))
     graph.add_node("compaction", compaction_node)
     
     graph.set_conditional_entry_point(check_state, {
@@ -167,10 +195,27 @@ def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str],
     return graph.compile()
 
 
-def run_graph(user_message: str, workspace_id: str, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
-    """运行主 Graph"""
+def run_graph(
+    user_message: str, 
+    workspace_id: str, 
+    llm_service=None, 
+    token_callback: Optional[Callable[[str], None]] = None,
+    memory_mode: str = "accumulate",
+    window_size: int = 3
+) -> dict:
+    """运行主 Graph
+    
+    Args:
+        user_message: 用户消息
+        workspace_id: 工作区ID
+        llm_service: LLM 服务实例
+        token_callback: 流式输出回调
+        memory_mode: 记忆模式 - "accumulate" 累加, "sliding" 滑动窗口
+        window_size: 滑动窗口大小
+    """
     print("\n" + "="*60)
     print("[Graph] 主 Graph 启动")
+    print(f"[Graph] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
     print("="*60)
     
     saved_state = persistence.load(workspace_id)
@@ -192,7 +237,7 @@ def run_graph(user_message: str, workspace_id: str, llm_service=None, token_call
             "replan_count": 0,
         }
     
-    graph = create_main_graph(llm_service, token_callback)
+    graph = create_main_graph(llm_service, token_callback, memory_mode, window_size)
     final_state = graph.invoke(initial_state)
     
     persistence.save(workspace_id, final_state)

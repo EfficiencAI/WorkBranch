@@ -32,14 +32,34 @@ class Conversation:
 class AgentService:
     """Agent 服务：管理多个并发对话"""
 
-    def __init__(self, workspace_service: WorkspaceService = None, llm_service=None, message_queue=None):
+    def __init__(self, workspace_service: WorkspaceService = None, llm_service=None, message_queue=None, settings_service=None):
         if workspace_service is None:
             workspace_service = WorkspaceService()
         self.ws = workspace_service
         self._llm_service = llm_service
         self._message_queue = message_queue
+        self._settings = settings_service
         self._conversations: Dict[str, Conversation] = {}
         self._lock = asyncio.Lock()
+    
+    def _get_settings(self):
+        if self._settings is None:
+            from service.settings_service.settings_service import SettingsService
+            self._settings = SettingsService()
+        return self._settings
+    
+    def _get_memory_config(self) -> tuple:
+        """获取记忆配置"""
+        settings = self._get_settings()
+        try:
+            memory_mode = settings.get("agent:memory_mode")
+        except KeyError:
+            memory_mode = "accumulate"
+        try:
+            window_size = settings.get("agent:memory_window_size")
+        except KeyError:
+            window_size = 3
+        return memory_mode, window_size
 
     def _get_llm_service(self):
         if self._llm_service is None:
@@ -144,6 +164,7 @@ class AgentService:
         """
         llm_service = self._get_llm_service()
         mq = self._get_message_queue()
+        memory_mode, window_size = self._get_memory_config()
         
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
@@ -160,15 +181,18 @@ class AgentService:
             )
             mq.publish_sync(msg)
         
+        def run_with_config():
+            return run_graph(
+                message,
+                workspace_id,
+                llm_service,
+                token_callback,
+                memory_mode,
+                window_size
+            )
+        
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            run_graph,
-            message,
-            workspace_id,
-            llm_service,
-            token_callback
-        )
+        result = await loop.run_in_executor(None, run_with_config)
         
         done_msg = StreamMessage(
             session_id=session_id,
@@ -349,7 +373,8 @@ class AgentService:
         print(f"[Agent] 工作区ID: {workspace_id}")
 
         llm_service = self._get_llm_service()
-        result = run_graph(user_message, workspace_id, llm_service)
+        memory_mode, window_size = self._get_memory_config()
+        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size)
 
         print("\n[Agent] 任务完成！")
         print("="*60)
