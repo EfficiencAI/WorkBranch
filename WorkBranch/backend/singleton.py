@@ -57,7 +57,12 @@ def get_agent_service() -> AgentService:
 
 @lru_cache(maxsize=1)
 def get_workspace_service() -> WorkspaceService:
-    return WorkspaceService()
+    settings = get_settings_service()
+    try:
+        base_dir = settings.get("workspace:base_dir")
+    except KeyError:
+        base_dir = "workspaces"
+    return WorkspaceService(base_dir)
 
 @lru_cache(maxsize=1)
 def get_llm_service() -> LLMService:

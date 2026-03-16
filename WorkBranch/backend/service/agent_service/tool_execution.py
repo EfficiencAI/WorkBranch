@@ -21,16 +21,31 @@ class ToolExecutionState(TypedDict):
     previous_calls: List[ToolCall]
 
 
-def check_permission(state: ToolExecutionState) -> dict:
+FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
+
+
+def check_permission(state: ToolExecutionState, workspace_service=None) -> dict:
     """权限检查"""
     print("\n" + "-"*40)
     print("[ToolExec] 权限检查...")
     
     tool_name = state["tool_name"]
     workspace_id = state["workspace_id"]
+    tool_args = state["tool_args"]
     
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 工作区: {workspace_id}")
+
+    if tool_name in FILE_TOOLS and workspace_service:
+        path_key = "path" if "path" in tool_args else "file_path"
+        target_path = tool_args.get(path_key) or tool_args.get("directory")
+        
+        if target_path:
+            allowed, resolved_or_error = workspace_service.resolve_path(workspace_id, target_path)
+            if not allowed:
+                print(f"[ToolExec] 路径验证失败: {resolved_or_error}")
+                return {"permission": "deny", "error": resolved_or_error}
+            print(f"[ToolExec] 路径验证通过: {resolved_or_error}")
     
     dangerous_tools = ["delete_file", "execute_command", "modify_system"]
     
@@ -58,18 +73,35 @@ def ask_user(state: ToolExecutionState) -> dict:
 def deny_execution(state: ToolExecutionState) -> dict:
     """拒绝执行"""
     print("[ToolExec] 执行被拒绝")
-    return {"error": "Permission denied", "result": None}
+    error = state.get("error", "Permission denied")
+    return {"error": error, "result": None}
 
 
-def execute_tool(state: ToolExecutionState) -> dict:
+def execute_tool(state: ToolExecutionState, workspace_service=None) -> dict:
     """执行工具"""
     print("[ToolExec] 执行工具...")
     
     tool_name = state["tool_name"]
-    tool_args = state["tool_args"]
+    tool_args = state["tool_args"].copy()
+    workspace_id = state["workspace_id"]
     
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 参数: {tool_args}")
+
+    if tool_name in FILE_TOOLS and workspace_service:
+        path_key = "path" if "path" in tool_args else "file_path"
+        target_path = tool_args.get(path_key) or tool_args.get("directory")
+        
+        if target_path:
+            allowed, resolved_path = workspace_service.resolve_path(workspace_id, target_path)
+            if allowed:
+                if "path" in tool_args:
+                    tool_args["path"] = resolved_path
+                elif "file_path" in tool_args:
+                    tool_args["file_path"] = resolved_path
+                elif "directory" in tool_args:
+                    tool_args["directory"] = resolved_path
+                print(f"[ToolExec] 路径已解析: {resolved_path}")
     
     result = f"工具 {tool_name} 执行成功"
     print(f"[ToolExec] 结果: {result}")
@@ -98,14 +130,20 @@ def check_doom_loop(state: ToolExecutionState) -> dict:
     return {"doom_loop_detected": False}
 
 
-def create_tool_execution_subgraph():
+def create_tool_execution_subgraph(workspace_service=None):
     """创建工具执行子图"""
     graph = StateGraph(ToolExecutionState)
     
-    graph.add_node("check_permission", check_permission)
+    def check_permission_node(state: ToolExecutionState) -> dict:
+        return check_permission(state, workspace_service)
+    
+    def execute_tool_node(state: ToolExecutionState) -> dict:
+        return execute_tool(state, workspace_service)
+    
+    graph.add_node("check_permission", check_permission_node)
     graph.add_node("ask_user", ask_user)
     graph.add_node("deny", deny_execution)
-    graph.add_node("execute", execute_tool)
+    graph.add_node("execute", execute_tool_node)
     graph.add_node("doom_loop_check", check_doom_loop)
     
     graph.set_entry_point("check_permission")
@@ -128,7 +166,8 @@ def run_tool_execution(
     tool_name: str,
     tool_args: dict,
     workspace_id: str,
-    previous_calls: List[ToolCall] = None
+    previous_calls: List[ToolCall] = None,
+    workspace_service=None
 ) -> dict:
     """
     运行工具执行子图
@@ -138,6 +177,7 @@ def run_tool_execution(
         tool_args: 工具参数
         workspace_id: 工作区ID
         previous_calls: 之前的工具调用记录
+        workspace_service: 工作区服务实例
         
     Returns:
         执行结果
@@ -157,7 +197,7 @@ def run_tool_execution(
         "previous_calls": previous_calls or [],
     }
     
-    graph = create_tool_execution_subgraph()
+    graph = create_tool_execution_subgraph(workspace_service)
     result = graph.invoke(initial_state)
     
     print("="*60)

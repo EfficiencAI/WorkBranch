@@ -20,6 +20,7 @@ class ConversationStatus(Enum):
 class Conversation:
     id: str
     workspace_id: str
+    session_id: str
     status: ConversationStatus
     created_at: datetime = field(default_factory=datetime.now)
     task: Optional[asyncio.Task] = None
@@ -48,29 +49,36 @@ class AgentService:
     def _generate_id(self) -> str:
         return str(uuid.uuid4())
 
-    async def create_conversation(self, workspace_id: str = None) -> str:
+    async def create_conversation(
+        self,
+        workspace_id: str = None,
+        session_id: str = None
+    ) -> str:
         """
         创建新对话
         
         Args:
             workspace_id: 可选的工作区ID，不提供则自动生成
+            session_id: 可选的会话ID，不提供则自动生成
             
         Returns:
             对话ID
         """
         conv_id = self._generate_id()
+        session_id = session_id or self._generate_id()
         workspace_id = workspace_id or self._generate_id()
         
-        self.ws.register(workspace_id)
+        self.ws.register(workspace_id, session_id)
         
         async with self._lock:
             self._conversations[conv_id] = Conversation(
                 id=conv_id,
                 workspace_id=workspace_id,
+                session_id=session_id,
                 status=ConversationStatus.PENDING
             )
         
-        print(f"[Agent] 创建对话: {conv_id}, 工作区: {workspace_id}")
+        print(f"[Agent] 创建对话: {conv_id}, 会话: {session_id}, 工作区: {workspace_id}")
         return conv_id
 
     async def send_message(
@@ -177,6 +185,7 @@ class AgentService:
         return {
             "id": conv.id,
             "workspace_id": conv.workspace_id,
+            "session_id": conv.session_id,
             "status": conv.status.value,
             "created_at": conv.created_at.isoformat(),
             "result": conv.result,
@@ -267,7 +276,12 @@ class AgentService:
         task = await self.send_message(conversation_id, message)
         return await task
 
-    def new_agent(self, user_message: str, workspace_id: Optional[str] = None):
+    def new_agent(
+        self,
+        user_message: str,
+        workspace_id: Optional[str] = None,
+        session_id: Optional[str] = None
+    ):
         """
         启动一个新的 Agent（同步版本，向后兼容）
         
@@ -276,6 +290,7 @@ class AgentService:
         Args:
             user_message: 用户输入的消息
             workspace_id: 可选的工作区ID
+            session_id: 可选的会话ID
             
         Returns:
             执行结果
@@ -284,14 +299,19 @@ class AgentService:
         print("[Agent] 启动 Agent (同步模式)")
         print("="*60)
 
+        if not session_id:
+            session_id = self._generate_id()
+            print(f"[Agent] 自动生成会话ID: {session_id}")
+        
         if not workspace_id:
             workspace_id = self._generate_id()
             print(f"[Agent] 自动生成工作区ID: {workspace_id}")
 
         print(f"[Agent] 注册工作区...")
-        self.ws.register(workspace_id)
+        self.ws.register(workspace_id, session_id)
 
         print(f"[Agent] 用户输入: {user_message}")
+        print(f"[Agent] 会话ID: {session_id}")
         print(f"[Agent] 工作区ID: {workspace_id}")
 
         llm_service = self._get_llm_service()
@@ -304,7 +324,8 @@ class AgentService:
     async def new_agent_async(
         self,
         user_message: str,
-        workspace_id: Optional[str] = None
+        workspace_id: Optional[str] = None,
+        session_id: Optional[str] = None
     ) -> asyncio.Task:
         """
         启动一个新的 Agent（异步版本）
@@ -314,9 +335,10 @@ class AgentService:
         Args:
             user_message: 用户输入的消息
             workspace_id: 可选的工作区ID
+            session_id: 可选的会话ID
             
         Returns:
             asyncio.Task 对象
         """
-        conv_id = await self.create_conversation(workspace_id)
+        conv_id = await self.create_conversation(workspace_id, session_id)
         return await self.send_message(conv_id, user_message)
