@@ -3,14 +3,7 @@ from langgraph.graph import StateGraph, END
 import os
 import glob as glob_module
 
-
-class ExploreState(TypedDict):
-    """Explore 子图状态"""
-    request: str
-    workspace_path: str
-    thoroughness: Literal["quick", "medium", "thorough"]
-    findings: List[dict]
-    summary: str
+from ...state import ExploreState
 
 
 def analyze_request(state: ExploreState) -> dict:

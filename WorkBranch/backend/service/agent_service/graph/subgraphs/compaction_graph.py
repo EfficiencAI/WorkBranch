@@ -2,13 +2,7 @@ from typing import TypedDict, List, Any
 from langgraph.graph import StateGraph, END
 import json
 
-
-class CompactionState(TypedDict):
-    """Compaction 子图状态"""
-    messages: List[Any]
-    max_messages: int
-    compressed: bool
-    summary: str
+from ...state import CompactionState
 
 
 def estimate_token_count(messages: List[Any]) -> int:

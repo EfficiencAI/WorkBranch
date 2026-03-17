@@ -2,9 +2,8 @@ import sys
 import asyncio
 sys.path.insert(0, '.')
 
-from service.agent_service.agent_service import AgentService
-from service.agent_service.workspace import WorkspaceService
-from service.agent_service.llm_service import LLMService
+from service.agent_service import AgentService
+from service.agent_service.service import WorkspaceService, LLMService
 from service.settings_service.settings_service import SettingsService
 
 

@@ -1,26 +1,7 @@
 from typing import TypedDict, List, Optional, Literal, Callable
 from langgraph.graph import StateGraph, END
 
-
-class ToolCall(TypedDict):
-    """工具调用记录"""
-    tool: str
-    args: dict
-    result: Optional[str]
-
-
-class ToolExecutionState(TypedDict):
-    """工具执行子图状态"""
-    tool_name: str
-    tool_args: dict
-    workspace_id: str
-    permission: str
-    result: Optional[str]
-    error: Optional[str]
-    doom_loop_detected: bool
-    previous_calls: List[ToolCall]
-    task_description: Optional[str]
-    previous_results: List[str]
+from ...state import ToolExecutionState, ToolCall
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}

@@ -4,7 +4,8 @@ from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
-from .workspace import WorkspaceService
+
+from .service import WorkspaceService
 from .graph import run_graph
 
 
@@ -63,7 +64,7 @@ class AgentService:
 
     def _get_llm_service(self):
         if self._llm_service is None:
-            from .llm_service import get_llm_service
+            from .service import get_llm_service
             self._llm_service = get_llm_service()
         return self._llm_service
 
