@@ -1,5 +1,7 @@
 from typing import TypedDict, List, Optional, Literal, Callable
 from langgraph.graph import StateGraph, END
+import os
+import shutil
 
 from ...state import ToolExecutionState, ToolCall
 
@@ -134,10 +136,224 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
             print(f"[ToolExec] 结果: {result}")
             return {"result": result, "error": None}
     
+    if tool_name == "read_file":
+        return _execute_read_file(tool_args)
+    
+    if tool_name == "write_file":
+        return _execute_write_file(tool_args)
+    
+    if tool_name == "delete_file":
+        return _execute_delete_file(tool_args)
+    
+    if tool_name == "list_dir":
+        return _execute_list_dir(tool_args)
+    
+    if tool_name == "create_dir":
+        return _execute_create_dir(tool_args)
+    
     result = f"工具 {tool_name} 执行成功"
     print(f"[ToolExec] 结果: {result}")
     
     return {"result": result, "error": None}
+
+
+def _execute_read_file(tool_args: dict) -> dict:
+    """执行 read_file 工具"""
+    file_path = tool_args.get("file_path") or tool_args.get("path")
+    if not file_path:
+        return {"result": None, "error": "缺少 file_path 参数"}
+    
+    encoding = tool_args.get("encoding", "utf-8")
+    start_line = tool_args.get("start_line", 1)
+    end_line = tool_args.get("end_line")
+    
+    print(f"[ToolExec] read_file: {file_path}")
+    
+    try:
+        if not os.path.exists(file_path):
+            return {"result": None, "error": f"文件不存在: {file_path}"}
+        
+        if not os.path.isfile(file_path):
+            return {"result": None, "error": f"路径不是文件: {file_path}"}
+        
+        with open(file_path, "r", encoding=encoding) as f:
+            lines = f.readlines()
+        
+        total_lines = len(lines)
+        start_idx = max(0, start_line - 1)
+        end_idx = end_line if end_line else total_lines
+        
+        selected_lines = lines[start_idx:end_idx]
+        
+        result_lines = []
+        for i, line in enumerate(selected_lines, start=start_idx + 1):
+            result_lines.append(f"{i:6d}\t{line.rstrip()}")
+        
+        content = "\n".join(result_lines)
+        if end_line is None or end_line >= total_lines:
+            summary = f"文件共 {total_lines} 行，已读取全部内容"
+        else:
+            summary = f"文件共 {total_lines} 行，已读取第 {start_line}-{end_line} 行"
+        
+        print(f"[ToolExec] read_file 成功: {summary}")
+        return {"result": f"{summary}\n\n{content}", "error": None}
+    
+    except UnicodeDecodeError:
+        return {"result": None, "error": f"文件编码错误，无法用 {encoding} 解码"}
+    except Exception as e:
+        print(f"[ToolExec] read_file 失败: {e}")
+        return {"result": None, "error": f"读取文件失败: {str(e)}"}
+
+
+def _execute_write_file(tool_args: dict) -> dict:
+    """执行 write_file 工具"""
+    file_path = tool_args.get("file_path") or tool_args.get("path")
+    if not file_path:
+        return {"result": None, "error": "缺少 file_path 参数"}
+    
+    content = tool_args.get("content")
+    if content is None:
+        return {"result": None, "error": "缺少 content 参数"}
+    
+    mode = tool_args.get("mode", "write")
+    encoding = tool_args.get("encoding", "utf-8")
+    
+    print(f"[ToolExec] write_file: {file_path}, mode: {mode}")
+    
+    try:
+        dir_path = os.path.dirname(file_path)
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+        
+        write_mode = "a" if mode == "append" else "w"
+        with open(file_path, write_mode, encoding=encoding) as f:
+            f.write(content)
+        
+        action = "追加" if mode == "append" else "写入"
+        print(f"[ToolExec] write_file 成功: {action} {len(content)} 字符")
+        return {"result": f"文件{action}成功: {file_path}", "error": None}
+    
+    except Exception as e:
+        print(f"[ToolExec] write_file 失败: {e}")
+        return {"result": None, "error": f"写入文件失败: {str(e)}"}
+
+
+def _execute_delete_file(tool_args: dict) -> dict:
+    """执行 delete_file 工具"""
+    file_path = tool_args.get("file_path") or tool_args.get("path")
+    if not file_path:
+        return {"result": None, "error": "缺少 file_path 参数"}
+    
+    print(f"[ToolExec] delete_file: {file_path}")
+    
+    try:
+        if not os.path.exists(file_path):
+            return {"result": None, "error": f"路径不存在: {file_path}"}
+        
+        if os.path.isfile(file_path):
+            os.remove(file_path)
+            print(f"[ToolExec] delete_file 成功: 已删除文件")
+            return {"result": f"文件已删除: {file_path}", "error": None}
+        elif os.path.isdir(file_path):
+            shutil.rmtree(file_path)
+            print(f"[ToolExec] delete_file 成功: 已删除目录及其内容")
+            return {"result": f"目录已删除: {file_path}", "error": None}
+        else:
+            return {"result": None, "error": f"未知文件类型: {file_path}"}
+    
+    except Exception as e:
+        print(f"[ToolExec] delete_file 失败: {e}")
+        return {"result": None, "error": f"删除失败: {str(e)}"}
+
+
+def _execute_list_dir(tool_args: dict) -> dict:
+    """执行 list_dir 工具"""
+    dir_path = tool_args.get("directory") or tool_args.get("path") or tool_args.get("dir_path")
+    if not dir_path:
+        return {"result": None, "error": "缺少 directory 参数"}
+    
+    recursive = tool_args.get("recursive", False)
+    show_hidden = tool_args.get("show_hidden", False)
+    
+    print(f"[ToolExec] list_dir: {dir_path}, recursive: {recursive}")
+    
+    try:
+        if not os.path.exists(dir_path):
+            return {"result": None, "error": f"目录不存在: {dir_path}"}
+        
+        if not os.path.isdir(dir_path):
+            return {"result": None, "error": f"路径不是目录: {dir_path}"}
+        
+        result_lines = []
+        file_count = 0
+        dir_count = 0
+        
+        if recursive:
+            for root, dirs, files in os.walk(dir_path):
+                if not show_hidden:
+                    dirs[:] = [d for d in dirs if not d.startswith(".")]
+                    files = [f for f in files if not f.startswith(".")]
+                
+                rel_root = os.path.relpath(root, dir_path)
+                if rel_root == ".":
+                    rel_root = ""
+                
+                for d in sorted(dirs):
+                    dir_count += 1
+                    prefix = f"{rel_root}/" if rel_root else ""
+                    result_lines.append(f"📁 {prefix}{d}/")
+                
+                for f in sorted(files):
+                    file_count += 1
+                    prefix = f"{rel_root}/" if rel_root else ""
+                    result_lines.append(f"📄 {prefix}{f}")
+        else:
+            entries = os.listdir(dir_path)
+            if not show_hidden:
+                entries = [e for e in entries if not e.startswith(".")]
+            
+            for entry in sorted(entries):
+                full_path = os.path.join(dir_path, entry)
+                if os.path.isdir(full_path):
+                    dir_count += 1
+                    result_lines.append(f"📁 {entry}/")
+                else:
+                    file_count += 1
+                    result_lines.append(f"📄 {entry}")
+        
+        summary = f"目录: {dir_path}\n共 {dir_count} 个目录, {file_count} 个文件"
+        content = "\n".join(result_lines) if result_lines else "(空目录)"
+        
+        print(f"[ToolExec] list_dir 成功: {dir_count} 目录, {file_count} 文件")
+        return {"result": f"{summary}\n\n{content}", "error": None}
+    
+    except Exception as e:
+        print(f"[ToolExec] list_dir 失败: {e}")
+        return {"result": None, "error": f"列出目录失败: {str(e)}"}
+
+
+def _execute_create_dir(tool_args: dict) -> dict:
+    """执行 create_dir 工具"""
+    dir_path = tool_args.get("directory") or tool_args.get("path") or tool_args.get("dir_path")
+    if not dir_path:
+        return {"result": None, "error": "缺少 directory 参数"}
+    
+    print(f"[ToolExec] create_dir: {dir_path}")
+    
+    try:
+        if os.path.exists(dir_path):
+            if os.path.isdir(dir_path):
+                return {"result": f"目录已存在: {dir_path}", "error": None}
+            else:
+                return {"result": None, "error": f"路径已存在但不是目录: {dir_path}"}
+        
+        os.makedirs(dir_path, exist_ok=True)
+        print(f"[ToolExec] create_dir 成功")
+        return {"result": f"目录已创建: {dir_path}", "error": None}
+    
+    except Exception as e:
+        print(f"[ToolExec] create_dir 失败: {e}")
+        return {"result": None, "error": f"创建目录失败: {str(e)}"}
 
 
 def check_doom_loop(state: ToolExecutionState) -> dict:
