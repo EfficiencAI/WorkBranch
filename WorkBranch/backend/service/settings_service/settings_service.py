@@ -26,18 +26,18 @@ DEFAULT_SETTINGS = {
     "tool_permissions": {
         "build_agent": {
             "allowed": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking"],
-            "forbidden": ["delete_file"]
+            "forbidden": ["delete_file", "explore_internet"]
         },
         "review_agent": {
             "allowed": ["read_file", "list_dir", "explore_code", "thinking"],
-            "forbidden": ["write_file", "delete_file", "create_dir"]
+            "forbidden": ["write_file", "delete_file", "create_dir", "explore_internet"]
         },
         "explore_agent": {
-            "allowed": ["read_file", "list_dir", "thinking"],
+            "allowed": ["read_file", "list_dir", "thinking", "explore_internet"],
             "forbidden": ["write_file", "delete_file", "create_dir", "explore_code"]
         },
         "admin_agent": {
-            "allowed": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "thinking"],
+            "allowed": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "explore_internet", "thinking"],
             "forbidden": []
         }
     }

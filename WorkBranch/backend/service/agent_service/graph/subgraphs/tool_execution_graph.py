@@ -41,6 +41,11 @@ ALL_TOOLS = {
         "description": "探索代码库",
         "params": "query, search_type(file/code/structure), file_pattern, max_results"
     },
+    "explore_internet": {
+        "name": "explore_internet",
+        "description": "搜索互联网获取信息",
+        "params": "query, max_results"
+    },
     "thinking": {
         "name": "thinking",
         "description": "思考工具（用于分析、设计等需要思考的任务）",
@@ -74,8 +79,8 @@ def get_allowed_tools(agent_type: str, settings_service=None) -> List[str]:
     default_permissions = {
         "build_agent": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking"],
         "review_agent": ["read_file", "list_dir", "explore_code", "thinking"],
-        "explore_agent": ["read_file", "list_dir", "thinking"],
-        "admin_agent": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "thinking"]
+        "explore_agent": ["read_file", "list_dir", "thinking", "explore_internet"],
+        "admin_agent": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "explore_internet", "thinking"]
     }
     return default_permissions.get(agent_type, default_permissions["build_agent"])
 
@@ -289,6 +294,9 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     
     if tool_name == "explore_code":
         return _execute_explore_code(tool_args)
+    
+    if tool_name == "explore_internet":
+        return _execute_explore_internet(tool_args)
     
     result = f"工具 {tool_name} 执行成功"
     print(f"[ToolExec] 结果: {result}")
@@ -626,6 +634,55 @@ def _execute_explore_code(tool_args: dict) -> dict:
     except Exception as e:
         print(f"[ToolExec] explore_code 失败: {e}")
         return {"result": None, "error": f"探索失败: {str(e)}"}
+
+
+def _execute_explore_internet(tool_args: dict) -> dict:
+    """执行 explore_internet 工具 - 使用 DuckDuckGo 搜索互联网"""
+    query = tool_args.get("query")
+    if not query:
+        return {"result": None, "error": "缺少 query 参数"}
+    
+    max_results = tool_args.get("max_results", 5)
+    
+    print(f"[ToolExec] explore_internet: {query}, max_results: {max_results}")
+    
+    try:
+        from duckduckgo_search import DDGS
+        
+        results = []
+        with DDGS() as ddgs:
+            search_results = list(ddgs.text(query, max_results=max_results))
+        
+        if not search_results:
+            return {"result": "未找到相关结果", "error": None}
+        
+        result_lines = [f"互联网搜索结果 (查询: {query}, 共 {len(search_results)} 项):\n"]
+        
+        for i, item in enumerate(search_results, 1):
+            title = item.get("title", "无标题")
+            href = item.get("href", "")
+            body = item.get("body", "")
+            
+            result_lines.append(f"{i}. {title}")
+            if href:
+                result_lines.append(f"   链接: {href}")
+            if body:
+                truncated_body = body[:300] + "..." if len(body) > 300 else body
+                result_lines.append(f"   摘要: {truncated_body}")
+            result_lines.append("")
+        
+        result = "\n".join(result_lines)
+        print(f"[ToolExec] explore_internet 成功: {len(search_results)} 项结果")
+        return {"result": result, "error": None}
+    
+    except ImportError:
+        error_msg = "duckduckgo-search 库未安装，请运行: pip install duckduckgo-search"
+        print(f"[ToolExec] explore_internet 失败: {error_msg}")
+        return {"result": None, "error": error_msg}
+    
+    except Exception as e:
+        print(f"[ToolExec] explore_internet 失败: {e}")
+        return {"result": None, "error": f"搜索失败: {str(e)}"}
 
 
 def check_doom_loop(state: ToolExecutionState) -> dict:
