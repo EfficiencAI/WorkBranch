@@ -3,7 +3,6 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 
 from ...state import AgentState, Task
-from .explore_graph import run_explore
 
 
 class TaskPlan(BaseModel):
@@ -19,10 +18,12 @@ PLAN_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。你的任�
 3. 提供工具参数（如果需要）
 
 可用的工具包括：
-- read_file: 读取文件内容
-- write_file: 写入文件
-- search_code: 搜索代码
-- execute_command: 执行命令
+- read_file: 读取文件内容，参数: file_path, start_line, end_line
+- write_file: 写入文件，参数: file_path, content, mode(write/append)
+- delete_file: 删除文件或目录，参数: file_path
+- list_dir: 列出目录内容，参数: directory, recursive
+- create_dir: 创建目录，参数: directory
+- explore_code: 探索代码库，参数: query, search_type(file/code/structure), file_pattern, max_results
 - thinking: 思考工具（用于分析、设计等需要思考的任务）
 
 请直接输出任务列表，不要有多余的解释。"""
@@ -37,20 +38,7 @@ def phase1_understand(state: AgentState, llm_service=None) -> dict:
     user_message = state["messages"][-1] if state["messages"] else ""
     print(f"[Plan] 用户消息: {user_message}")
     
-    print("[Plan] 判断是否需要探索代码库...")
-    need_explore = len(user_message) > 10
-    
-    if need_explore:
-        print("[Plan] 需要探索代码库")
-        explore_result = run_explore(
-            request=user_message,
-            workspace_path=".",
-            thoroughness="medium"
-        )
-        print(f"[Plan] 探索结果: {explore_result['summary']}")
-        return {"explore_result": explore_result}
-    
-    print("[Plan] 无需探索，直接进入下一阶段")
+    print("[Plan] 需求已接收，进入下一阶段")
     return {}
 
 
@@ -62,11 +50,6 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     
     user_message = state["messages"][-1] if state["messages"] else ""
     print(f"[Plan] 基于需求设计任务计划...")
-    
-    explore_result = state.get("explore_result", {})
-    explore_context = ""
-    if explore_result:
-        explore_context = f"\n\n代码库探索结果:\n{explore_result.get('summary', '无')}"
     
     if llm_service is None:
         print("[Plan] LLM 服务未配置，使用默认计划")
@@ -84,7 +67,6 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             prompt = f"""请根据以下用户需求生成执行计划：
 
 用户需求: {user_message}
-{explore_context}
 
 请生成一个包含 2-5 个任务的执行计划。"""
             

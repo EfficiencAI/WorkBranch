@@ -8,6 +8,8 @@ from ...state import ToolExecutionState, ToolCall
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
 
+EXPLORE_TOOLS = {"explore_code"}
+
 THINK_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。
 
 你会收到：
@@ -105,6 +107,12 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                     tool_args["directory"] = resolved_path
                 print(f"[ToolExec] 路径已解析: {resolved_path}")
     
+    if tool_name in EXPLORE_TOOLS and workspace_service:
+        workspace_root = workspace_service.get_workspace_dir(workspace_id)
+        if workspace_root:
+            tool_args["workspace_root"] = workspace_root
+            print(f"[ToolExec] 工作区根目录: {workspace_root}")
+    
     if tool_name == "thinking":
         if llm_service:
             print("[ToolExec] 调用 LLM 进行思考...")
@@ -150,6 +158,9 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     
     if tool_name == "create_dir":
         return _execute_create_dir(tool_args)
+    
+    if tool_name == "explore_code":
+        return _execute_explore_code(tool_args)
     
     result = f"工具 {tool_name} 执行成功"
     print(f"[ToolExec] 结果: {result}")
@@ -354,6 +365,139 @@ def _execute_create_dir(tool_args: dict) -> dict:
     except Exception as e:
         print(f"[ToolExec] create_dir 失败: {e}")
         return {"result": None, "error": f"创建目录失败: {str(e)}"}
+
+
+def _execute_explore_code(tool_args: dict) -> dict:
+    """执行 explore_code 工具"""
+    import glob as glob_module
+    import re
+    
+    workspace_root = tool_args.get("workspace_root", ".")
+    query = tool_args.get("query", "")
+    search_type = tool_args.get("search_type", "file")
+    max_results = tool_args.get("max_results", 20)
+    file_pattern = tool_args.get("file_pattern", "**/*.py")
+    
+    print(f"[ToolExec] explore_code: query={query}, type={search_type}")
+    
+    try:
+        findings = []
+        
+        if search_type == "file":
+            pattern = file_pattern if file_pattern else "**/*"
+            matches = glob_module.glob(
+                os.path.join(workspace_root, pattern),
+                recursive=True
+            )
+            for m in matches[:max_results]:
+                if os.path.isfile(m):
+                    rel_path = os.path.relpath(m, workspace_root)
+                    findings.append({
+                        "path": rel_path,
+                        "type": "file",
+                        "match": os.path.basename(m)
+                    })
+        
+        elif search_type == "code":
+            if not query:
+                return {"result": None, "error": "code 搜索需要 query 参数"}
+            
+            pattern = file_pattern if file_pattern else "**/*.py"
+            matches = glob_module.glob(
+                os.path.join(workspace_root, pattern),
+                recursive=True
+            )
+            
+            try:
+                regex = re.compile(query, re.IGNORECASE)
+            except re.error:
+                regex = re.compile(re.escape(query), re.IGNORECASE)
+            
+            for file_path in matches:
+                if not os.path.isfile(file_path):
+                    continue
+                if len(findings) >= max_results:
+                    break
+                
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        for line_num, line in enumerate(f, 1):
+                            if regex.search(line):
+                                rel_path = os.path.relpath(file_path, workspace_root)
+                                findings.append({
+                                    "path": rel_path,
+                                    "type": "code",
+                                    "line": line_num,
+                                    "content": line.strip()[:100]
+                                })
+                                if len(findings) >= max_results:
+                                    break
+                except Exception:
+                    continue
+        
+        elif search_type == "structure":
+            pattern = file_pattern if file_pattern else "**/*.py"
+            matches = glob_module.glob(
+                os.path.join(workspace_root, pattern),
+                recursive=True
+            )
+            
+            structure_patterns = {
+                "class": re.compile(r"^\s*class\s+(\w+)"),
+                "def": re.compile(r"^\s*(?:async\s+)?def\s+(\w+)"),
+                "import": re.compile(r"^\s*(?:from|import)\s+([\w.]+)"),
+            }
+            
+            for file_path in matches:
+                if not os.path.isfile(file_path):
+                    continue
+                if len(findings) >= max_results:
+                    break
+                
+                try:
+                    with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                        rel_path = os.path.relpath(file_path, workspace_root)
+                        file_structures = {"path": rel_path, "classes": [], "functions": [], "imports": []}
+                        
+                        for line in f:
+                            for struct_type, pattern in structure_patterns.items():
+                                match = pattern.match(line)
+                                if match:
+                                    file_structures[f"{struct_type}s"].append(match.group(1))
+                        
+                        if any([file_structures["classes"], file_structures["functions"], file_structures["imports"]]):
+                            findings.append(file_structures)
+                except Exception:
+                    continue
+        
+        else:
+            return {"result": None, "error": f"不支持的搜索类型: {search_type}"}
+        
+        if not findings:
+            return {"result": "未找到匹配结果", "error": None}
+        
+        result_lines = [f"探索结果 (类型: {search_type}, 共 {len(findings)} 项):\n"]
+        
+        for item in findings:
+            if item["type"] == "file":
+                result_lines.append(f"  📄 {item['path']}")
+            elif item["type"] == "code":
+                result_lines.append(f"  📍 {item['path']}:{item['line']}")
+                result_lines.append(f"     {item['content']}")
+            elif "classes" in item:
+                result_lines.append(f"  📁 {item['path']}")
+                if item["classes"]:
+                    result_lines.append(f"     Classes: {', '.join(item['classes'][:5])}")
+                if item["functions"]:
+                    result_lines.append(f"     Functions: {', '.join(item['functions'][:5])}")
+        
+        result = "\n".join(result_lines)
+        print(f"[ToolExec] explore_code 成功: {len(findings)} 项结果")
+        return {"result": result, "error": None}
+    
+    except Exception as e:
+        print(f"[ToolExec] explore_code 失败: {e}")
+        return {"result": None, "error": f"探索失败: {str(e)}"}
 
 
 def check_doom_loop(state: ToolExecutionState) -> dict:
