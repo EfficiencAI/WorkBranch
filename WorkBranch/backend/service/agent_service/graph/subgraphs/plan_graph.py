@@ -1,26 +1,51 @@
 from typing import Literal, List, Callable, Optional
 from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
+import json
+import re
 
 from ...state import AgentState, Task
 from .tool_execution_graph import generate_tool_prompt
 
 
+class TaskItem(BaseModel):
+    """单个任务"""
+    id: int = Field(description="任务ID，从1开始")
+    description: str = Field(description="任务描述")
+    tool: Optional[str] = Field(default=None, description="要使用的工具名称，如 thinking, read_file, write_file 等")
+    args: Optional[dict] = Field(default=None, description="工具参数")
+
+
 class TaskPlan(BaseModel):
     """LLM 输出的任务计划"""
-    tasks: List[dict] = Field(description="任务列表，每个任务包含 id, description, tool, args")
+    tasks: List[TaskItem] = Field(description="任务列表")
 
 
 PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的任务是根据用户需求生成一个清晰的执行计划。
 
-请生成一个任务列表，每个任务应该：
-1. 有明确的描述
-2. 指定需要使用的工具（如果需要）
-3. 提供工具参数（如果需要）
-
 {tool_prompt}
 
-请直接输出任务列表，不要有多余的解释。"""
+## 输出格式要求
+你必须严格按照以下 JSON 格式输出，不要有任何其他文字：
+
+```json
+{{
+  "tasks": [
+    {{
+      "id": 1,
+      "description": "任务描述",
+      "tool": "工具名称或null",
+      "args": {{"参数名": "参数值"}}或null
+    }}
+  ]
+}}
+```
+
+## 注意事项
+1. 每个任务必须包含 id, description, tool, args 四个字段
+2. tool 如果不需要使用工具，设为 null
+3. args 如果没有参数，设为 null
+4. 只输出 JSON，不要有任何解释或额外文字"""
 
 
 def get_plan_system_prompt(agent_type: str = "build_agent", settings_service=None) -> str:
@@ -87,7 +112,7 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
 
 用户需求: {user_message}
 
-请生成一个包含 2-5 个任务的执行计划。"""
+请生成一个包含 2-5 个任务的执行计划，严格按照 JSON 格式输出。"""
             
             messages = [{"role": "user", "content": prompt}]
             
@@ -123,7 +148,8 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     
     print(f"[Plan] 生成 {len(plan)} 个任务:")
     for task in plan:
-        print(f"  - Task {task['id']}: {task['description']}")
+        tool_info = f" [工具: {task.get('tool')}]" if task.get('tool') else ""
+        print(f"  - Task {task['id']}: {task['description']}{tool_info}")
     
     if message_context:
         send_message = message_context.get("send_message")
@@ -135,24 +161,97 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
 
 
 def parse_plan_from_text(text: str) -> List[dict]:
-    """从文本解析计划"""
+    """从文本解析计划 - 支持 JSON 格式"""
+    text = text.strip()
+    print(f"[Plan] 原始响应文本:\n{text[:500]}...")
+    
+    json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
+    if json_match:
+        json_str = json_match.group(1)
+        print(f"[Plan] 从代码块提取 JSON")
+    else:
+        json_str = text
+    
+    json_match2 = re.search(r'\{[\s\S]*"tasks"[\s\S]*\}', text)
+    if json_match2 and not json_match:
+        json_str = json_match2.group(0)
+        print(f"[Plan] 从文本提取 JSON 对象")
+    
+    try:
+        data = json.loads(json_str)
+        if isinstance(data, dict) and "tasks" in data:
+            tasks = []
+            for task_data in data["tasks"]:
+                if isinstance(task_data, dict):
+                    task = {
+                        "id": task_data.get("id", len(tasks) + 1),
+                        "description": task_data.get("description", ""),
+                        "tool": task_data.get("tool"),
+                        "args": task_data.get("args"),
+                    }
+                    if task["description"]:
+                        tasks.append(task)
+            
+            if tasks:
+                print(f"[Plan] JSON 解析成功，找到 {len(tasks)} 个任务")
+                return tasks
+    except json.JSONDecodeError as e:
+        print(f"[Plan] JSON 解析失败: {e}")
+    
+    print("[Plan] JSON 解析失败，尝试逐行解析...")
     tasks = []
     lines = text.strip().split("\n")
     
+    current_task = None
     for line in lines:
         line = line.strip()
         if not line:
             continue
         
-        if line[0].isdigit() or line.startswith("-") or line.startswith("*"):
-            desc = line.lstrip("0123456789.-* ").strip()
-            if desc:
-                tasks.append({
-                    "id": len(tasks) + 1,
-                    "description": desc,
-                    "tool": None,
-                    "args": None
-                })
+        task_match = re.match(r'^Task\s*(\d+)\s*[:：]\s*(.+)$', line, re.IGNORECASE)
+        if task_match:
+            if current_task and current_task.get("description"):
+                tasks.append(current_task)
+            current_task = {
+                "id": int(task_match.group(1)),
+                "description": task_match.group(2).strip(),
+                "tool": None,
+                "args": None
+            }
+            continue
+        
+        if current_task:
+            tool_match = re.match(r'^工具\s*[:：]\s*(\w+)', line)
+            if tool_match:
+                current_task["tool"] = tool_match.group(1)
+                continue
+            
+            args_match = re.match(r'^参数\s*[:：]\s*(.+)$', line)
+            if args_match:
+                try:
+                    current_task["args"] = json.loads(args_match.group(1))
+                except:
+                    current_task["args"] = None
+                continue
+    
+    if current_task and current_task.get("description"):
+        tasks.append(current_task)
+    
+    if not tasks:
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if line[0].isdigit() or line.startswith("-") or line.startswith("*"):
+                desc = line.lstrip("0123456789.-* ").strip()
+                if desc and not desc.lower().startswith(("工具", "参数", "tool", "args")):
+                    tasks.append({
+                        "id": len(tasks) + 1,
+                        "description": desc,
+                        "tool": None,
+                        "args": None
+                    })
     
     if not tasks:
         tasks = [
@@ -160,6 +259,7 @@ def parse_plan_from_text(text: str) -> List[dict]:
             {"id": 2, "description": "执行实现", "tool": None, "args": None},
         ]
     
+    print(f"[Plan] 逐行解析完成，找到 {len(tasks)} 个任务")
     return tasks
 
 
