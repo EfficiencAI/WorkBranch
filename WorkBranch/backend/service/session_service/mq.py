@@ -64,6 +64,7 @@ class MessageQueue:
         self._sync_queue: queue.Queue = queue.Queue(maxsize=self._max_size)
         self._sync_bridge_running = False
         self._sync_bridge_thread: Optional[threading.Thread] = None
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._storage_dir = self._get_storage_dir()
         self._conversation_messages: Dict[str, List[dict]] = {}
         self._file_lock = threading.Lock()
@@ -170,6 +171,11 @@ class MessageQueue:
             return
         
         self._sync_bridge_running = True
+        try:
+            self._main_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._main_loop = None
+        
         self._sync_bridge_thread = threading.Thread(
             target=self._sync_bridge_loop,
             daemon=True
@@ -179,15 +185,15 @@ class MessageQueue:
 
     def _sync_bridge_loop(self) -> None:
         """同步-异步桥接循环"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         while self._sync_bridge_running:
             try:
                 message = self._sync_queue.get(timeout=0.1)
-                loop.call_soon_threadsafe(
-                    lambda msg=message: loop.create_task(self._put_to_async_queue(msg))
-                )
+                if self._main_loop and self._main_loop.is_running():
+                    self._main_loop.call_soon_threadsafe(
+                        lambda msg=message: self._main_loop.create_task(self._put_to_async_queue(msg))
+                    )
+                else:
+                    self._queue.put_nowait(message)
             except queue.Empty:
                 continue
             except Exception as e:
