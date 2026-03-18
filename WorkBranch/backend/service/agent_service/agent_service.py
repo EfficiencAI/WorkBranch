@@ -173,15 +173,35 @@ class AgentService:
         
         from service.session_service.mq import StreamMessage, MessageType
         
-        def token_callback(token: str):
+        def send_message(content: str, message_type: MessageType, metadata: dict = None):
+            msg = StreamMessage(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                content=content,
+                message_type=message_type,
+                metadata=metadata or {}
+            )
+            mq.publish_sync(msg)
+        
+        def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
             msg = StreamMessage(
                 session_id=session_id,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 content=token,
-                message_type=MessageType.TEXT
+                message_type=message_type,
+                metadata=metadata or {}
             )
             mq.publish_sync(msg)
+        
+        message_context = {
+            "send_message": send_message,
+            "token_callback": token_callback,
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "workspace_id": workspace_id,
+        }
         
         def run_with_config():
             return run_graph(
@@ -191,7 +211,8 @@ class AgentService:
                 token_callback,
                 memory_mode,
                 window_size,
-                settings
+                settings,
+                message_context=message_context
             )
         
         loop = asyncio.get_event_loop()

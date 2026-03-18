@@ -14,6 +14,15 @@ class MessageType(Enum):
     ERROR = "error"
     DONE = "done"
     THINKING = "thinking"
+    PLAN = "plan"
+    PLAN_START = "plan_start"
+    PLAN_END = "plan_end"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    EXECUTE_START = "execute_start"
+    EXECUTE_END = "execute_end"
+    STEP_START = "step_start"
+    STEP_END = "step_end"
 
 
 @dataclass

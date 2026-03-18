@@ -51,7 +51,7 @@ def phase1_understand(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None) -> dict:
+def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None) -> dict:
     """Phase 2: 生成计划"""
     print("\n" + "="*60)
     print("[Plan] Phase 2/5: 生成计划")
@@ -61,6 +61,12 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     agent_type = state.get("agent_type", "build_agent")
     print(f"[Plan] 基于需求设计任务计划...")
     print(f"[Plan] Agent 类型: {agent_type}")
+    
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            send_message("", MessageType.PLAN_START, {"agent_type": agent_type, "user_message": user_message})
     
     if llm_service is None:
         print("[Plan] LLM 服务未配置，使用默认计划")
@@ -85,8 +91,17 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             
             messages = [{"role": "user", "content": prompt}]
             
+            def plan_token_callback(token: str):
+                if token_callback:
+                    token_callback(token)
+                if message_context:
+                    send_msg = message_context.get("send_message")
+                    if send_msg:
+                        from service.session_service.mq import MessageType
+                        send_msg(token, MessageType.PLAN)
+            
             full_response = ""
-            for chunk in llm_service.chat_stream(messages, system_prompt, token_callback):
+            for chunk in llm_service.chat_stream(messages, system_prompt, plan_token_callback):
                 full_response += chunk
             
             plan = parse_plan_from_text(full_response)
@@ -109,6 +124,12 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     print(f"[Plan] 生成 {len(plan)} 个任务:")
     for task in plan:
         print(f"  - Task {task['id']}: {task['description']}")
+    
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            send_message("", MessageType.PLAN_END, {"plan": plan, "task_count": len(plan)})
     
     return {"plan": plan}
 
@@ -180,14 +201,14 @@ def phase5_exit(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None):
+def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None):
     """创建 Plan 子图"""
     
     def _phase1(state):
         return phase1_understand(state, llm_service)
     
     def _phase2(state):
-        return phase2_design(state, llm_service, token_callback, settings_service)
+        return phase2_design(state, llm_service, token_callback, settings_service, message_context)
     
     def _phase3(state):
         return phase3_review(state, llm_service)
@@ -216,13 +237,13 @@ def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[st
     return graph.compile()
 
 
-def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None) -> dict:
+def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None) -> dict:
     """运行 Plan 流程"""
     print("\n" + "="*60)
     print("[Flow] Plan 流程启动")
     print("="*60)
     
-    graph = create_plan_subgraph(llm_service, token_callback, settings_service)
+    graph = create_plan_subgraph(llm_service, token_callback, settings_service, message_context)
     result = graph.invoke(state)
     
     print("="*60)

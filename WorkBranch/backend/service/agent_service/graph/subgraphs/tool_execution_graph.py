@@ -221,7 +221,7 @@ def deny_execution(state: ToolExecutionState) -> dict:
     return {"error": error, "result": None}
 
 
-def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
+def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """执行工具"""
     print("[ToolExec] 执行工具...")
     
@@ -235,6 +235,16 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     print(f"[ToolExec] 参数: {tool_args}")
     print(f"[ToolExec] 任务描述: {task_description}")
     print(f"[ToolExec] 之前结果数量: {len(previous_results)}")
+    
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            send_message("", MessageType.TOOL_CALL, {
+                "tool_name": tool_name,
+                "tool_args": tool_args,
+                "task_description": task_description
+            })
 
     if tool_name in FILE_TOOLS and workspace_service:
         path_key = "path" if "path" in tool_args else "file_path"
@@ -274,14 +284,43 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 prompt = "\n".join(context_parts)
                 messages = [{"role": "user", "content": prompt}]
                 
+                def thinking_token_callback(token: str):
+                    if token_callback:
+                        token_callback(token)
+                    if message_context:
+                        send_msg = message_context.get("send_message")
+                        if send_msg:
+                            from service.session_service.mq import MessageType
+                            send_msg(token, MessageType.THINKING)
+                
                 result = ""
-                for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, token_callback):
+                for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
                     result += chunk
                 
                 print(f"[ToolExec] 思考完成")
+                
+                if message_context:
+                    send_message = message_context.get("send_message")
+                    if send_message:
+                        from service.session_service.mq import MessageType
+                        send_message("", MessageType.TOOL_RESULT, {
+                            "tool_name": tool_name,
+                            "result": result[:500] + "..." if len(result) > 500 else result,
+                            "success": True
+                        })
+                
                 return {"result": result, "error": None}
             except Exception as e:
                 print(f"[ToolExec] LLM 调用失败: {e}")
+                if message_context:
+                    send_message = message_context.get("send_message")
+                    if send_message:
+                        from service.session_service.mq import MessageType
+                        send_message("", MessageType.TOOL_RESULT, {
+                            "tool_name": tool_name,
+                            "error": str(e),
+                            "success": False
+                        })
                 return {"result": f"思考失败: {e}", "error": str(e)}
         else:
             result = f"思考任务: {task_description} (LLM 服务未配置)"
@@ -289,36 +328,40 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
             return {"result": result, "error": None}
     
     if tool_name == "read_file":
-        return _execute_read_file(tool_args)
+        tool_result = _execute_read_file(tool_args)
+    elif tool_name == "write_file":
+        tool_result = _execute_write_file(tool_args)
+    elif tool_name == "delete_file":
+        tool_result = _execute_delete_file(tool_args)
+    elif tool_name == "list_dir":
+        tool_result = _execute_list_dir(tool_args)
+    elif tool_name == "create_dir":
+        tool_result = _execute_create_dir(tool_args)
+    elif tool_name == "explore_code":
+        tool_result = _execute_explore_code(tool_args)
+    elif tool_name == "explore_internet":
+        tool_result = _execute_explore_internet(tool_args)
+    elif tool_name == "call_explore_agent":
+        tool_result = _execute_call_explore_agent(tool_args, llm_service, token_callback, message_context)
+    elif tool_name == "call_review_agent":
+        tool_result = _execute_call_review_agent(tool_args, llm_service, token_callback, message_context)
+    else:
+        tool_result = {"result": f"工具 {tool_name} 执行成功", "error": None}
+        print(f"[ToolExec] 结果: {tool_result['result']}")
     
-    if tool_name == "write_file":
-        return _execute_write_file(tool_args)
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            result_content = tool_result.get("result", "")
+            send_message("", MessageType.TOOL_RESULT, {
+                "tool_name": tool_name,
+                "result": result_content[:500] + "..." if len(result_content) > 500 else result_content,
+                "error": tool_result.get("error"),
+                "success": tool_result.get("error") is None
+            })
     
-    if tool_name == "delete_file":
-        return _execute_delete_file(tool_args)
-    
-    if tool_name == "list_dir":
-        return _execute_list_dir(tool_args)
-    
-    if tool_name == "create_dir":
-        return _execute_create_dir(tool_args)
-    
-    if tool_name == "explore_code":
-        return _execute_explore_code(tool_args)
-    
-    if tool_name == "explore_internet":
-        return _execute_explore_internet(tool_args)
-    
-    if tool_name == "call_explore_agent":
-        return _execute_call_explore_agent(tool_args, llm_service, token_callback)
-    
-    if tool_name == "call_review_agent":
-        return _execute_call_review_agent(tool_args, llm_service, token_callback)
-    
-    result = f"工具 {tool_name} 执行成功"
-    print(f"[ToolExec] 结果: {result}")
-    
-    return {"result": result, "error": None}
+    return tool_result
 
 
 def _execute_read_file(tool_args: dict) -> dict:
@@ -702,7 +745,7 @@ def _execute_explore_internet(tool_args: dict) -> dict:
         return {"result": None, "error": f"搜索失败: {str(e)}"}
 
 
-def _execute_call_explore_agent(tool_args: dict, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
+def _execute_call_explore_agent(tool_args: dict, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """执行 call_explore_agent 工具 - 调用探索子代理"""
     task_description = tool_args.get("task_description")
     if not task_description:
@@ -726,8 +769,17 @@ def _execute_call_explore_agent(tool_args: dict, llm_service=None, token_callbac
 
         messages = [{"role": "user", "content": task_description}]
         
+        def explore_token_callback(token: str):
+            if token_callback:
+                token_callback(token)
+            if message_context:
+                send_msg = message_context.get("send_message")
+                if send_msg:
+                    from service.session_service.mq import MessageType
+                    send_msg(token, MessageType.TEXT)
+        
         result = ""
-        for chunk in llm_service.chat_stream(messages, EXPLORE_AGENT_PROMPT, token_callback):
+        for chunk in llm_service.chat_stream(messages, EXPLORE_AGENT_PROMPT, explore_token_callback):
             result += chunk
         
         print(f"[ToolExec] call_explore_agent 完成")
@@ -738,7 +790,7 @@ def _execute_call_explore_agent(tool_args: dict, llm_service=None, token_callbac
         return {"result": None, "error": f"子代理执行失败: {str(e)}"}
 
 
-def _execute_call_review_agent(tool_args: dict, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
+def _execute_call_review_agent(tool_args: dict, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """执行 call_review_agent 工具 - 调用审查子代理"""
     task_description = tool_args.get("task_description")
     if not task_description:
@@ -762,8 +814,17 @@ def _execute_call_review_agent(tool_args: dict, llm_service=None, token_callback
 
         messages = [{"role": "user", "content": task_description}]
         
+        def review_token_callback(token: str):
+            if token_callback:
+                token_callback(token)
+            if message_context:
+                send_msg = message_context.get("send_message")
+                if send_msg:
+                    from service.session_service.mq import MessageType
+                    send_msg(token, MessageType.TEXT)
+        
         result = ""
-        for chunk in llm_service.chat_stream(messages, REVIEW_AGENT_PROMPT, token_callback):
+        for chunk in llm_service.chat_stream(messages, REVIEW_AGENT_PROMPT, review_token_callback):
             result += chunk
         
         print(f"[ToolExec] call_review_agent 完成")
@@ -795,7 +856,7 @@ def check_doom_loop(state: ToolExecutionState) -> dict:
     return {"doom_loop_detected": False}
 
 
-def create_tool_execution_subgraph(workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None):
+def create_tool_execution_subgraph(workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None):
     """创建工具执行子图"""
     graph = StateGraph(ToolExecutionState)
     
@@ -803,7 +864,7 @@ def create_tool_execution_subgraph(workspace_service=None, llm_service=None, tok
         return check_permission(state, workspace_service, settings_service)
     
     def execute_tool_node(state: ToolExecutionState) -> dict:
-        return execute_tool(state, workspace_service, llm_service, token_callback)
+        return execute_tool(state, workspace_service, llm_service, token_callback, message_context)
     
     graph.add_node("check_permission", check_permission_node)
     graph.add_node("ask_user", ask_user)
@@ -838,7 +899,8 @@ def run_tool_execution(
     task_description: str = "",
     previous_results: List[str] = None,
     agent_type: str = "build_agent",
-    settings_service=None
+    settings_service=None,
+    message_context: dict = None
 ) -> dict:
     """
     运行工具执行子图
@@ -855,6 +917,7 @@ def run_tool_execution(
         previous_results: 之前任务的执行结果（短期记忆）
         agent_type: Agent 类型
         settings_service: 设置服务实例
+        message_context: 消息上下文，包含 send_message 等方法
         
     Returns:
         执行结果
@@ -877,7 +940,7 @@ def run_tool_execution(
         "agent_type": agent_type,
     }
     
-    graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback, settings_service)
+    graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback, settings_service, message_context)
     result = graph.invoke(initial_state)
     
     print("="*60)

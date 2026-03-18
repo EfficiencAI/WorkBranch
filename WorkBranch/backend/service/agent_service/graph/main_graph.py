@@ -57,7 +57,7 @@ def check_state(state: AgentState) -> Literal["plan", "build", "compaction", "do
     return "done"
 
 
-def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None):
+def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None):
     """创建 Plan 节点"""
     def plan_node(state: AgentState) -> dict:
         is_replan = state.get("plan_failed", False)
@@ -70,7 +70,7 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
             print(f"[Graph] 重新规划 (第 {replan_count + 1} 次)，重置状态")
             print("="*60)
         
-        result = run_plan_flow(plan_state, llm_service, token_callback, settings_service)
+        result = run_plan_flow(plan_state, llm_service, token_callback, settings_service, message_context)
         
         if is_replan:
             result["tool_history"] = []
@@ -86,7 +86,7 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
     return plan_node
 
 
-def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None):
+def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     """创建 Build 流程"""
     def build_flow(state: AgentState) -> dict:
         print("\n" + "="*60)
@@ -122,7 +122,8 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
             task_description=task.get("description", ""),
             previous_results=previous_results,
             agent_type=agent_type,
-            settings_service=settings_service
+            settings_service=settings_service,
+            message_context=message_context
         )
         
         if tool_result.get("error"):
@@ -166,12 +167,12 @@ def compaction_node(state: AgentState) -> dict:
     return {}
 
 
-def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None):
+def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     """创建主 Graph"""
     graph = StateGraph(AgentState)
     
-    graph.add_node("plan_flow", create_plan_node(llm_service, token_callback, settings_service))
-    graph.add_node("build_flow", create_build_flow(llm_service, token_callback, memory_mode, window_size, settings_service))
+    graph.add_node("plan_flow", create_plan_node(llm_service, token_callback, settings_service, message_context))
+    graph.add_node("build_flow", create_build_flow(llm_service, token_callback, memory_mode, window_size, settings_service, message_context))
     graph.add_node("compaction", compaction_node)
     
     graph.set_conditional_entry_point(check_state, {
@@ -207,7 +208,8 @@ def run_graph(
     token_callback: Optional[Callable[[str], None]] = None,
     memory_mode: str = "accumulate",
     window_size: int = 3,
-    settings_service=None
+    settings_service=None,
+    message_context: dict = None
 ) -> dict:
     """运行主 Graph
     
@@ -219,6 +221,7 @@ def run_graph(
         memory_mode: 记忆模式 - "accumulate" 累加, "sliding" 滑动窗口
         window_size: 滑动窗口大小
         settings_service: 设置服务实例
+        message_context: 消息上下文，包含 send_message 等方法
         
     Note:
         Plan 节点使用 plan_agent 类型
@@ -250,7 +253,7 @@ def run_graph(
             "agent_type": None,
         }
     
-    graph = create_main_graph(llm_service, token_callback, memory_mode, window_size, settings_service)
+    graph = create_main_graph(llm_service, token_callback, memory_mode, window_size, settings_service, message_context)
     final_state = graph.invoke(initial_state)
     
     persistence.save(workspace_id, final_state)
