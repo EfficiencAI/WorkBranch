@@ -3,6 +3,7 @@ from langgraph.graph import StateGraph, END
 from pydantic import BaseModel, Field
 
 from ...state import AgentState, Task
+from .tool_execution_graph import generate_tool_prompt
 
 
 class TaskPlan(BaseModel):
@@ -10,23 +11,31 @@ class TaskPlan(BaseModel):
     tasks: List[dict] = Field(description="任务列表，每个任务包含 id, description, tool, args")
 
 
-PLAN_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。你的任务是根据用户需求生成一个清晰的执行计划。
+PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的任务是根据用户需求生成一个清晰的执行计划。
 
 请生成一个任务列表，每个任务应该：
 1. 有明确的描述
 2. 指定需要使用的工具（如果需要）
 3. 提供工具参数（如果需要）
 
-可用的工具包括：
-- read_file: 读取文件内容，参数: file_path, start_line, end_line
-- write_file: 写入文件，参数: file_path, content, mode(write/append)
-- delete_file: 删除文件或目录，参数: file_path
-- list_dir: 列出目录内容，参数: directory, recursive
-- create_dir: 创建目录，参数: directory
-- explore_code: 探索代码库，参数: query, search_type(file/code/structure), file_pattern, max_results
-- thinking: 思考工具（用于分析、设计等需要思考的任务）
+{tool_prompt}
 
 请直接输出任务列表，不要有多余的解释。"""
+
+
+def get_plan_system_prompt(agent_type: str = "build_agent", settings_service=None) -> str:
+    """
+    获取包含工具列表的系统 prompt
+    
+    Args:
+        agent_type: Agent 类型
+        settings_service: 设置服务实例
+        
+    Returns:
+        完整的系统 prompt
+    """
+    tool_prompt = generate_tool_prompt(agent_type, settings_service)
+    return PLAN_SYSTEM_PROMPT_BASE.format(tool_prompt=tool_prompt)
 
 
 def phase1_understand(state: AgentState, llm_service=None) -> dict:
@@ -42,14 +51,16 @@ def phase1_understand(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
+def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None) -> dict:
     """Phase 2: 生成计划"""
     print("\n" + "="*60)
     print("[Plan] Phase 2/5: 生成计划")
     print("="*60)
     
     user_message = state["messages"][-1] if state["messages"] else ""
+    agent_type = state.get("agent_type", "build_agent")
     print(f"[Plan] 基于需求设计任务计划...")
+    print(f"[Plan] Agent 类型: {agent_type}")
     
     if llm_service is None:
         print("[Plan] LLM 服务未配置，使用默认计划")
@@ -64,6 +75,8 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             print("[Plan] 调用 LLM 生成计划...")
             print("[Plan] LLM 思考中:")
             
+            system_prompt = get_plan_system_prompt(agent_type, settings_service)
+            
             prompt = f"""请根据以下用户需求生成执行计划：
 
 用户需求: {user_message}
@@ -73,7 +86,7 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             messages = [{"role": "user", "content": prompt}]
             
             full_response = ""
-            for chunk in llm_service.chat_stream(messages, PLAN_SYSTEM_PROMPT, token_callback):
+            for chunk in llm_service.chat_stream(messages, system_prompt, token_callback):
                 full_response += chunk
             
             plan = parse_plan_from_text(full_response)
@@ -167,14 +180,14 @@ def phase5_exit(state: AgentState, llm_service=None) -> dict:
     return {}
 
 
-def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
+def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None):
     """创建 Plan 子图"""
     
     def _phase1(state):
         return phase1_understand(state, llm_service)
     
     def _phase2(state):
-        return phase2_design(state, llm_service, token_callback)
+        return phase2_design(state, llm_service, token_callback, settings_service)
     
     def _phase3(state):
         return phase3_review(state, llm_service)
@@ -203,13 +216,13 @@ def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[st
     return graph.compile()
 
 
-def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None) -> dict:
+def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None) -> dict:
     """运行 Plan 流程"""
     print("\n" + "="*60)
     print("[Flow] Plan 流程启动")
     print("="*60)
     
-    graph = create_plan_subgraph(llm_service, token_callback)
+    graph = create_plan_subgraph(llm_service, token_callback, settings_service)
     result = graph.invoke(state)
     
     print("="*60)

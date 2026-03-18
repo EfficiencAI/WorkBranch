@@ -1,4 +1,13 @@
 from typing import TypedDict, List, Any, Optional
+from enum import Enum
+
+
+class AgentType(str, Enum):
+    """Agent 类型枚举"""
+    BUILD_AGENT = "build_agent"
+    REVIEW_AGENT = "review_agent"
+    EXPLORE_AGENT = "explore_agent"
+    ADMIN_AGENT = "admin_agent"
 
 
 class Task(TypedDict):
@@ -27,3 +36,4 @@ class AgentState(TypedDict):
     explore_result: Optional[dict]
     tool_history: List[ToolCall]
     replan_count: int
+    agent_type: Optional[str]

@@ -30,3 +30,4 @@ class ToolExecutionState(TypedDict):
     previous_calls: List[dict]
     task_description: str
     previous_results: List[str]
+    agent_type: str

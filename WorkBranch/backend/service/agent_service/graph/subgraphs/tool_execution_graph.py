@@ -3,12 +3,131 @@ from langgraph.graph import StateGraph, END
 import os
 import shutil
 
-from ...state import ToolExecutionState, ToolCall
+from ...state import ToolExecutionState, ToolCall, AgentType
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
 
 EXPLORE_TOOLS = {"explore_code"}
+
+ALL_TOOLS = {
+    "read_file": {
+        "name": "read_file",
+        "description": "读取文件内容",
+        "params": "file_path, start_line, end_line"
+    },
+    "write_file": {
+        "name": "write_file",
+        "description": "写入文件",
+        "params": "file_path, content, mode(write/append)"
+    },
+    "delete_file": {
+        "name": "delete_file",
+        "description": "删除文件或目录",
+        "params": "file_path"
+    },
+    "list_dir": {
+        "name": "list_dir",
+        "description": "列出目录内容",
+        "params": "directory, recursive"
+    },
+    "create_dir": {
+        "name": "create_dir",
+        "description": "创建目录",
+        "params": "directory"
+    },
+    "explore_code": {
+        "name": "explore_code",
+        "description": "探索代码库",
+        "params": "query, search_type(file/code/structure), file_pattern, max_results"
+    },
+    "thinking": {
+        "name": "thinking",
+        "description": "思考工具（用于分析、设计等需要思考的任务）",
+        "params": ""
+    }
+}
+
+
+def get_allowed_tools(agent_type: str, settings_service=None) -> List[str]:
+    """
+    根据 agent 类型获取允许使用的工具列表
+    
+    Args:
+        agent_type: Agent 类型 (coder, reviewer, explorer, admin)
+        settings_service: 设置服务实例
+        
+    Returns:
+        允许使用的工具名称列表
+    """
+    if settings_service is None:
+        from service.settings_service.settings_service import SettingsService
+        settings_service = SettingsService()
+    
+    try:
+        permissions = settings_service.get("tool_permissions")
+        if agent_type in permissions:
+            return permissions[agent_type].get("allowed", [])
+    except KeyError:
+        pass
+    
+    default_permissions = {
+        "build_agent": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking"],
+        "review_agent": ["read_file", "list_dir", "explore_code", "thinking"],
+        "explore_agent": ["read_file", "list_dir", "thinking"],
+        "admin_agent": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "thinking"]
+    }
+    return default_permissions.get(agent_type, default_permissions["build_agent"])
+
+
+def filter_tools_by_agent_type(agent_type: str, settings_service=None) -> List[dict]:
+    """
+    根据 agent 类型过滤工具列表
+    
+    Args:
+        agent_type: Agent 类型
+        settings_service: 设置服务实例
+        
+    Returns:
+        过滤后的工具定义列表
+    """
+    allowed_tools = get_allowed_tools(agent_type, settings_service)
+    return [ALL_TOOLS[name] for name in allowed_tools if name in ALL_TOOLS]
+
+
+def generate_tool_prompt(agent_type: str, settings_service=None) -> str:
+    """
+    根据 agent 类型生成工具说明 prompt
+    
+    Args:
+        agent_type: Agent 类型
+        settings_service: 设置服务实例
+        
+    Returns:
+        工具说明文本
+    """
+    tools = filter_tools_by_agent_type(agent_type, settings_service)
+    lines = ["可用的工具包括："]
+    for tool in tools:
+        params_str = f", 参数: {tool['params']}" if tool['params'] else ""
+        lines.append(f"- {tool['name']}: {tool['description']}{params_str}")
+    return "\n".join(lines)
+
+
+def is_tool_allowed(tool_name: str, agent_type: str, settings_service=None) -> bool:
+    """
+    检查指定工具是否对当前 agent 类型可用
+    
+    Args:
+        tool_name: 工具名称
+        agent_type: Agent 类型
+        settings_service: 设置服务实例
+        
+    Returns:
+        是否允许使用
+    """
+    allowed_tools = get_allowed_tools(agent_type, settings_service)
+    return tool_name in allowed_tools
 
 THINK_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。
 
@@ -24,7 +143,7 @@ THINK_SYSTEM_PROMPT = """你是一个专业的软件工程师助手。当前正�
 请简洁清晰地回答，不要过于冗长。"""
 
 
-def check_permission(state: ToolExecutionState, workspace_service=None) -> dict:
+def check_permission(state: ToolExecutionState, workspace_service=None, settings_service=None) -> dict:
     """权限检查"""
     print("\n" + "-"*40)
     print("[ToolExec] 权限检查...")
@@ -32,9 +151,18 @@ def check_permission(state: ToolExecutionState, workspace_service=None) -> dict:
     tool_name = state["tool_name"]
     workspace_id = state["workspace_id"]
     tool_args = state["tool_args"]
+    agent_type = state.get("agent_type", "build_agent")
     
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 工作区: {workspace_id}")
+    print(f"[ToolExec] Agent 类型: {agent_type}")
+    
+    if not is_tool_allowed(tool_name, agent_type, settings_service):
+        error_msg = f"工具 '{tool_name}' 不允许被 '{agent_type}' 类型的 Agent 使用"
+        print(f"[ToolExec] 工具权限拒绝: {error_msg}")
+        return {"permission": "deny", "error": error_msg}
+    
+    print(f"[ToolExec] 工具权限检查通过")
 
     if tool_name in FILE_TOOLS and workspace_service:
         path_key = "path" if "path" in tool_args else "file_path"
@@ -521,12 +649,12 @@ def check_doom_loop(state: ToolExecutionState) -> dict:
     return {"doom_loop_detected": False}
 
 
-def create_tool_execution_subgraph(workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
+def create_tool_execution_subgraph(workspace_service=None, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None):
     """创建工具执行子图"""
     graph = StateGraph(ToolExecutionState)
     
     def check_permission_node(state: ToolExecutionState) -> dict:
-        return check_permission(state, workspace_service)
+        return check_permission(state, workspace_service, settings_service)
     
     def execute_tool_node(state: ToolExecutionState) -> dict:
         return execute_tool(state, workspace_service, llm_service, token_callback)
@@ -562,7 +690,9 @@ def run_tool_execution(
     llm_service=None,
     token_callback: Optional[Callable[[str], None]] = None,
     task_description: str = "",
-    previous_results: List[str] = None
+    previous_results: List[str] = None,
+    agent_type: str = "build_agent",
+    settings_service=None
 ) -> dict:
     """
     运行工具执行子图
@@ -577,6 +707,8 @@ def run_tool_execution(
         token_callback: 流式输出回调
         task_description: 任务描述（用于思考工具）
         previous_results: 之前任务的执行结果（短期记忆）
+        agent_type: Agent 类型
+        settings_service: 设置服务实例
         
     Returns:
         执行结果
@@ -596,9 +728,10 @@ def run_tool_execution(
         "previous_calls": previous_calls or [],
         "task_description": task_description,
         "previous_results": previous_results or [],
+        "agent_type": agent_type,
     }
     
-    graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback)
+    graph = create_tool_execution_subgraph(workspace_service, llm_service, token_callback, settings_service)
     result = graph.invoke(initial_state)
     
     print("="*60)

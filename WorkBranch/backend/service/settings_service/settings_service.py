@@ -20,7 +20,26 @@ DEFAULT_SETTINGS = {
     },
     "agent": {
         "memory_mode": "accumulate",
-        "memory_window_size": 3
+        "memory_window_size": 3,
+        "default_type": "build_agent"
+    },
+    "tool_permissions": {
+        "build_agent": {
+            "allowed": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking"],
+            "forbidden": ["delete_file"]
+        },
+        "review_agent": {
+            "allowed": ["read_file", "list_dir", "explore_code", "thinking"],
+            "forbidden": ["write_file", "delete_file", "create_dir"]
+        },
+        "explore_agent": {
+            "allowed": ["read_file", "list_dir", "thinking"],
+            "forbidden": ["write_file", "delete_file", "create_dir", "explore_code"]
+        },
+        "admin_agent": {
+            "allowed": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "thinking"],
+            "forbidden": []
+        }
     }
 }
 

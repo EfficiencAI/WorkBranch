@@ -23,6 +23,7 @@ class Conversation:
     workspace_id: str
     session_id: str
     status: ConversationStatus
+    agent_type: str = "build_agent"
     created_at: datetime = field(default_factory=datetime.now)
     task: Optional[asyncio.Task] = None
     result: Optional[dict] = None
@@ -61,6 +62,14 @@ class AgentService:
         except KeyError:
             window_size = 3
         return memory_mode, window_size
+    
+    def _get_default_agent_type(self) -> str:
+        """获取默认 Agent 类型"""
+        settings = self._get_settings()
+        try:
+            return settings.get("agent:default_type")
+        except KeyError:
+            return "build_agent"
 
     def _get_llm_service(self):
         if self._llm_service is None:
@@ -81,7 +90,8 @@ class AgentService:
     async def create_conversation(
         self,
         workspace_id: str = None,
-        session_id: str = None
+        session_id: str = None,
+        agent_type: str = None
     ) -> str:
         """
         创建新对话
@@ -89,6 +99,7 @@ class AgentService:
         Args:
             workspace_id: 可选的工作区ID，不提供则自动生成
             session_id: 可选的会话ID，不提供则自动生成
+            agent_type: 可选的 Agent 类型，不提供则使用默认值
             
         Returns:
             对话ID
@@ -96,6 +107,7 @@ class AgentService:
         conv_id = self._generate_id()
         session_id = session_id or self._generate_id()
         workspace_id = workspace_id or self._generate_id()
+        agent_type = agent_type or self._get_default_agent_type()
         
         self.ws.register(workspace_id, session_id)
         
@@ -104,10 +116,11 @@ class AgentService:
                 id=conv_id,
                 workspace_id=workspace_id,
                 session_id=session_id,
-                status=ConversationStatus.PENDING
+                status=ConversationStatus.PENDING,
+                agent_type=agent_type
             )
         
-        print(f"[Agent] 创建对话: {conv_id}, 会话: {session_id}, 工作区: {workspace_id}")
+        print(f"[Agent] 创建对话: {conv_id}, 会话: {session_id}, 工作区: {workspace_id}, Agent类型: {agent_type}")
         return conv_id
 
     async def send_message(
@@ -166,9 +179,11 @@ class AgentService:
         llm_service = self._get_llm_service()
         mq = self._get_message_queue()
         memory_mode, window_size = self._get_memory_config()
+        settings = self._get_settings()
         
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
+        agent_type = conv.agent_type if conv else self._get_default_agent_type()
         
         from service.session_service.mq import StreamMessage, MessageType
         
@@ -189,7 +204,9 @@ class AgentService:
                 llm_service,
                 token_callback,
                 memory_mode,
-                window_size
+                window_size,
+                agent_type,
+                settings
             )
         
         loop = asyncio.get_event_loop()
@@ -246,6 +263,7 @@ class AgentService:
             "workspace_id": conv.workspace_id,
             "session_id": conv.session_id,
             "status": conv.status.value,
+            "agent_type": conv.agent_type,
             "created_at": conv.created_at.isoformat(),
             "result": conv.result,
             "error": conv.error,
@@ -339,7 +357,8 @@ class AgentService:
         self,
         user_message: str,
         workspace_id: Optional[str] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        agent_type: Optional[str] = None
     ):
         """
         启动一个新的 Agent（同步版本，向后兼容）
@@ -350,6 +369,7 @@ class AgentService:
             user_message: 用户输入的消息
             workspace_id: 可选的工作区ID
             session_id: 可选的会话ID
+            agent_type: 可选的 Agent 类型
             
         Returns:
             执行结果
@@ -365,6 +385,11 @@ class AgentService:
         if not workspace_id:
             workspace_id = self._generate_id()
             print(f"[Agent] 自动生成工作区ID: {workspace_id}")
+        
+        if not agent_type:
+            agent_type = self._get_default_agent_type()
+        
+        print(f"[Agent] Agent 类型: {agent_type}")
 
         print(f"[Agent] 注册工作区...")
         self.ws.register(workspace_id, session_id)
@@ -375,7 +400,8 @@ class AgentService:
 
         llm_service = self._get_llm_service()
         memory_mode, window_size = self._get_memory_config()
-        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size)
+        settings = self._get_settings()
+        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size, agent_type, settings)
 
         print("\n[Agent] 任务完成！")
         print("="*60)
@@ -385,7 +411,8 @@ class AgentService:
         self,
         user_message: str,
         workspace_id: Optional[str] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        agent_type: Optional[str] = None
     ) -> asyncio.Task:
         """
         启动一个新的 Agent（异步版本）
@@ -396,9 +423,10 @@ class AgentService:
             user_message: 用户输入的消息
             workspace_id: 可选的工作区ID
             session_id: 可选的会话ID
+            agent_type: 可选的 Agent 类型
             
         Returns:
             asyncio.Task 对象
         """
-        conv_id = await self.create_conversation(workspace_id, session_id)
+        conv_id = await self.create_conversation(workspace_id, session_id, agent_type)
         return await self.send_message(conv_id, user_message)
