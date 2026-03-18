@@ -4,6 +4,7 @@ from enum import Enum
 
 class AgentType(str, Enum):
     """Agent 类型枚举"""
+    PLAN_AGENT = "plan_agent"
     BUILD_AGENT = "build_agent"
     REVIEW_AGENT = "review_agent"
     EXPLORE_AGENT = "explore_agent"

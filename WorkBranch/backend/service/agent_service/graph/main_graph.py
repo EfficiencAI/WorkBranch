@@ -63,12 +63,14 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
         is_replan = state.get("plan_failed", False)
         replan_count = state.get("replan_count", 0)
         
+        plan_state = {**state, "agent_type": "plan_agent"}
+        
         if is_replan:
             print("\n" + "="*60)
             print(f"[Graph] 重新规划 (第 {replan_count + 1} 次)，重置状态")
             print("="*60)
         
-        result = run_plan_flow(state, llm_service, token_callback, settings_service)
+        result = run_plan_flow(plan_state, llm_service, token_callback, settings_service)
         
         if is_replan:
             result["tool_history"] = []
@@ -93,7 +95,7 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         
         step = state["current_step"]
         plan = state["plan"]
-        agent_type = state.get("agent_type", "build_agent")
+        agent_type = "build_agent"
         
         if step >= len(plan):
             print("[Build] 所有任务已完成")
@@ -205,7 +207,6 @@ def run_graph(
     token_callback: Optional[Callable[[str], None]] = None,
     memory_mode: str = "accumulate",
     window_size: int = 3,
-    agent_type: str = "build_agent",
     settings_service=None
 ) -> dict:
     """运行主 Graph
@@ -217,13 +218,16 @@ def run_graph(
         token_callback: 流式输出回调
         memory_mode: 记忆模式 - "accumulate" 累加, "sliding" 滑动窗口
         window_size: 滑动窗口大小
-        agent_type: Agent 类型 (coder, reviewer, explorer, admin)
         settings_service: 设置服务实例
+        
+    Note:
+        Plan 节点使用 plan_agent 类型
+        Build 节点使用 build_agent 类型
+        SubAgent (explore_agent, review_agent) 通过工具调用
     """
     print("\n" + "="*60)
     print("[Graph] 主 Graph 启动")
     print(f"[Graph] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
-    print(f"[Graph] Agent 类型: {agent_type}")
     print("="*60)
     
     saved_state = persistence.load(workspace_id)
@@ -232,7 +236,6 @@ def run_graph(
         print(f"[Graph] 恢复已保存的状态")
         initial_state = saved_state
         initial_state["messages"] = initial_state.get("messages", []) + [user_message]
-        initial_state["agent_type"] = initial_state.get("agent_type", agent_type)
     else:
         initial_state: AgentState = {
             "messages": [user_message],
@@ -244,7 +247,7 @@ def run_graph(
             "explore_result": None,
             "tool_history": [],
             "replan_count": 0,
-            "agent_type": agent_type,
+            "agent_type": None,
         }
     
     graph = create_main_graph(llm_service, token_callback, memory_mode, window_size, settings_service)
