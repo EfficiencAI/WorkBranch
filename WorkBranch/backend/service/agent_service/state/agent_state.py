@@ -11,6 +11,17 @@ class AgentType(str, Enum):
     ADMIN_AGENT = "admin_agent"
 
 
+class IntentType(str, Enum):
+    """用户意图类型"""
+    DEVELOP = "develop"
+    EXPLORE = "explore"
+    REVIEW = "review"
+    QUESTION = "question"
+    DEBUG = "debug"
+    REFACTOR = "refactor"
+    OTHER = "other"
+
+
 class Task(TypedDict):
     """单个任务定义"""
     id: int
@@ -26,6 +37,16 @@ class ToolCall(TypedDict):
     result: Optional[str]
 
 
+class IntentAnalysis(TypedDict):
+    """意图分析结果"""
+    intent_type: str
+    summary: str
+    key_points: List[str]
+    suggested_tools: List[str]
+    complexity: str
+    confidence: float
+
+
 class AgentState(TypedDict):
     """Agent 状态定义"""
     messages: List[Any]
@@ -38,3 +59,4 @@ class AgentState(TypedDict):
     tool_history: List[ToolCall]
     replan_count: int
     agent_type: Optional[str]
+    intent_analysis: Optional[IntentAnalysis]

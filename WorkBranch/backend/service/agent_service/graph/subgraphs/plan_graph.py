@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 import json
 import re
 
-from ...state import AgentState, Task
+from ...state import AgentState, Task, IntentAnalysis
 from .tool_execution_graph import generate_tool_prompt
 
 
@@ -19,6 +19,39 @@ class TaskItem(BaseModel):
 class TaskPlan(BaseModel):
     """LLM 输出的任务计划"""
     tasks: List[TaskItem] = Field(description="任务列表")
+
+
+INTENT_ANALYSIS_PROMPT = """你是一个专业的需求分析专家。请分析用户的输入，识别其真实意图和需求。
+
+## 意图类型说明
+- develop: 开发新功能、编写代码、创建文件
+- explore: 探索代码库、查找文件、理解项目结构
+- review: 代码审查、检查问题、优化建议
+- question: 问答、咨询、解释说明
+- debug: 调试问题、修复错误、排查故障
+- refactor: 重构代码、优化结构、改进设计
+- other: 其他类型
+
+## 输出格式要求
+请严格按照以下 JSON 格式输出：
+
+```json
+{
+  "intent_type": "意图类型",
+  "summary": "需求摘要（一句话描述核心需求）",
+  "key_points": ["关键点1", "关键点2"],
+  "suggested_tools": ["建议使用的工具1", "建议使用的工具2"],
+  "complexity": "simple/medium/complex",
+  "confidence": 0.95
+}
+```
+
+## 分析要点
+1. 准确识别用户的主要意图
+2. 提取核心需求点
+3. 判断任务复杂度
+4. 给出置信度（0-1之间）
+5. 只输出 JSON，不要有其他文字"""
 
 
 PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的任务是根据用户需求生成一个清晰的执行计划。
@@ -63,8 +96,44 @@ def get_plan_system_prompt(agent_type: str = "build_agent", settings_service=Non
     return PLAN_SYSTEM_PROMPT_BASE.format(tool_prompt=tool_prompt)
 
 
-def phase1_understand(state: AgentState, llm_service=None) -> dict:
-    """Phase 1: 理解需求"""
+def parse_intent_from_text(text: str) -> IntentAnalysis:
+    """从 LLM 响应中解析意图分析结果"""
+    text = text.strip()
+    
+    json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
+    if json_match:
+        json_str = json_match.group(1)
+    else:
+        json_match2 = re.search(r'\{[\s\S]*"intent_type"[\s\S]*\}', text)
+        if json_match2:
+            json_str = json_match2.group(0)
+        else:
+            json_str = text
+    
+    try:
+        data = json.loads(json_str)
+        return {
+            "intent_type": data.get("intent_type", "other"),
+            "summary": data.get("summary", ""),
+            "key_points": data.get("key_points", []),
+            "suggested_tools": data.get("suggested_tools", []),
+            "complexity": data.get("complexity", "medium"),
+            "confidence": float(data.get("confidence", 0.5))
+        }
+    except (json.JSONDecodeError, ValueError) as e:
+        print(f"[Plan] 意图解析失败: {e}")
+        return {
+            "intent_type": "other",
+            "summary": text[:100] if text else "",
+            "key_points": [],
+            "suggested_tools": [],
+            "complexity": "medium",
+            "confidence": 0.3
+        }
+
+
+def phase1_understand(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
+    """Phase 1: 理解需求 - 调用 LLM 分析用户意图"""
     print("\n" + "="*60)
     print("[Plan] Phase 1/5: 理解需求")
     print("="*60)
@@ -72,8 +141,71 @@ def phase1_understand(state: AgentState, llm_service=None) -> dict:
     user_message = state["messages"][-1] if state["messages"] else ""
     print(f"[Plan] 用户消息: {user_message}")
     
-    print("[Plan] 需求已接收，进入下一阶段")
-    return {}
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            send_message("", MessageType.INTENT_START, {"user_message": user_message})
+    
+    if llm_service is None:
+        print("[Plan] LLM 服务未配置，使用默认意图分析")
+        intent_analysis: IntentAnalysis = {
+            "intent_type": "other",
+            "summary": user_message[:50] if user_message else "",
+            "key_points": [user_message] if user_message else [],
+            "suggested_tools": [],
+            "complexity": "medium",
+            "confidence": 0.5
+        }
+    else:
+        try:
+            print("[Plan] 调用 LLM 分析用户意图...")
+            
+            prompt = f"请分析以下用户输入的意图：\n\n{user_message}"
+            messages = [{"role": "user", "content": prompt}]
+            
+            def intent_token_callback(token: str):
+                if token_callback:
+                    token_callback(token)
+                if message_context:
+                    send_msg = message_context.get("send_message")
+                    if send_msg:
+                        from service.session_service.mq import MessageType
+                        send_msg(token, MessageType.INTENT)
+            
+            full_response = ""
+            for chunk in llm_service.chat_stream(messages, INTENT_ANALYSIS_PROMPT, intent_token_callback):
+                full_response += chunk
+            
+            intent_analysis = parse_intent_from_text(full_response)
+            
+            print(f"[Plan] 意图分析完成:")
+            print(f"  - 意图类型: {intent_analysis['intent_type']}")
+            print(f"  - 需求摘要: {intent_analysis['summary']}")
+            print(f"  - 关键点: {intent_analysis['key_points']}")
+            print(f"  - 建议工具: {intent_analysis['suggested_tools']}")
+            print(f"  - 复杂度: {intent_analysis['complexity']}")
+            print(f"  - 置信度: {intent_analysis['confidence']}")
+            
+        except Exception as e:
+            print(f"[Plan] 意图分析失败: {e}")
+            intent_analysis = {
+                "intent_type": "other",
+                "summary": user_message[:50] if user_message else "",
+                "key_points": [user_message] if user_message else [],
+                "suggested_tools": [],
+                "complexity": "medium",
+                "confidence": 0.3
+            }
+    
+    if message_context:
+        send_message = message_context.get("send_message")
+        if send_message:
+            from service.session_service.mq import MessageType
+            send_message("", MessageType.INTENT_END, {"intent_analysis": intent_analysis})
+    
+    print("[Plan] 需求分析完成，进入下一阶段")
+    return {"intent_analysis": intent_analysis}
 
 
 def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None) -> dict:
@@ -84,14 +216,22 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     
     user_message = state["messages"][-1] if state["messages"] else ""
     agent_type = state.get("agent_type", "build_agent")
+    intent_analysis = state.get("intent_analysis")
+    
     print(f"[Plan] 基于需求设计任务计划...")
     print(f"[Plan] Agent 类型: {agent_type}")
+    
+    if intent_analysis:
+        print(f"[Plan] 使用意图分析结果:")
+        print(f"  - 意图类型: {intent_analysis.get('intent_type')}")
+        print(f"  - 需求摘要: {intent_analysis.get('summary')}")
+        print(f"  - 建议工具: {intent_analysis.get('suggested_tools')}")
     
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
             from service.session_service.mq import MessageType
-            send_message("", MessageType.PLAN_START, {"agent_type": agent_type, "user_message": user_message})
+            send_message("", MessageType.PLAN_START, {"agent_type": agent_type, "user_message": user_message, "intent_analysis": intent_analysis})
     
     if llm_service is None:
         print("[Plan] LLM 服务未配置，使用默认计划")
@@ -108,10 +248,21 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             
             system_prompt = get_plan_system_prompt(agent_type, settings_service)
             
+            intent_context = ""
+            if intent_analysis:
+                intent_context = f"""
+## 意图分析结果
+- 意图类型: {intent_analysis.get('intent_type', 'unknown')}
+- 需求摘要: {intent_analysis.get('summary', '')}
+- 关键点: {', '.join(intent_analysis.get('key_points', []))}
+- 建议工具: {', '.join(intent_analysis.get('suggested_tools', []))}
+- 复杂度: {intent_analysis.get('complexity', 'medium')}
+"""
+            
             prompt = f"""请根据以下用户需求生成执行计划：
 
 用户需求: {user_message}
-
+{intent_context}
 请生成一个包含 2-5 个任务的执行计划，严格按照 JSON 格式输出。"""
             
             messages = [{"role": "user", "content": prompt}]
@@ -305,7 +456,7 @@ def create_plan_subgraph(llm_service=None, token_callback: Optional[Callable[[st
     """创建 Plan 子图"""
     
     def _phase1(state):
-        return phase1_understand(state, llm_service)
+        return phase1_understand(state, llm_service, token_callback, message_context)
     
     def _phase2(state):
         return phase2_design(state, llm_service, token_callback, settings_service, message_context)
