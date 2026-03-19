@@ -3,6 +3,9 @@
 AGENTS.md
 
 __pycache__/
+.agent_states/
 *.py[cod]
 *$py.class
+
+.temp/
 

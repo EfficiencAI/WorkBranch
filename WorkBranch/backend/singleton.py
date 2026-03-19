@@ -9,9 +9,10 @@ from service.user_service.user import UserService
 from service.user_service.session_history import SessionHistory
 from service.session_service.session import SessionService
 from service.session_service.conversation_creator import ConversationCreator
-from service.agent_service.agent import AgentService
-from service.agent_service.workspace import WorkspaceService
+from service.agent_service import AgentService, ConversationStatus, Conversation
+from service.agent_service.service import WorkspaceService, LLMService
 from service.settings_service.settings_service import SettingsService
+from service.session_service.mq import MessageQueue
 from data.user_info_dao import UserInfoDAO
 from data.conversation_dao import ConversationDAO
 
@@ -50,11 +51,24 @@ def get_conversation_creator() -> ConversationCreator:
 
 @lru_cache(maxsize=1)
 def get_agent_service() -> AgentService:
-    return AgentService()
+    llm = get_llm_service()
+    ws = get_workspace_service()
+    mq = get_message_queue()
+    return AgentService(ws, llm, mq)
 
 @lru_cache(maxsize=1)
 def get_workspace_service() -> WorkspaceService:
-    return WorkspaceService()
+    settings = get_settings_service()
+    try:
+        base_dir = settings.get("workspace:base_dir")
+    except KeyError:
+        base_dir = "workspaces"
+    return WorkspaceService(base_dir)
+
+@lru_cache(maxsize=1)
+def get_llm_service() -> LLMService:
+    settings = get_settings_service()
+    return LLMService(settings)
 
 @lru_cache(maxsize=1)
 def get_user_info_dao() -> UserInfoDAO:
@@ -63,6 +77,11 @@ def get_user_info_dao() -> UserInfoDAO:
 @lru_cache(maxsize=1)
 def get_conversation_dao() -> ConversationDAO:
     return ConversationDAO()
+
+@lru_cache(maxsize=1)
+def get_message_queue() -> MessageQueue:
+    settings = get_settings_service()
+    return MessageQueue(settings)
 
 
 def clear_all_singletons():
@@ -77,5 +96,7 @@ def clear_all_singletons():
     get_conversation_creator.cache_clear()
     get_agent_service.cache_clear()
     get_workspace_service.cache_clear()
+    get_llm_service.cache_clear()
     get_user_info_dao.cache_clear()
     get_conversation_dao.cache_clear()
+    get_message_queue.cache_clear()

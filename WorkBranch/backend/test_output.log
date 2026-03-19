@@ -1,0 +1,82 @@
+﻿============================================================
+测试 AgentService - 提示词: 你好
+============================================================
+[Workspace] 工作区已注册: 5fd71200-9412-482a-84a1-4e1ac1587978
+[Workspace] 会话ID: f946171d-1620-4abf-b1c2-3c7e608ba18f
+[Workspace] 路径: E:\PythonProject\WorkBranch\WorkBranch\backend\workspaces\f946171d-1620-4abf-b1c2-3c7e608ba18f\5fd71200-9412-482a-84a1-4e1ac1587978
+[Agent] 创建对话: b4661b0d-30f1-4208-a366-2bc661620dca, 会话: f946171d-1620-4abf-b1c2-3c7e608ba18f, 工作区: 5fd71200-9412-482a-84a1-4e1ac1587978
+[测试] 创建对话: b4661b0d-30f1-4208-a366-2bc661620dca
+[测试] 发送消息: 你好
+[Agent] 对话 b4661b0d-30f1-4208-a366-2bc661620dca 开始执行
+
+============================================================
+[Graph] 主 Graph 启动
+[Graph] 记忆模式: accumulate, 窗口大小: 3
+============================================================
+[Persistence] 加载状态: 5fd71200-9412-482a-84a1-4e1ac1587978
+[Persistence] 状态文件不存在: E:\PythonProject\WorkBranch\WorkBranch\backend\.agent_states\5fd71200-9412-482a-84a1-4e1ac1587978.json
+[Graph] 状态: 无计划 → Plan
+
+============================================================
+[Flow] Plan 流程启动
+============================================================
+
+============================================================
+[Plan] Phase 1/5: 理解需求
+============================================================
+[Plan] 用户消息: 你好
+[Plan] 判断是否需要探索代码库...
+[Plan] 无需探索，直接进入下一阶段
+
+============================================================
+[Plan] Phase 2/5: 生成计划
+============================================================
+[Plan] 基于需求设计任务计划...
+[Plan] 调用 LLM 生成计划...
+[Plan] LLM 思考中:
+[LLM] 发送流式请求: 2 条消息
+[LLM] 流式输出:
+----------------------------------------
+1. 描述: 分析用户输入“你好”，确定这是一个初始化问候，目前没有具体的开发任务，需要建立上下文。
+   工具: thinking
+   参数: {}
+
+2. 描述: 获取当前工作目录路径，以便了解项目上下文。
+   工具: execute_command
+   参数: command="pwd"
+
+3. 描述: 列出当前目录下的文件和文件夹，初步了解项目结构。
+   工具: execute_command
+python : Traceback (most recent call last):
+所在位置 行:1 字符: 62
++ ... nch\WorkBranch\backend; python .test/test_agent_hello.py 2>&1 | Out-F ...
++                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "E:\PythonProject\WorkBranch\WorkBranch\backend\.test\test_agent_hello.py", line 25, in test_agent_service_hello
+    result = await agent.send_message_and_wait(conv_id, "你好")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "E:\PythonProject\WorkBranch\WorkBranch\backend\service\agent_service\agent_service.py", line 336, in send_message_and_wait
+    return await task
+           ^^^^^^^^^^
+UnicodeEncodeError: 'gbk' codec can't encode character '\u2713' in position 2: illegal multibyte sequence
+During task with name 'phase3' and id 'd6668b1d-0094-cd09-612f-9e5fda80d765'
+During task with name 'plan_flow' and id '7d3781fe-bc8f-090a-cb97-100f88447720'
+   参数: command="ls -la"
+----------------------------------------
+
+[Plan] LLM 生成了 3 个任务
+[Plan] 生成 3 个任务:
+  - Task 1: 描述: 分析用户输入“你好”，确定这是一个初始化问候，目前没有具体的开发任务，需要建立上下文。
+  - Task 2: 描述: 获取当前工作目录路径，以便了解项目上下文。
+  - Task 3: 描述: 列出当前目录下的文件和文件夹，初步了解项目结构。
+
+============================================================
+[Plan] Phase 3/5: 审查计划
+============================================================
+[Plan] 审查 3 个任务...
+[Agent] 对话 b4661b0d-30f1-4208-a366-2bc661620dca 执行失败: 'gbk' codec can't encode character '\u2713' in position 2: illegal multibyte sequence
+[测试] 执行出错: 'gbk' codec can't encode character '\u2713' in position 2: illegal multibyte sequence
+[测试] 对话状态: {'id': 'b4661b0d-30f1-4208-a366-2bc661620dca', 'workspace_id': '5fd71200-9412-482a-84a1-4e1ac1587978', 'session_id': 'f946171d-1620-4abf-b1c2-3c7e608ba18f', 'status': 'failed', 'created_at': '2026-03-17T17:29:44.120353', 'result': None, 'error': "'gbk' codec can't encode character '\\u2713' in position 2: illegal multibyte sequence", 'message_count': 1}
+[测试] 测试完成

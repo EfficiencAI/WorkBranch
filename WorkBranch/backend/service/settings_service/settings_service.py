@@ -4,6 +4,45 @@ from data.file_storage_system import FileStorageSystem
 DEFAULT_SETTINGS = {
     "database": {
         "path": "workbranch.db"
+    },
+    "llm": {
+        "api_key": "",
+        "base_url": "https://api.openai.com/v1",
+        "model": "gpt-4o-mini",
+        "temperature": 0.7,
+        "max_tokens": 4096
+    },
+    "workspace": {
+        "base_dir": "workspaces"
+    },
+    "mq": {
+        "max_size": 1000
+    },
+    "agent": {
+        "memory_mode": "accumulate",
+        "memory_window_size": 3
+    },
+    "tool_permissions": {
+        "build_agent": {
+            "allowed": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking", "call_explore_agent", "call_review_agent"],
+            "forbidden": ["delete_file", "explore_internet"]
+        },
+        "plan_agent": {
+            "allowed": ["read_file", "list_dir", "explore_code", "thinking", "call_explore_agent", "call_review_agent"],
+            "forbidden": ["write_file", "delete_file", "create_dir", "explore_internet"]
+        },
+        "review_agent": {
+            "allowed": ["read_file", "list_dir", "explore_code", "thinking"],
+            "forbidden": ["write_file", "delete_file", "create_dir", "explore_internet", "call_explore_agent", "call_review_agent"]
+        },
+        "explore_agent": {
+            "allowed": ["read_file", "list_dir", "thinking", "explore_internet"],
+            "forbidden": ["write_file", "delete_file", "create_dir", "explore_code", "call_explore_agent", "call_review_agent"]
+        },
+        "admin_agent": {
+            "allowed": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "explore_internet", "thinking", "call_explore_agent", "call_review_agent"],
+            "forbidden": []
+        }
     }
 }
 
