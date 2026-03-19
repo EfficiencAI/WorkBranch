@@ -1,6 +1,5 @@
-from .main_graph import run_graph, create_main_graph
+from .orchestrator import run_graph, create_orchestrator_graph
 from .subgraphs import (
-    run_explore,
     run_compaction,
     run_tool_execution,
     run_plan_flow,
@@ -8,8 +7,7 @@ from .subgraphs import (
 
 __all__ = [
     "run_graph",
-    "create_main_graph",
-    "run_explore",
+    "create_orchestrator_graph",
     "run_compaction",
     "run_tool_execution",
     "run_plan_flow",

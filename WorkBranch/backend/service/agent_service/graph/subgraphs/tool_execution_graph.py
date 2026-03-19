@@ -3,65 +3,13 @@ from langgraph.graph import StateGraph, END
 import os
 import shutil
 
-from ...state import ToolExecutionState, ToolCall, AgentType
+from ...state import ToolExecutionState, ToolCall
+from ...tools import ALL_TOOLS, FILE_TOOLS, EXPLORE_TOOLS, SUBAGENT_TOOLS
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
-
-EXPLORE_TOOLS = {"explore_code"}
-
-ALL_TOOLS = {
-    "read_file": {
-        "name": "read_file",
-        "description": "读取文件内容",
-        "params": "file_path, start_line, end_line"
-    },
-    "write_file": {
-        "name": "write_file",
-        "description": "写入文件",
-        "params": "file_path, content, mode(write/append)"
-    },
-    "delete_file": {
-        "name": "delete_file",
-        "description": "删除文件或目录",
-        "params": "file_path"
-    },
-    "list_dir": {
-        "name": "list_dir",
-        "description": "列出目录内容",
-        "params": "directory, recursive"
-    },
-    "create_dir": {
-        "name": "create_dir",
-        "description": "创建目录",
-        "params": "directory"
-    },
-    "explore_code": {
-        "name": "explore_code",
-        "description": "探索代码库",
-        "params": "query, search_type(file/code/structure), file_pattern, max_results"
-    },
-    "explore_internet": {
-        "name": "explore_internet",
-        "description": "搜索互联网获取信息",
-        "params": "query, max_results"
-    },
-    "thinking": {
-        "name": "thinking",
-        "description": "思考工具（用于分析、设计等需要思考的任务）",
-        "params": ""
-    },
-    "call_explore_agent": {
-        "name": "call_explore_agent",
-        "description": "调用探索子代理执行代码探索和互联网搜索任务",
-        "params": "task_description"
-    },
-    "call_review_agent": {
-        "name": "call_review_agent",
-        "description": "调用审查子代理执行代码审查任务",
-        "params": "task_description"
-    }
-}
+EXPLORE_TOOLS = {"explore_code", "explore_internet"}
+SUBAGENT_TOOLS = {"call_explore_agent", "call_review_agent"}
 
 
 def get_allowed_tools(agent_type: str, settings_service=None) -> List[str]:

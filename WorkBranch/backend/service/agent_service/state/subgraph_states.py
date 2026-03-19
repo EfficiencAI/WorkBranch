@@ -1,15 +1,6 @@
 from typing import TypedDict, List, Any, Literal
 
 
-class ExploreState(TypedDict):
-    """Explore 子图状态"""
-    request: str
-    workspace_path: str
-    thoroughness: Literal["quick", "medium", "thorough"]
-    findings: List[dict]
-    summary: str
-
-
 class CompactionState(TypedDict):
     """Compaction 子图状态"""
     messages: List[Any]
