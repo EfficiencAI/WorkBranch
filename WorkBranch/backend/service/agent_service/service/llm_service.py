@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, Optional, Generator, Callable, Awaitable
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+import httpx
 
 
 class LLMService:
@@ -43,6 +44,7 @@ class LLMService:
                 model=model,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                timeout=httpx.Timeout(120.0, connect=30.0),
             )
         
         return self._llm

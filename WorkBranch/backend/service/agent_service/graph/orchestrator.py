@@ -1,10 +1,18 @@
+"""
+Orchestrator Graph - 主编排图
+
+架构说明:
+    - Plan 节点使用 plan_agent 类型
+    - Build 节点使用 build_agent 类型
+    - SubAgent (explore_agent, review_agent) 通过工具调用
+"""
+
 from typing import Literal, Callable, Optional, List
 from langgraph.graph import StateGraph, END
-from .state import AgentState, ToolCall
-from .plan import run_plan_flow
-from .tool_execution import run_tool_execution
-from .compaction import run_compaction
-from .persistence import PersistenceService
+
+from ..state import AgentState, ToolCall
+from ..persistence import PersistenceService
+from .subgraphs import run_plan_flow, run_tool_execution, run_compaction
 
 MAX_REPLAN_COUNT = 3
 MAX_MESSAGES = 10
@@ -17,17 +25,6 @@ def get_previous_results(
     memory_mode: str = "accumulate",
     window_size: int = 3
 ) -> List[str]:
-    """
-    根据配置获取之前任务的结果
-    
-    Args:
-        tool_history: 工具调用历史
-        memory_mode: 记忆模式 - "accumulate" 累加所有结果, "sliding" 滑动窗口
-        window_size: 滑动窗口大小（仅 sliding 模式生效）
-        
-    Returns:
-        之前任务的结果列表
-    """
     all_results = [call.get("result", "") for call in tool_history if call.get("result")]
     
     if memory_mode == "sliding":
@@ -37,39 +34,39 @@ def get_previous_results(
 
 
 def check_state(state: AgentState) -> Literal["plan", "build", "compaction", "done"]:
-    """检查状态，决定下一步"""
     if not state.get("plan"):
-        print("[Graph] 状态: 无计划 → Plan")
+        print("[Orchestrator] 状态: 无计划 → Plan")
         return "plan"
     
     if state.get("plan_failed"):
         replan_count = state.get("replan_count", 0)
         if replan_count >= MAX_REPLAN_COUNT:
-            print(f"[Graph] 重规划次数已达上限 ({replan_count}/{MAX_REPLAN_COUNT}) → Done")
+            print(f"[Orchestrator] 重规划次数已达上限 ({replan_count}/{MAX_REPLAN_COUNT}) → Done")
             return "done"
-        print(f"[Graph] 状态: 计划失败 → 重新Plan ({replan_count}/{MAX_REPLAN_COUNT})")
+        print(f"[Orchestrator] 状态: 计划失败 → 重新Plan ({replan_count}/{MAX_REPLAN_COUNT})")
         return "plan"
     
     if state["current_step"] < len(state["plan"]):
-        print(f"[Graph] 状态: 执行中 ({state['current_step']}/{len(state['plan'])}) → Build")
+        print(f"[Orchestrator] 状态: 执行中 ({state['current_step']}/{len(state['plan'])}) → Build")
         return "build"
     
-    print("[Graph] 状态: 完成 → Done")
+    print("[Orchestrator] 状态: 完成 → Done")
     return "done"
 
 
-def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], None]] = None):
-    """创建 Plan 节点"""
+def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None):
     def plan_node(state: AgentState) -> dict:
         is_replan = state.get("plan_failed", False)
         replan_count = state.get("replan_count", 0)
         
+        plan_state = {**state, "agent_type": "plan_agent"}
+        
         if is_replan:
             print("\n" + "="*60)
-            print(f"[Graph] 重新规划 (第 {replan_count + 1} 次)，重置状态")
+            print(f"[Orchestrator] 重新规划 (第 {replan_count + 1} 次)，重置状态")
             print("="*60)
         
-        result = run_plan_flow(state, llm_service, token_callback)
+        result = run_plan_flow(plan_state, llm_service, token_callback, settings_service, message_context)
         
         if is_replan:
             result["tool_history"] = []
@@ -85,15 +82,15 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
     return plan_node
 
 
-def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3):
-    """创建 Build 流程"""
+def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     def build_flow(state: AgentState) -> dict:
         print("\n" + "="*60)
-        print("[Graph] 节点: build_flow")
+        print("[Orchestrator] 节点: build_flow")
         print("="*60)
         
         step = state["current_step"]
         plan = state["plan"]
+        agent_type = "build_agent"
         
         if step >= len(plan):
             print("[Build] 所有任务已完成")
@@ -108,6 +105,7 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         previous_results = get_previous_results(tool_history, memory_mode, window_size)
         
         print(f"[Build] 记忆模式: {memory_mode}, 传递 {len(previous_results)} 个之前结果")
+        print(f"[Build] Agent 类型: {agent_type}")
         
         tool_result = run_tool_execution(
             tool_name=tool_name,
@@ -117,7 +115,10 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
             llm_service=llm_service,
             token_callback=token_callback,
             task_description=task.get("description", ""),
-            previous_results=previous_results
+            previous_results=previous_results,
+            agent_type=agent_type,
+            settings_service=settings_service,
+            message_context=message_context
         )
         
         if tool_result.get("error"):
@@ -151,7 +152,6 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
 
 
 def compaction_node(state: AgentState) -> dict:
-    """Compaction 节点：压缩消息"""
     messages = state.get("messages", [])
     
     if len(messages) > MAX_MESSAGES:
@@ -161,12 +161,11 @@ def compaction_node(state: AgentState) -> dict:
     return {}
 
 
-def create_main_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3):
-    """创建主 Graph"""
+def create_orchestrator_graph(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     graph = StateGraph(AgentState)
     
-    graph.add_node("plan_flow", create_plan_node(llm_service, token_callback))
-    graph.add_node("build_flow", create_build_flow(llm_service, token_callback, memory_mode, window_size))
+    graph.add_node("plan_flow", create_plan_node(llm_service, token_callback, settings_service, message_context))
+    graph.add_node("build_flow", create_build_flow(llm_service, token_callback, memory_mode, window_size, settings_service, message_context))
     graph.add_node("compaction", compaction_node)
     
     graph.set_conditional_entry_point(check_state, {
@@ -201,27 +200,19 @@ def run_graph(
     llm_service=None, 
     token_callback: Optional[Callable[[str], None]] = None,
     memory_mode: str = "accumulate",
-    window_size: int = 3
+    window_size: int = 3,
+    settings_service=None,
+    message_context: dict = None
 ) -> dict:
-    """运行主 Graph
-    
-    Args:
-        user_message: 用户消息
-        workspace_id: 工作区ID
-        llm_service: LLM 服务实例
-        token_callback: 流式输出回调
-        memory_mode: 记忆模式 - "accumulate" 累加, "sliding" 滑动窗口
-        window_size: 滑动窗口大小
-    """
     print("\n" + "="*60)
-    print("[Graph] 主 Graph 启动")
-    print(f"[Graph] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
+    print("[Orchestrator] 主编排图启动")
+    print(f"[Orchestrator] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
     print("="*60)
     
     saved_state = persistence.load(workspace_id)
     
     if saved_state:
-        print(f"[Graph] 恢复已保存的状态")
+        print(f"[Orchestrator] 恢复已保存的状态")
         initial_state = saved_state
         initial_state["messages"] = initial_state.get("messages", []) + [user_message]
     else:
@@ -235,15 +226,16 @@ def run_graph(
             "explore_result": None,
             "tool_history": [],
             "replan_count": 0,
+            "agent_type": None,
         }
     
-    graph = create_main_graph(llm_service, token_callback, memory_mode, window_size)
+    graph = create_orchestrator_graph(llm_service, token_callback, memory_mode, window_size, settings_service, message_context)
     final_state = graph.invoke(initial_state)
     
     persistence.save(workspace_id, final_state)
     
     print("\n" + "="*60)
-    print("[Graph] 主 Graph 执行完成")
+    print("[Orchestrator] 主编排图执行完成")
     print("="*60)
     
     return final_state

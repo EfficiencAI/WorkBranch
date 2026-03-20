@@ -5,6 +5,9 @@ from enum import Enum
 from typing import Optional, Dict, Any, List
 import queue
 import threading
+import json
+import os
+from pathlib import Path
 
 from service.settings_service.settings_service import SettingsService
 
@@ -14,6 +17,18 @@ class MessageType(Enum):
     ERROR = "error"
     DONE = "done"
     THINKING = "thinking"
+    PLAN = "plan"
+    PLAN_START = "plan_start"
+    PLAN_END = "plan_end"
+    INTENT = "intent"
+    INTENT_START = "intent_start"
+    INTENT_END = "intent_end"
+    TOOL_CALL = "tool_call"
+    TOOL_RESULT = "tool_result"
+    EXECUTE_START = "execute_start"
+    EXECUTE_END = "execute_end"
+    STEP_START = "step_start"
+    STEP_END = "step_end"
 
 
 @dataclass
@@ -52,12 +67,54 @@ class MessageQueue:
         self._sync_queue: queue.Queue = queue.Queue(maxsize=self._max_size)
         self._sync_bridge_running = False
         self._sync_bridge_thread: Optional[threading.Thread] = None
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
+        self._storage_dir = self._get_storage_dir()
+        self._conversation_messages: Dict[str, List[dict]] = {}
+        self._file_lock = threading.Lock()
 
     def _get_max_size(self) -> int:
         try:
             return self._settings.get("mq:max_size")
         except KeyError:
             return 1000
+    
+    def _get_storage_dir(self) -> Path:
+        try:
+            storage_dir = self._settings.get("mq:storage_dir")
+        except KeyError:
+            storage_dir = ".temp/conversations"
+        
+        path = Path(storage_dir)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    
+    def _get_conversation_file(self, conversation_id: str) -> Path:
+        return self._storage_dir / f"{conversation_id}.json"
+    
+    def _save_message_to_file(self, message: StreamMessage) -> None:
+        msg_dict = message.to_dict()
+        conv_id = message.conversation_id
+        
+        with self._file_lock:
+            if conv_id not in self._conversation_messages:
+                self._conversation_messages[conv_id] = []
+                file_path = self._get_conversation_file(conv_id)
+                if file_path.exists():
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            self._conversation_messages[conv_id] = json.load(f)
+                    except Exception as e:
+                        print(f"[MQ] 加载已有消息文件失败: {e}")
+                        self._conversation_messages[conv_id] = []
+            
+            self._conversation_messages[conv_id].append(msg_dict)
+            
+            file_path = self._get_conversation_file(conv_id)
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(self._conversation_messages[conv_id], f, ensure_ascii=False, indent=2)
+            except Exception as e:
+                print(f"[MQ] 保存消息文件失败: {e}")
 
     async def publish(self, message: StreamMessage) -> bool:
         """
@@ -117,6 +174,11 @@ class MessageQueue:
             return
         
         self._sync_bridge_running = True
+        try:
+            self._main_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._main_loop = None
+        
         self._sync_bridge_thread = threading.Thread(
             target=self._sync_bridge_loop,
             daemon=True
@@ -126,15 +188,15 @@ class MessageQueue:
 
     def _sync_bridge_loop(self) -> None:
         """同步-异步桥接循环"""
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
         while self._sync_bridge_running:
             try:
                 message = self._sync_queue.get(timeout=0.1)
-                loop.call_soon_threadsafe(
-                    lambda msg=message: loop.create_task(self._put_to_async_queue(msg))
-                )
+                if self._main_loop and self._main_loop.is_running():
+                    self._main_loop.call_soon_threadsafe(
+                        lambda msg=message: self._main_loop.create_task(self._put_to_async_queue(msg))
+                    )
+                else:
+                    self._queue.put_nowait(message)
             except queue.Empty:
                 continue
             except Exception as e:
@@ -198,15 +260,16 @@ class MessageQueue:
 
     async def _consume(self, message: StreamMessage) -> None:
         """
-        消费单条消息（目前打印到控制台）
+        消费单条消息
         
-        未来可扩展：
-        - 转发到 WebSocket
-        - 写入数据库
-        - 调用外部 API
+        功能：
+        - 打印到控制台
+        - 保存到 JSON 文件（按对话 ID）
         """
         msg_dict = message.to_dict()
         print(f"[MQ] 消费消息: {msg_dict}")
+        
+        self._save_message_to_file(message)
 
     @property
     def size(self) -> int:

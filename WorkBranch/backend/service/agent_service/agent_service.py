@@ -4,7 +4,8 @@ from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
-from .workspace import WorkspaceService
+
+from .service import WorkspaceService
 from .graph import run_graph
 
 
@@ -63,7 +64,7 @@ class AgentService:
 
     def _get_llm_service(self):
         if self._llm_service is None:
-            from .llm_service import get_llm_service
+            from .service import get_llm_service
             self._llm_service = get_llm_service()
         return self._llm_service
 
@@ -165,21 +166,42 @@ class AgentService:
         llm_service = self._get_llm_service()
         mq = self._get_message_queue()
         memory_mode, window_size = self._get_memory_config()
+        settings = self._get_settings()
         
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
         
         from service.session_service.mq import StreamMessage, MessageType
         
-        def token_callback(token: str):
+        def send_message(content: str, message_type: MessageType, metadata: dict = None):
+            msg = StreamMessage(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                content=content,
+                message_type=message_type,
+                metadata=metadata or {}
+            )
+            mq.publish_sync(msg)
+        
+        def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
             msg = StreamMessage(
                 session_id=session_id,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 content=token,
-                message_type=MessageType.TEXT
+                message_type=message_type,
+                metadata=metadata or {}
             )
             mq.publish_sync(msg)
+        
+        message_context = {
+            "send_message": send_message,
+            "token_callback": token_callback,
+            "session_id": session_id,
+            "conversation_id": conversation_id,
+            "workspace_id": workspace_id,
+        }
         
         def run_with_config():
             return run_graph(
@@ -188,7 +210,9 @@ class AgentService:
                 llm_service,
                 token_callback,
                 memory_mode,
-                window_size
+                window_size,
+                settings,
+                message_context=message_context
             )
         
         loop = asyncio.get_event_loop()
@@ -345,6 +369,11 @@ class AgentService:
         
         注意：此方法会阻塞直到完成，建议使用异步方法
         
+        架构说明:
+            - Plan 节点使用 plan_agent 类型
+            - Build 节点使用 build_agent 类型
+            - SubAgent (explore_agent, review_agent) 通过工具调用
+        
         Args:
             user_message: 用户输入的消息
             workspace_id: 可选的工作区ID
@@ -374,7 +403,8 @@ class AgentService:
 
         llm_service = self._get_llm_service()
         memory_mode, window_size = self._get_memory_config()
-        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size)
+        settings = self._get_settings()
+        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size, settings)
 
         print("\n[Agent] 任务完成！")
         print("="*60)
