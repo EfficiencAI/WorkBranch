@@ -139,8 +139,6 @@ class MessageQueue:
                 continue
             except Exception as e:
                 print(f"[MQ] 同步桥接异常: {e}")
-        
-        loop.close()
 
     async def _put_to_async_queue(self, message: StreamMessage) -> None:
         """将消息放入异步队列"""
