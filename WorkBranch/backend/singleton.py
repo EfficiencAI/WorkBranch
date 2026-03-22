@@ -3,18 +3,10 @@
 from functools import lru_cache
 
 from db.sqlite import Database
-from service.session_service.conversation_buffer import ConversationBuffer
 from data.file_storage_system import FileStorageSystem
-from service.user_service.user import UserService
-from service.user_service.session_history import SessionHistory
-from service.session_service.session import SessionService
-from service.session_service.conversation_creator import ConversationCreator
-from service.agent_service import AgentService, ConversationStatus, Conversation
 from service.agent_service.service import WorkspaceService, LLMService
 from service.settings_service.settings_service import SettingsService
 from service.session_service.mq import MessageQueue
-from data.user_info_dao import UserInfoDAO
-from data.conversation_dao import ConversationDAO
 
 
 @lru_cache(maxsize=1)
@@ -26,7 +18,8 @@ def get_database() -> Database:
     return Database()
 
 @lru_cache(maxsize=1)
-def get_conversation_buffer() -> ConversationBuffer:
+def get_conversation_buffer():
+    from service.session_service.conversation_buffer import ConversationBuffer
     return ConversationBuffer()
 
 @lru_cache(maxsize=1)
@@ -34,23 +27,28 @@ def get_file_storage_system() -> FileStorageSystem:
     return FileStorageSystem()
 
 @lru_cache(maxsize=1)
-def get_user_service() -> UserService:
+def get_user_service():
+    from service.user_service.user import UserService
     return UserService()
 
 @lru_cache(maxsize=1)
-def get_session_history() -> SessionHistory:
+def get_session_history():
+    from service.user_service.session_history import SessionHistory
     return SessionHistory()
 
 @lru_cache(maxsize=1)
-def get_session_service() -> SessionService:
+def get_session_service():
+    from service.session_service.session import SessionService
     return SessionService()
 
 @lru_cache(maxsize=1)
-def get_conversation_creator() -> ConversationCreator:
+def get_conversation_creator():
+    from service.session_service.conversation_creator import ConversationCreator
     return ConversationCreator()
 
 @lru_cache(maxsize=1)
-def get_agent_service() -> AgentService:
+def get_agent_service():
+    from service.agent_service import AgentService
     llm = get_llm_service()
     ws = get_workspace_service()
     mq = get_message_queue()
@@ -71,11 +69,13 @@ def get_llm_service() -> LLMService:
     return LLMService(settings)
 
 @lru_cache(maxsize=1)
-def get_user_info_dao() -> UserInfoDAO:
+def get_user_info_dao():
+    from data.user_info_dao import UserInfoDAO
     return UserInfoDAO()
 
 @lru_cache(maxsize=1)
-def get_conversation_dao() -> ConversationDAO:
+def get_conversation_dao():
+    from data.conversation_dao import ConversationDAO
     return ConversationDAO()
 
 @lru_cache(maxsize=1)
