@@ -3,7 +3,6 @@ import sqlite3
 from typing import Any, List, Tuple, Optional
 from contextlib import contextmanager
 
-from singleton import get_settings_service
 from data.file_storage_system import FileStorageSystem
 
 
@@ -11,6 +10,7 @@ class Database:
     """SQLite 数据库封装类，提供连接管理和基础操作方法。"""
 
     def __init__(self):
+        from singleton import get_settings_service
         self._settings_service = get_settings_service()
         self._file_storage = FileStorageSystem()
         self._db_path = self._get_db_path()
