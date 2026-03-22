@@ -51,3 +51,12 @@ class UserInfoDAO:
         """更新用户名称。"""
         sql = 'UPDATE users SET name = ? WHERE id = ?'
         self._db.execute(sql, (new_name, user_id))
+
+    def get_or_create_default_user(self) -> User:
+        """获取或创建默认本地用户（唯一用户）。"""
+        sql = 'SELECT id, name FROM users LIMIT 1'
+        row = self._db.fetch_one(sql)
+        if row:
+            return User(**dict(row))
+        user_id = self.create_user("Local User")
+        return User(id=user_id, name="Local User")
