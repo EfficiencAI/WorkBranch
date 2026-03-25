@@ -1,19 +1,19 @@
 import { Col, Row } from 'antd'
-import { WorkspaceCanvas } from './WorkspaceCanvas'
-import { WorkspaceInspector } from './WorkspaceInspector'
-import { WorkspaceSidebar } from './WorkspaceSidebar'
+import { ConversationCanvas } from './ConversationCanvas'
+import { DetailPanel } from './DetailPanel'
+import { SessionSidebar } from './SessionSidebar'
 
 export function WorkspaceShell() {
   return (
     <Row gutter={[16, 16]} className="workspace-shell">
-      <Col xs={24} lg={6}>
-        <WorkspaceSidebar />
+      <Col xs={24} xl={6}>
+        <SessionSidebar />
       </Col>
-      <Col xs={24} lg={12}>
-        <WorkspaceCanvas />
+      <Col xs={24} xl={12}>
+        <ConversationCanvas />
       </Col>
-      <Col xs={24} lg={6}>
-        <WorkspaceInspector />
+      <Col xs={24} xl={6}>
+        <DetailPanel />
       </Col>
     </Row>
   )

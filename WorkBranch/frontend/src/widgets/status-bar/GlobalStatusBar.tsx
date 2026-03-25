@@ -15,8 +15,8 @@ export function GlobalStatusBar() {
     <Layout.Footer className="global-status-bar">
       <Space size="middle" wrap>
         <Typography.Text type="secondary">当前页面：{pageLabel}</Typography.Text>
-        <StatusTag label="阶段二" tone="processing" />
-        <StatusTag label="基础框架已接入" tone="success" />
+        <StatusTag label="阶段四" tone="processing" />
+        <StatusTag label="静态工作台已接入" tone="success" />
       </Space>
     </Layout.Footer>
   )

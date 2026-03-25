@@ -71,6 +71,7 @@ select {
 
 .app-header__menu {
   min-width: 220px;
+  flex: 1 1 240px;
   background: transparent;
   border-bottom: none;
 }
@@ -85,18 +86,103 @@ select {
 
 .workspace-column {
   width: 100%;
-  min-height: 420px;
+  min-height: 560px;
 }
 
-.workspace-canvas-placeholder {
+.session-sidebar__profile,
+.session-sidebar__item,
+.conversation-node__card,
+.message-composer,
+.detail-panel__note {
+  border-radius: 14px;
+}
+
+.session-sidebar__list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.session-sidebar__item {
+  padding: 14px;
+  border: 1px solid #f0f0f0;
+  background: #fff;
+}
+
+.session-sidebar__item + .session-sidebar__item {
+  margin-top: 12px;
+}
+
+.session-sidebar__item--active {
+  border-color: #91caff;
+  background: #f0f7ff;
+  box-shadow: inset 0 0 0 1px rgba(22, 119, 255, 0.08);
+}
+
+.session-sidebar__preview.ant-typography {
+  margin: 0;
+}
+
+.conversation-canvas__toolbar {
   display: flex;
-  flex: 1;
-  min-height: 260px;
-  align-items: center;
-  justify-content: center;
-  border: 1px dashed #d1d5db;
-  border-radius: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.conversation-canvas__title.ant-typography {
+  margin: 0;
+}
+
+.conversation-canvas__content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.conversation-canvas__empty-panel {
+  border: 1px dashed #d9d9d9;
+  border-radius: 16px;
   background: #fafafa;
+}
+
+.conversation-node {
+  position: relative;
+  padding-left: 22px;
+}
+
+.conversation-node__line {
+  position: absolute;
+  top: 0;
+  bottom: -16px;
+  left: 8px;
+  width: 2px;
+  background: #e5e7eb;
+}
+
+.conversation-node:last-child .conversation-node__line {
+  bottom: 50%;
+}
+
+.conversation-node__card {
+  width: 100%;
+}
+
+.conversation-node--active .conversation-node__card {
+  border-color: #91caff;
+  background: linear-gradient(180deg, rgba(240, 247, 255, 0.95), #ffffff);
+}
+
+.conversation-node__summary.ant-typography,
+.conversation-node__content.ant-typography {
+  margin: 0;
+}
+
+.message-composer .ant-card-head,
+.detail-panel .ant-card-head,
+.session-sidebar .ant-card-head,
+.conversation-canvas .ant-card-head {
+  min-height: 48px;
 }
 
 .loading-state {

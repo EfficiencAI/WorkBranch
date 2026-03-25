@@ -7,7 +7,7 @@ export function WorkspacePage() {
       <div>
         <Typography.Title level={2}>工作台</Typography.Title>
         <Typography.Paragraph type="secondary">
-          第二阶段先固定三栏式布局与页面路由，后续阶段再逐步接入会话、树图和聊天能力。
+          第四阶段先把静态工作台界面搭完整，后续阶段再逐步接入 Zustand、会话数据、树图和 SSE 聊天链路。
         </Typography.Paragraph>
       </div>
       <WorkspaceShell />
