@@ -32,39 +32,146 @@ select {
   font: inherit;
 }
 
-.app-shell {
+.app-layout {
   min-height: 100vh;
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: auto;
+  padding: 0 24px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.app-header__inner {
+  min-height: 72px;
   display: flex;
   align-items: center;
-  justify-content: center;
-  padding: 32px;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  padding: 12px 0;
 }
 
-.hero-panel {
-  width: min(720px, 100%);
-  padding: 40px;
-  border-radius: 20px;
-  background: #ffffff;
-  box-shadow: 0 20px 50px rgba(15, 23, 42, 0.08);
-}
-
-.eyebrow {
-  margin: 0 0 12px;
-  color: #4f46e5;
-  font-size: 14px;
+.app-header__eyebrow {
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  color: #4f46e5;
 }
 
-h1 {
-  margin: 0 0 16px;
-  font-size: 36px;
-  line-height: 1.2;
-}
-
-.description {
+.app-header__title.ant-typography {
   margin: 0;
-  color: #4b5563;
-  font-size: 16px;
+}
+
+.app-header__menu {
+  min-width: 220px;
+  background: transparent;
+  border-bottom: none;
+}
+
+.app-content {
+  padding: 24px;
+}
+
+.workspace-shell .ant-col {
+  display: flex;
+}
+
+.workspace-column {
+  width: 100%;
+  min-height: 420px;
+}
+
+.workspace-canvas-placeholder {
+  display: flex;
+  flex: 1;
+  min-height: 260px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed #d1d5db;
+  border-radius: 12px;
+  background: #fafafa;
+}
+
+.loading-state {
+  min-height: 240px;
+}
+
+.settings-card,
+.workspace-column {
+  border-radius: 16px;
+}
+
+.settings-tree-node,
+.settings-tree-leaf {
+  width: 100%;
+}
+
+.settings-tree-node {
+  padding-left: 12px;
+  border-left: 2px solid #e5e7eb;
+}
+
+.settings-tree-node__title.ant-typography {
+  margin: 0 0 8px;
+}
+
+.settings-tree-leaf {
+  padding: 12px 0;
+  border-top: 1px solid #f0f0f0;
+}
+
+.settings-tree-leaf:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.settings-tree-leaf__meta {
+  flex: 1;
+  min-width: 220px;
+}
+
+.settings-tree-leaf__path.ant-typography {
+  margin: 4px 0 0;
+  word-break: break-all;
+}
+
+.settings-tree-leaf__value {
+  margin-top: 12px;
+}
+
+.settings-tree-leaf__hint.ant-typography {
+  margin: 8px 0 0;
+}
+
+.settings-pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.global-status-bar {
+  padding: 12px 24px;
+  background: #111827;
+}
+
+.global-status-bar .ant-typography {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 991px) {
+  .app-content {
+    padding: 16px;
+  }
+
+  .app-header {
+    padding: 0 16px;
+  }
 }

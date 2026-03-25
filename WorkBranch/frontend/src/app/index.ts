@@ -1,2 +1,3 @@
-// 阶段一仅预留目录骨架，后续在此接入应用级初始化逻辑。
-export {}
+export { AppLayout } from './layouts/AppLayout'
+export { AppProviders } from './providers'
+export { router } from './router'

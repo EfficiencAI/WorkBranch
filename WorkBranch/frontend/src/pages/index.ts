@@ -1,2 +1,2 @@
-// 阶段一仅预留目录骨架，后续在此承接页面实现。
-export {}
+export { SettingsPage } from './settings/SettingsPage'
+export { WorkspacePage } from './workspace/WorkspacePage'

@@ -1,2 +1,5 @@
-// 阶段一仅预留目录骨架，后续在此承接 widgets 组件。
-export {}
+export { GlobalStatusBar } from './status-bar/GlobalStatusBar'
+export { WorkspaceCanvas } from './workspace/WorkspaceCanvas'
+export { WorkspaceInspector } from './workspace/WorkspaceInspector'
+export { WorkspaceShell } from './workspace/WorkspaceShell'
+export { WorkspaceSidebar } from './workspace/WorkspaceSidebar'
