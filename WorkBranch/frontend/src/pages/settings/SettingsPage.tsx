@@ -14,22 +14,11 @@ import {
 } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import type { SettingNode, SettingValue } from '../../entities'
+import { getErrorMessage, get, patch } from '../../shared/api'
 import { settingsConfig } from '../../shared/config/settings'
+import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { LoadingState, StatusTag } from '../../shared/ui'
-
-type SettingPrimitive = string | number | boolean | null
-
-type SettingValue = SettingPrimitive | SettingNode | SettingValue[]
-
-interface SettingNode {
-  [key: string]: SettingValue
-}
-
-type SettingsResponse = {
-  code?: number
-  message?: string
-  data?: SettingNode
-}
 
 type EditorKind = 'string' | 'number' | 'boolean' | 'json' | 'secret'
 
@@ -41,10 +30,6 @@ type EditingState = {
 }
 
 const MAX_RENDER_DEPTH = 5
-
-function isPlainObject(value: SettingValue): value is SettingNode {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isSecretField(path: string[]) {
   return path[path.length - 1] === 'api_key'
@@ -96,49 +81,6 @@ function formatReadonlyValue(path: string[], value: SettingValue) {
   }
 
   return String(value)
-}
-
-function cloneValue<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T
-}
-
-function getValueAtPath(root: SettingValue, path: string[]) {
-  let current = root
-
-  for (const segment of path) {
-    if (!isPlainObject(current) || !(segment in current)) {
-      return undefined
-    }
-
-    current = current[segment]
-  }
-
-  return current
-}
-
-function setValueAtPath(root: SettingValue, path: string[], nextValue: SettingValue) {
-  if (path.length === 0) {
-    return nextValue
-  }
-
-  if (!isPlainObject(root)) {
-    return root
-  }
-
-  const [head, ...rest] = path
-
-  if (rest.length === 0) {
-    root[head] = nextValue
-    return root
-  }
-
-  const child = root[head]
-  if (!isPlainObject(child)) {
-    return root
-  }
-
-  root[head] = setValueAtPath(child, rest, nextValue)
-  return root
 }
 
 function buildInitialEditorValue(kind: EditorKind, value: SettingValue) {
@@ -204,16 +146,10 @@ export function SettingsPage() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch(settingsConfig.endpoint)
-      if (!response.ok) {
-        throw new Error(`设置加载失败：${response.status}`)
-      }
-
-      const result = (await response.json()) as SettingsResponse
-      setSettings(result.data ?? {})
+      const result = await get<SettingNode>(settingsConfig.endpoint)
+      setSettings(result)
     } catch (caughtError) {
-      const messageText = caughtError instanceof Error ? caughtError.message : '设置加载失败'
-      setError(messageText)
+      setError(getErrorMessage(caughtError, '设置加载失败'))
     } finally {
       setLoading(false)
     }
@@ -248,7 +184,7 @@ export function SettingsPage() {
       kind,
       value: buildInitialEditorValue(kind, value),
     })
-    setDraftRoot(cloneValue(rootValue))
+    setDraftRoot(cloneDeepJson(rootValue))
     setSaveError(null)
   }
 
@@ -267,7 +203,7 @@ export function SettingsPage() {
       return
     }
 
-    const originalValue = getValueAtPath(originalRoot, editing.path)
+    const originalValue = getValueAtPath<SettingValue>(originalRoot, editing.path)
     if (originalValue === undefined) {
       setSaveError('找不到当前设置项')
       return
@@ -278,22 +214,12 @@ export function SettingsPage() {
       setSaveError(null)
 
       const parsedValue = parseEditorValue(editing.kind, editing.value, originalValue)
-      const nextRoot = cloneValue(draftRoot)
+      const nextRoot = cloneDeepJson(draftRoot)
       const updatedRoot = setValueAtPath(nextRoot, editing.path, parsedValue)
 
-      const response = await fetch(settingsConfig.endpoint, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          [editing.rootKey]: updatedRoot,
-        }),
+      await patch<void, Partial<SettingNode>>(settingsConfig.endpoint, {
+        [editing.rootKey]: updatedRoot,
       })
-
-      if (!response.ok) {
-        throw new Error(`设置保存失败：${response.status}`)
-      }
 
       setSettings((current) => {
         if (!current) {
@@ -309,8 +235,7 @@ export function SettingsPage() {
       message.success('设置已保存')
       cancelEditing()
     } catch (caughtError) {
-      const messageText = caughtError instanceof Error ? caughtError.message : '设置保存失败'
-      setSaveError(messageText)
+      setSaveError(getErrorMessage(caughtError, '设置保存失败'))
     } finally {
       setSaving(false)
     }
@@ -416,9 +341,7 @@ export function SettingsPage() {
           </Space>
         </Flex>
 
-        <div className="settings-tree-leaf__value">
-          {isEditingLeaf ? renderEditor() : renderReadonlyValue(fullPath, value)}
-        </div>
+        <div className="settings-tree-leaf__value">{isEditingLeaf ? renderEditor() : renderReadonlyValue(fullPath, value)}</div>
 
         {isEditingLeaf && isSecretField(fullPath) ? (
           <Typography.Paragraph type="secondary" className="settings-tree-leaf__hint">
