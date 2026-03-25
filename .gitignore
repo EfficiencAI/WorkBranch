@@ -12,3 +12,5 @@ __pycache__/
 *.db
 logs/
 .test/
+
+node_modules/
