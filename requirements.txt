@@ -1,2 +1,11 @@
 zstandard==0.24.0
 duckduckgo-search>=6.0.0
+
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+httpx>=0.24.0
+httpx-sse>=0.3.0
+fastapi>=0.100.0
+pydantic>=2.0.0
+langchain-openai>=0.1.0
+langgraph>=0.1.0
