@@ -1,9 +1,13 @@
 import { Button, Input, Space, Typography } from 'antd'
 import { useState } from 'react'
-import { currentWorkspaceId } from './workspaceMocks'
 
-export function MessageComposer() {
-  const [workspaceId, setWorkspaceId] = useState(currentWorkspaceId)
+type MessageComposerProps = {
+  workspaceId: string | null
+  sending: boolean
+  onSend: (message: string) => Promise<void>
+}
+
+export function MessageComposer({ workspaceId, sending, onSend }: MessageComposerProps) {
   const [message, setMessage] = useState('请基于当前节点继续展开下一轮对话。')
 
   return (
@@ -17,15 +21,22 @@ export function MessageComposer() {
         />
 
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Typography.Text strong>workspace_id</Typography.Text>
-          <Input value={workspaceId} onChange={(event) => setWorkspaceId(event.target.value)} />
+          <Typography.Text strong>conversation workspace</Typography.Text>
+          <Input value={workspaceId ?? ''} readOnly />
         </Space>
 
         <Space className="message-composer__footer" wrap>
-          <Typography.Text type="secondary">静态阶段仅展示图内新建节点的输入形态。</Typography.Text>
+          <Typography.Text type="secondary">发送将走 session 接口，详情/内容回读由 conversation 接口获取。</Typography.Text>
           <Space>
-            <Button>停止</Button>
-            <Button type="primary">发送</Button>
+            <Button disabled={sending}>停止</Button>
+            <Button
+              type="primary"
+              loading={sending}
+              disabled={!message.trim() || sending}
+              onClick={() => onSend(message)}
+            >
+              发送
+            </Button>
           </Space>
         </Space>
       </Space>

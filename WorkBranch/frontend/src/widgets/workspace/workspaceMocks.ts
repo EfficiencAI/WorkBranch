@@ -1,5 +1,5 @@
 import type { MessageNode } from '../../entities/message-node/model/types'
-import type { SessionDetail, SessionSummary } from '../../entities/session/model/types'
+import type { SessionSummary } from '../../entities/session/model/types'
 import type { UserProfile } from '../../entities/user/model/types'
 
 type StaticTone = 'default' | 'success' | 'warning' | 'error' | 'processing'
@@ -23,8 +23,31 @@ export type CanvasMessage = MessageNode & {
   position: CanvasPosition
 }
 
-export const currentSessionTitle = '阶段四：全屏工作台静态重构'
-export const currentWorkspaceId = 'workspace-demo-001'
+export type ConversationDetail = {
+  conversationId: string
+  sessionId: string
+  sessionTitle: string
+  title: string
+  workspaceId: string
+  status: string
+  createdAt: string
+  updatedAt: string
+  nodeCount: number
+  branchCount: number
+}
+
+export const currentConversationDetail: ConversationDetail = {
+  conversationId: 'conversation-001',
+  sessionId: 'session-001',
+  sessionTitle: '阶段四：全屏工作台静态重构',
+  title: '阶段四：全屏工作台静态重构 / 当前对话',
+  workspaceId: 'workspace-demo-001',
+  status: '静态预览中',
+  createdAt: '2026-03-26 09:10',
+  updatedAt: '2026-03-26 10:48',
+  nodeCount: 4,
+  branchCount: 2,
+}
 
 export const mockUser: UserProfile = {
   id: 'user-demo',
@@ -34,7 +57,7 @@ export const mockUser: UserProfile = {
 export const mockSessions: SessionListItem[] = [
   {
     id: 'session-001',
-    title: '阶段四：全屏工作台静态重构',
+    title: currentConversationDetail.sessionTitle,
     preview: '切换为悬浮入口、覆盖侧栏、全屏会话图。',
     statusLabel: '当前会话',
     tone: 'processing',
@@ -69,21 +92,6 @@ export const mockSessions: SessionListItem[] = [
     updatedAt: '昨天',
   },
 ]
-
-export const currentSessionDetail: SessionDetail & {
-  workspaceId: string
-  nodeCount: number
-  branchCount: number
-} = {
-  id: 'session-001',
-  title: currentSessionTitle,
-  status: '静态预览中',
-  createdAt: '2026-03-26 09:10',
-  updatedAt: '2026-03-26 10:48',
-  workspaceId: currentWorkspaceId,
-  nodeCount: 4,
-  branchCount: 2,
-}
 
 export const mockMessages: CanvasMessage[] = [
   {

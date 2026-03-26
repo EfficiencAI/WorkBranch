@@ -4,9 +4,10 @@ from typing import Optional, Dict, Any, Callable, Awaitable
 from enum import Enum
 from datetime import datetime
 
-from singleton import get_conversation_buffer, get_agent_service
+from singleton import get_conversation_buffer, get_agent_service, get_conversation_dao
 from service.session_service.conversation_buffer import ConversationBuffer
 from service.agent_service.agent_service import AgentService
+from data.conversation_dao import ConversationDAO
 
 
 class ConversationState(Enum):
@@ -42,9 +43,10 @@ class ConversationCreator:
         if ConversationCreator._initialized:
             return
         ConversationCreator._initialized = True
-        
+
         self._buffer: ConversationBuffer = get_conversation_buffer()
         self._agent: AgentService = get_agent_service()
+        self._dao: ConversationDAO = get_conversation_dao()
         self._conversations: Dict[str, ConversationInfo] = {}
         self._lock = asyncio.Lock()
 
@@ -57,17 +59,24 @@ class ConversationCreator:
             workspace_id=workspace_id,
             session_id=str(session_id)
         )
-        
+
+        resolved_workspace_id = workspace_id or agent_conv_id
         await self._buffer.start_buffer(agent_conv_id, session_id)
-        
+        self._dao.create_conversation(
+            conversation_id=agent_conv_id,
+            session_id=session_id,
+            workspace_id=resolved_workspace_id,
+            state=ConversationState.PENDING.value,
+        )
+
         async with self._lock:
             self._conversations[agent_conv_id] = ConversationInfo(
                 conversation_id=agent_conv_id,
                 session_id=session_id,
-                workspace_id=workspace_id or agent_conv_id,
+                workspace_id=resolved_workspace_id,
                 state=ConversationState.PENDING
             )
-        
+
         return agent_conv_id
 
     async def send_user_message(
@@ -79,35 +88,53 @@ class ConversationCreator:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
-                raise ValueError(f"Conversation {conversation_id} not found")
-            
+                persisted = self._dao.get_conversation_by_id(conversation_id)
+                if not persisted:
+                    raise ValueError(f"Conversation {conversation_id} not found")
+                conv_info = ConversationInfo(
+                    conversation_id=persisted.id,
+                    session_id=persisted.session_id,
+                    workspace_id=persisted.workspace_id or conversation_id,
+                    state=ConversationState(persisted.state or ConversationState.PENDING.value),
+                    created_at=datetime.fromisoformat(persisted.created_at) if 'T' in persisted.created_at else datetime.now(),
+                    error=persisted.error,
+                    message_count=persisted.message_count,
+                )
+                self._conversations[conversation_id] = conv_info
+
             if conv_info.state == ConversationState.RUNNING:
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
-        
+
         await self._buffer.add_node(
             conversation_id=conversation_id,
             role="user",
             content=message
         )
-        
+
         async with self._lock:
             conv_info.state = ConversationState.RUNNING
             conv_info.message_count += 1
-        
+            self._dao.update_conversation(
+                conversation_id,
+                state=ConversationState.RUNNING.value,
+                message_count=conv_info.message_count,
+                error=None,
+            )
+
         async def wrapped_callback(result: Dict[str, Any]):
             await self._on_message_complete(conversation_id, result)
             if on_complete:
                 await on_complete(result)
-        
+
         task = await self._agent.send_message(
             conversation_id=conversation_id,
             message=message,
             stream_callback=wrapped_callback
         )
-        
+
         async with self._lock:
             conv_info.task = task
-        
+
         return task
 
     async def _on_message_complete(
@@ -119,14 +146,20 @@ class ConversationCreator:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
                 return
-            
+
             conv_info.state = ConversationState.COMPLETED
-        
+            self._dao.update_conversation(
+                conversation_id,
+                state=ConversationState.COMPLETED.value,
+                message_count=conv_info.message_count,
+                ended_at=datetime.now().isoformat(),
+            )
+
         assistant_content = result.get("response", "") if result else ""
         if assistant_content:
             nodes = await self._buffer.get_buffered_nodes(conversation_id)
             parent_id = len(nodes) - 1 if nodes else None
-            
+
             await self._buffer.add_node(
                 conversation_id=conversation_id,
                 role="assistant",
@@ -138,8 +171,20 @@ class ConversationCreator:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
-                return 0
-            
+                persisted = self._dao.get_conversation_by_id(conversation_id)
+                if not persisted:
+                    return 0
+                conv_info = ConversationInfo(
+                    conversation_id=persisted.id,
+                    session_id=persisted.session_id,
+                    workspace_id=persisted.workspace_id or conversation_id,
+                    state=ConversationState(persisted.state or ConversationState.PENDING.value),
+                    created_at=datetime.now(),
+                    error=persisted.error,
+                    message_count=persisted.message_count,
+                )
+                self._conversations[conversation_id] = conv_info
+
             if conv_info.state == ConversationState.RUNNING:
                 if conv_info.task and not conv_info.task.done():
                     try:
@@ -148,33 +193,69 @@ class ConversationCreator:
                         conv_info.task.cancel()
                     except Exception:
                         pass
-            
+
             conv_info.state = ConversationState.COMPLETED
-        
+            self._dao.update_conversation(
+                conversation_id,
+                state=ConversationState.COMPLETED.value,
+                message_count=conv_info.message_count,
+                error=conv_info.error,
+                ended_at=datetime.now().isoformat(),
+            )
+
         flushed_count = await self._buffer.flush(conversation_id)
-        
+        self._dao.update_conversation(conversation_id, message_count=flushed_count)
         return flushed_count
 
     async def cancel_conversation(self, conversation_id: str) -> bool:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
-                return False
-            
+                persisted = self._dao.get_conversation_by_id(conversation_id)
+                if not persisted:
+                    return False
+                conv_info = ConversationInfo(
+                    conversation_id=persisted.id,
+                    session_id=persisted.session_id,
+                    workspace_id=persisted.workspace_id or conversation_id,
+                    state=ConversationState(persisted.state or ConversationState.PENDING.value),
+                    created_at=datetime.now(),
+                    error=persisted.error,
+                    message_count=persisted.message_count,
+                )
+                self._conversations[conversation_id] = conv_info
+
             if conv_info.state == ConversationState.RUNNING:
                 self._agent.cancel_conversation(conversation_id)
-            
+
             conv_info.state = ConversationState.CANCELLED
-        
+            self._dao.update_conversation(
+                conversation_id,
+                state=ConversationState.CANCELLED.value,
+                message_count=conv_info.message_count,
+                error=conv_info.error,
+                ended_at=datetime.now().isoformat(),
+            )
+
         await self._buffer.clear(conversation_id)
-        
         return True
 
     def get_state(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         conv_info = self._conversations.get(conversation_id)
         if not conv_info:
-            return None
-        
+            persisted = self._dao.get_conversation_by_id(conversation_id)
+            if not persisted:
+                return None
+            return {
+                "conversation_id": persisted.id,
+                "session_id": persisted.session_id,
+                "workspace_id": persisted.workspace_id,
+                "state": persisted.state,
+                "created_at": persisted.created_at,
+                "message_count": persisted.message_count,
+                "error": persisted.error
+            }
+
         return {
             "conversation_id": conv_info.conversation_id,
             "session_id": conv_info.session_id,
@@ -204,17 +285,14 @@ class ConversationCreator:
     async def delete_conversation(self, conversation_id: str) -> bool:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
-            if not conv_info:
-                return False
-            
-            if conv_info.state == ConversationState.RUNNING:
+            if conv_info and conv_info.state == ConversationState.RUNNING:
                 self._agent.cancel_conversation(conversation_id)
-            
-            del self._conversations[conversation_id]
-        
+
+            if conversation_id in self._conversations:
+                del self._conversations[conversation_id]
+
         await self._buffer.clear(conversation_id)
         self._agent.delete_conversation(conversation_id)
-        
         return True
 
     def is_conversation_running(self, conversation_id: str) -> bool:

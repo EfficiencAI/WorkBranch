@@ -19,6 +19,7 @@ class BufferNode:
 @dataclass
 class BufferData:
     session_id: int
+    conversation_id: str
     nodes: List[BufferNode] = field(default_factory=list)
     created_at: datetime = field(default_factory=datetime.now)
 
@@ -36,7 +37,7 @@ class ConversationBuffer:
         if ConversationBuffer._initialized:
             return
         ConversationBuffer._initialized = True
-        
+
         self._buffers: Dict[str, BufferData] = {}
         self._lock = asyncio.Lock()
         self._dao: ConversationDAO = get_conversation_dao()
@@ -45,7 +46,10 @@ class ConversationBuffer:
         async with self._lock:
             if conversation_id in self._buffers:
                 return
-            self._buffers[conversation_id] = BufferData(session_id=session_id)
+            self._buffers[conversation_id] = BufferData(
+                session_id=session_id,
+                conversation_id=conversation_id,
+            )
 
     async def add_node(
         self,
@@ -57,7 +61,7 @@ class ConversationBuffer:
         async with self._lock:
             if conversation_id not in self._buffers:
                 raise ValueError(f"Conversation {conversation_id} not found in buffer")
-            
+
             node = BufferNode(
                 role=role,
                 content=content,
@@ -76,33 +80,33 @@ class ConversationBuffer:
         async with self._lock:
             if conversation_id not in self._buffers:
                 return 0
-            
+
             buffer_data = self._buffers[conversation_id]
             session_id = buffer_data.session_id
             nodes = buffer_data.nodes
-            
+
             if not nodes:
                 return 0
-            
+
             parent_id_map: Dict[int, int] = {}
             flushed_count = 0
-            
+
             for i, node in enumerate(nodes):
-                actual_parent_id = parent_id_map.get(node.parent_id) if node.parent_id else None
-                
+                actual_parent_id = parent_id_map.get(node.parent_id) if node.parent_id is not None else None
+
                 node_id = self._dao.add_node(
                     session_id=session_id,
+                    conversation_id=conversation_id,
                     role=node.role,
                     content=node.content,
                     parent_id=actual_parent_id
                 )
-                
+
                 parent_id_map[i] = node_id
                 node.node_id = node_id
                 flushed_count += 1
-            
+
             self._buffers[conversation_id].nodes = []
-            
             return flushed_count
 
     async def clear(self, conversation_id: str) -> bool:

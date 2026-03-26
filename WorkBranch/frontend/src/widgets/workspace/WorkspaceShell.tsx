@@ -1,15 +1,39 @@
 import { Button, Space, Typography } from 'antd'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { ConversationDetail, MessageNode, SessionDetail, SessionSummary, UserProfile, WorkspaceDetail } from '../../entities'
 import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas } from './ConversationCanvas'
 import { DetailPanel } from './DetailPanel'
 import { SessionSidebar } from './SessionSidebar'
-import { currentSessionDetail } from './workspaceMocks'
 
 type SidebarMode = 'history' | 'settings'
 
-export function WorkspaceShell() {
+type WorkspaceShellProps = {
+  user: UserProfile
+  sessions: SessionSummary[]
+  selectedSessionId: string | number | null
+  sessionDetail: SessionDetail | null
+  conversationDetail: ConversationDetail | null
+  workspaceDetail: WorkspaceDetail | null
+  nodes: MessageNode[]
+  sending: boolean
+  onSelectSession: (sessionId: string | number) => void
+  onSendMessage: (message: string) => Promise<void>
+}
+
+export function WorkspaceShell({
+  user,
+  sessions,
+  selectedSessionId,
+  sessionDetail,
+  conversationDetail,
+  workspaceDetail,
+  nodes,
+  sending,
+  onSelectSession,
+  onSendMessage,
+}: WorkspaceShellProps) {
   const navigate = useNavigate()
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(null)
@@ -47,7 +71,15 @@ export function WorkspaceShell() {
   return (
     <section className="workspace-shell">
       <div className="workspace-shell__canvas-layer">
-        <ConversationCanvas focusedNodeId={focusedNodeId} onFocusNode={focusNode} />
+        <ConversationCanvas
+          focusedNodeId={focusedNodeId}
+          onFocusNode={focusNode}
+          conversationDetail={conversationDetail}
+          workspaceDetail={workspaceDetail}
+          nodes={nodes}
+          sending={sending}
+          onSendMessage={onSendMessage}
+        />
 
         <div
           className={navClassName}
@@ -90,7 +122,16 @@ export function WorkspaceShell() {
           </div>
 
           <div className={activeSidebar ? 'workspace-shell__nav-body workspace-shell__nav-body--visible' : 'workspace-shell__nav-body'}>
-            {activeSidebar ? <SessionSidebar mode={activeSidebar} onOpenSettingsPage={() => navigate('/settings')} /> : null}
+            {activeSidebar ? (
+              <SessionSidebar
+                mode={activeSidebar}
+                user={user}
+                sessions={sessions}
+                selectedSessionId={selectedSessionId}
+                onSelectSession={onSelectSession}
+                onOpenSettingsPage={() => navigate('/settings')}
+              />
+            ) : null}
           </div>
         </div>
 
@@ -98,12 +139,13 @@ export function WorkspaceShell() {
           <Space direction="vertical" size={8}>
             <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
             <Typography.Title level={3} className="workspace-shell__title">
-              {currentSessionDetail.title}
+              {conversationDetail?.conversationId ? `对话 ${conversationDetail.conversationId}` : '当前暂无活跃对话'}
             </Typography.Title>
             <Space wrap>
+              {sessionDetail ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
               <StatusTag label="阶段四" tone="processing" />
               <StatusTag label="全屏会话图" tone="success" />
-              <StatusTag label="静态预览" tone="warning" />
+              <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>
           </Space>
         </div>
@@ -118,7 +160,16 @@ export function WorkspaceShell() {
         />
       ) : null}
 
-      {focusedNodeId ? <DetailPanel nodeId={focusedNodeId} onClose={() => setFocusedNodeId(null)} /> : null}
+      {focusedNodeId && conversationDetail && sessionDetail ? (
+        <DetailPanel
+          nodeId={focusedNodeId}
+          onClose={() => setFocusedNodeId(null)}
+          nodes={nodes}
+          conversationDetail={conversationDetail}
+          sessionDetail={sessionDetail}
+          workspaceDetail={workspaceDetail}
+        />
+      ) : null}
     </section>
   )
 }

@@ -1,1 +1,1 @@
-export type { SessionDetail, SessionId, SessionSummary } from './model/types'
+export type { SessionConversationRef, SessionDetail, SessionId, SessionSummary } from './model/types'

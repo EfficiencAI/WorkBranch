@@ -2,7 +2,6 @@ import { Button, Layout, Menu, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { StatusTag } from '../../shared/ui'
-import { currentSessionTitle } from '../workspace/workspaceMocks'
 
 const navItems: MenuProps['items'] = [
   {
@@ -18,7 +17,7 @@ const navItems: MenuProps['items'] = [
 export function AppHeader() {
   const location = useLocation()
   const navigate = useNavigate()
-  const sessionTitle = location.pathname === '/workspace' ? currentSessionTitle : '系统设置'
+  const workspaceTitle = location.pathname === '/workspace' ? '工作台' : '系统设置'
 
   return (
     <Layout.Header className="app-header">
@@ -27,7 +26,7 @@ export function AppHeader() {
           <Typography.Text className="app-header__eyebrow">WorkBranch Frontend</Typography.Text>
           <Space size="middle" wrap>
             <Typography.Title level={4} className="app-header__title">
-              {sessionTitle}
+              {workspaceTitle}
             </Typography.Title>
             <StatusTag label="阶段四" tone="processing" />
             <StatusTag label="静态 UI" tone="success" />

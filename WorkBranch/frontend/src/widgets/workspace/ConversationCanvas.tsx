@@ -1,9 +1,9 @@
 import { Button, Card, Space, Typography } from 'antd'
 import type { CSSProperties } from 'react'
 import { useMemo, useState } from 'react'
+import type { ConversationDetail, MessageNode, WorkspaceDetail } from '../../entities'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { MessageComposer } from './MessageComposer'
-import { currentSessionDetail, mockMessages } from './workspaceMocks'
 
 const roleLabelMap = {
   system: 'System',
@@ -17,9 +17,33 @@ const zoomSteps = [0.8, 0.9, 1, 1.1, 1.25] as const
 type ConversationCanvasProps = {
   focusedNodeId: string | null
   onFocusNode: (nodeId: string) => void
+  conversationDetail: ConversationDetail | null
+  workspaceDetail: WorkspaceDetail | null
+  nodes: MessageNode[]
+  sending: boolean
+  onSendMessage: (message: string) => Promise<void>
 }
 
-export function ConversationCanvas({ focusedNodeId, onFocusNode }: ConversationCanvasProps) {
+function toStaticPosition(index: number) {
+  const positions = [
+    { left: '8%', top: '18%' },
+    { left: '28%', top: '30%' },
+    { left: '52%', top: '20%' },
+    { left: '66%', top: '46%' },
+  ]
+
+  return positions[index] ?? { left: '38%', top: '64%' }
+}
+
+export function ConversationCanvas({
+  focusedNodeId,
+  onFocusNode,
+  conversationDetail,
+  workspaceDetail,
+  nodes,
+  sending,
+  onSendMessage,
+}: ConversationCanvasProps) {
   const [zoomIndex, setZoomIndex] = useState(2)
   const zoom = zoomSteps[zoomIndex]
 
@@ -35,12 +59,12 @@ export function ConversationCanvas({ focusedNodeId, onFocusNode }: ConversationC
       <div className="conversation-canvas__viewport">
         <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
           <Space wrap>
-            <StatusTag label={`workspace ${currentSessionDetail.workspaceId}`} tone="default" />
-            <StatusTag label={`节点 ${currentSessionDetail.nodeCount}`} tone="processing" />
-            <StatusTag label={`分支 ${currentSessionDetail.branchCount}`} tone="warning" />
+            <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
+            <StatusTag label={`节点 ${nodes.length}`} tone="processing" />
+            <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
           </Space>
           <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-            当前阶段先验证全屏工作台布局；后续树图阶段会接入 React Flow 与真实节点数据。
+            当前已接入后端 session / conversation / workspace API；后续树图阶段会接入 React Flow 与真实节点布局。
           </Typography.Text>
         </div>
 
@@ -69,34 +93,34 @@ export function ConversationCanvas({ focusedNodeId, onFocusNode }: ConversationC
 
         <div className="conversation-canvas__stage-shell">
           <div className="conversation-canvas__stage" style={{ transform: `scale(${zoom})` }}>
-            {mockMessages.map((message) => {
+            {nodes.map((node, index) => {
+              const position = toStaticPosition(index)
               const style = {
-                left: message.position.left,
-                top: message.position.top,
+                left: position.left,
+                top: position.top,
               } as CSSProperties
 
-              const isFocused = focusedNodeId === message.id
+              const isFocused = focusedNodeId === node.id
 
               return (
                 <button
-                  key={message.id}
+                  key={node.id}
                   type="button"
                   className={isFocused ? 'conversation-node conversation-node--focused' : 'conversation-node'}
                   style={style}
-                  onClick={() => onFocusNode(message.id)}
-                  aria-label={`聚焦节点 ${message.title}`}
+                  onClick={() => onFocusNode(node.id)}
+                  aria-label={`聚焦节点 ${node.id}`}
                 >
-                  <Card size="small" className={`conversation-node__card conversation-node__card--${message.role}`}>
+                  <Card size="small" className={`conversation-node__card conversation-node__card--${node.role}`}>
                     <Space direction="vertical" size={10} style={{ width: '100%' }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                         <Space wrap>
-                          <Typography.Text strong>{message.title}</Typography.Text>
-                          <Typography.Text type="secondary">{roleLabelMap[message.role]}</Typography.Text>
+                          <Typography.Text strong>{node.id}</Typography.Text>
+                          <Typography.Text type="secondary">{roleLabelMap[node.role]}</Typography.Text>
                         </Space>
-                        <StatusTag label={message.statusLabel} tone={message.tone} />
+                        <StatusTag label={node.status ?? 'ready'} tone="default" />
                       </Space>
-                      <Typography.Paragraph className="conversation-node__summary">{message.summary}</Typography.Paragraph>
-                      <Typography.Text type="secondary">节点 {message.id}</Typography.Text>
+                      <Typography.Paragraph className="conversation-node__summary">{node.content}</Typography.Paragraph>
                     </Space>
                   </Card>
                 </button>
@@ -111,22 +135,18 @@ export function ConversationCanvas({ focusedNodeId, onFocusNode }: ConversationC
                       <Typography.Text strong>新对话节点</Typography.Text>
                       <Typography.Text type="secondary">Draft</Typography.Text>
                     </Space>
-                    <StatusTag label="待发送" tone="processing" />
+                    <StatusTag label={sending ? '发送中' : '待发送'} tone="processing" />
                   </Space>
-                  <Typography.Paragraph className="conversation-node__summary">
-                    发送框保持在图内新建节点中，后续会直接映射到 React Flow 的节点交互语义。
-                  </Typography.Paragraph>
-                  <MessageComposer />
+                  <MessageComposer workspaceId={conversationDetail?.workspaceId ?? null} sending={sending} onSend={onSendMessage} />
                 </Space>
               </Card>
             </div>
 
-            <div className="conversation-canvas__hint">
-              <EmptyState
-                title="React Flow 已纳入后续树图阶段"
-                description="当前先校正全屏主视口与覆盖层关系，后续再接入真实节点数据、拖拽、缩放与 fitView。"
-              />
-            </div>
+            {!conversationDetail ? (
+              <div className="conversation-canvas__hint">
+                <EmptyState title="当前会话暂无活跃对话" description="请先在后端发起一次对话，或选择一个已有活跃对话的会话。" />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>

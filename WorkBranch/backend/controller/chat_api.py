@@ -1,13 +1,13 @@
 import asyncio
 import json
-from typing import Optional, List, AsyncGenerator
+from typing import Optional, AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 from singleton import get_session_service, get_message_queue
 from service.session_service.session import SessionService
-from service.session_service.mq import MessageQueue, StreamMessage, MessageType
+from service.session_service.mq import MessageQueue, MessageType
 from controller.VO.result import Result
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -16,22 +16,6 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 class SendMessageBody(BaseModel):
     message: str
     workspace_id: Optional[str] = None
-
-
-class SessionResponse(BaseModel):
-    id: int
-    title: str
-    created_at: str
-    updated_at: str
-
-
-class NodeResponse(BaseModel):
-    id: int
-    session_id: int
-    parent_id: Optional[int]
-    role: str
-    content: str
-    created_at: str
 
 
 @router.post("/sessions")
@@ -44,7 +28,9 @@ def create_session(
         "id": session.id,
         "title": session.title,
         "created_at": session.created_at,
-        "updated_at": session.updated_at
+        "updated_at": session.updated_at,
+        "has_active_conversation": False,
+        "active_conversation_id": None,
     })
 
 
@@ -58,7 +44,9 @@ def list_sessions(
             "id": s.id,
             "title": s.title,
             "created_at": s.created_at,
-            "updated_at": s.updated_at
+            "updated_at": s.updated_at,
+            "has_active_conversation": service.has_active_conversation(s.id),
+            "active_conversation_id": service.get_active_conversation_id(s.id),
         }
         for s in sessions
     ])
@@ -77,8 +65,21 @@ def get_session(
         "user_id": session.user_id,
         "title": session.title,
         "created_at": session.created_at,
-        "updated_at": session.updated_at
+        "updated_at": session.updated_at,
+        "has_active_conversation": service.has_active_conversation(session_id),
+        "active_conversation_id": service.get_active_conversation_id(session_id),
     })
+
+
+@router.get("/sessions/{session_id}/conversations")
+def list_session_conversations(
+    session_id: int,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    session = service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return Result.success(data=service.list_conversation_refs(session_id))
 
 
 @router.delete("/sessions/{session_id}")
@@ -100,7 +101,7 @@ async def send_message(
     session = service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     try:
         result = await service.send_message(
             session_id=session_id,
@@ -110,54 +111,54 @@ async def send_message(
         conversation_id = result["conversation_id"]
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    
+
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
             await mq.start_consumer()
-            
+
             done_received = False
             timeout_counter = 0
             max_timeout = 300
-            
+
             while not done_received and timeout_counter < max_timeout:
                 try:
                     message = await asyncio.wait_for(
                         mq._queue.get(),
                         timeout=1.0
                     )
-                    
+
                     if message.conversation_id != conversation_id:
                         continue
-                    
+
                     event_data = {
                         "type": message.message_type.value,
                         "content": message.content,
                         "timestamp": message.timestamp.isoformat(),
                         "metadata": message.metadata
                     }
-                    
+
                     yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
-                    
+
                     if message.message_type == MessageType.DONE:
                         done_received = True
-                    
+
                     timeout_counter = 0
-                    
+
                 except asyncio.TimeoutError:
                     timeout_counter += 1
                     yield f": heartbeat\n\n"
-                    
-                    state = service.get_conversation_state(session_id)
-                    if state and state.get("state") in ["completed", "failed", "cancelled"]:
+
+                    conversation = await service.get_conversation_detail(conversation_id)
+                    if conversation and conversation.get("state") in ["completed", "failed", "cancelled"]:
                         done_received = True
                         yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
-            
+
             if not done_received:
                 yield f"data: {json.dumps({'type': 'error', 'content': 'Timeout'}, ensure_ascii=False)}\n\n"
-                
+
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
-    
+
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
@@ -167,29 +168,6 @@ async def send_message(
             "X-Accel-Buffering": "no"
         }
     )
-
-
-@router.get("/sessions/{session_id}/nodes")
-def get_nodes(
-    session_id: int,
-    service: SessionService = Depends(get_session_service),
-) -> Result:
-    session = service.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    
-    nodes = service.get_nodes(session_id)
-    return Result.success(data=[
-        {
-            "id": n.id,
-            "session_id": n.session_id,
-            "parent_id": n.parent_id,
-            "role": n.role,
-            "content": n.content,
-            "created_at": n.created_at
-        }
-        for n in nodes
-    ])
 
 
 @router.post("/sessions/{session_id}/end")
@@ -208,17 +186,3 @@ async def cancel_conversation(
 ) -> Result:
     result = await service.cancel_conversation(session_id)
     return Result.success(data={"cancelled": result})
-
-
-@router.get("/sessions/{session_id}/state")
-def get_conversation_state(
-    session_id: int,
-    service: SessionService = Depends(get_session_service),
-) -> Result:
-    state = service.get_conversation_state(session_id)
-    if not state:
-        return Result.success(data={"has_active_conversation": False})
-    return Result.success(data={
-        "has_active_conversation": True,
-        **state
-    })
