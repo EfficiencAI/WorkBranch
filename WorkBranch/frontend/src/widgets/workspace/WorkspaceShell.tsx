@@ -1,7 +1,17 @@
 import { Button, Space, Typography } from 'antd'
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ConversationDetail, MessageNode, SessionDetail, SessionSummary, UserProfile, WorkspaceDetail } from '../../entities'
+import type { UserProfile } from '../../entities'
+import {
+  selectChatWorkbenchConversationDetail,
+  selectChatWorkbenchNodes,
+  selectChatWorkbenchSelectedSessionId,
+  selectChatWorkbenchSessionDetail,
+  selectChatWorkbenchSessions,
+  selectChatWorkbenchStreaming,
+  selectChatWorkbenchWorkspaceDetail,
+  useChatWorkbenchStore,
+} from '../../features'
 import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas } from './ConversationCanvas'
 import { DetailPanel } from './DetailPanel'
@@ -11,30 +21,21 @@ type SidebarMode = 'history' | 'settings'
 
 type WorkspaceShellProps = {
   user: UserProfile
-  sessions: SessionSummary[]
-  selectedSessionId: string | number | null
-  sessionDetail: SessionDetail | null
-  conversationDetail: ConversationDetail | null
-  workspaceDetail: WorkspaceDetail | null
-  nodes: MessageNode[]
-  sending: boolean
-  onSelectSession: (sessionId: string | number) => void
-  onSendMessage: (message: string) => Promise<void>
+  onSendError: (content: string) => void
+  onRequestError: (error: unknown) => void
 }
 
-export function WorkspaceShell({
-  user,
-  sessions,
-  selectedSessionId,
-  sessionDetail,
-  conversationDetail,
-  workspaceDetail,
-  nodes,
-  sending,
-  onSelectSession,
-  onSendMessage,
-}: WorkspaceShellProps) {
+export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceShellProps) {
   const navigate = useNavigate()
+  const sessions = useChatWorkbenchStore(selectChatWorkbenchSessions)
+  const selectedSessionId = useChatWorkbenchStore(selectChatWorkbenchSelectedSessionId)
+  const sessionDetail = useChatWorkbenchStore(selectChatWorkbenchSessionDetail)
+  const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
+  const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
+  const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
+  const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
+  const selectSession = useChatWorkbenchStore((state) => state.selectSession)
+  const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
@@ -68,6 +69,24 @@ export function WorkspaceShell({
     setActiveSidebar(null)
   }
 
+  const handleSelectSession = useCallback((sessionId: string | number) => {
+    void selectSession(sessionId)
+  }, [selectSession])
+
+  const handleSendMessage = useCallback(async (message: string) => {
+    try {
+      await sendMessage(message, {
+        onStreamError(event) {
+          if (event.content) {
+            onSendError(String(event.content))
+          }
+        },
+      })
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [onRequestError, onSendError, sendMessage])
+
   return (
     <section className="workspace-shell">
       <div className="workspace-shell__canvas-layer">
@@ -78,7 +97,7 @@ export function WorkspaceShell({
           workspaceDetail={workspaceDetail}
           nodes={nodes}
           sending={sending}
-          onSendMessage={onSendMessage}
+          onSendMessage={handleSendMessage}
         />
 
         <div
@@ -128,7 +147,7 @@ export function WorkspaceShell({
                 user={user}
                 sessions={sessions}
                 selectedSessionId={selectedSessionId}
-                onSelectSession={onSelectSession}
+                onSelectSession={handleSelectSession}
                 onOpenSettingsPage={() => navigate('/settings')}
               />
             ) : null}
@@ -143,7 +162,7 @@ export function WorkspaceShell({
             </Typography.Title>
             <Space wrap>
               {sessionDetail ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段四" tone="processing" />
+              <StatusTag label="阶段五" tone="processing" />
               <StatusTag label="全屏会话图" tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>

@@ -11,8 +11,8 @@ const systemStatus: Array<{ label: string; status: AsyncStatus; value: string }>
   },
   {
     label: '状态管理',
-    status: 'loading',
-    value: '等待下一阶段接入 Zustand',
+    status: 'success',
+    value: '已接入 chat-workbench Zustand store',
   },
   {
     label: '接口联动',
