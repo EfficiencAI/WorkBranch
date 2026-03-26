@@ -4,7 +4,7 @@ import { Outlet, useLocation } from 'react-router-dom'
 export function AppLayout() {
   const location = useLocation()
   const contentClassName =
-    location.pathname === '/workspace' ? 'app-content app-content--workspace' : 'app-content'
+    location.pathname === '/chat' ? 'app-content app-content--workspace' : 'app-content'
 
   return (
     <Layout className="app-layout">

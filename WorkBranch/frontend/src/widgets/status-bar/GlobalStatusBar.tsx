@@ -3,7 +3,7 @@ import { useLocation } from 'react-router-dom'
 import { StatusTag } from '../../shared/ui'
 
 const pageLabelMap: Record<string, string> = {
-  '/workspace': '工作台',
+  '/chat': '工作台',
   '/settings': '设置',
 }
 

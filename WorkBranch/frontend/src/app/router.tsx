@@ -9,10 +9,10 @@ export const router = createBrowserRouter([
     children: [
       {
         index: true,
-        element: <Navigate replace to="/workspace" />,
+        element: <Navigate replace to="/chat" />,
       },
       {
-        path: 'workspace',
+        path: 'chat',
         element: <WorkspacePage />,
       },
       {
@@ -21,7 +21,7 @@ export const router = createBrowserRouter([
       },
       {
         path: '*',
-        element: <Navigate replace to="/workspace" />,
+        element: <Navigate replace to="/chat" />,
       },
     ],
   },

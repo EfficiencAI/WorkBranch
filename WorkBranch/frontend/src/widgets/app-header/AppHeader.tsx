@@ -5,7 +5,7 @@ import { StatusTag } from '../../shared/ui'
 
 const navItems: MenuProps['items'] = [
   {
-    key: '/workspace',
+    key: '/chat',
     label: '工作台',
   },
   {
@@ -17,7 +17,7 @@ const navItems: MenuProps['items'] = [
 export function AppHeader() {
   const location = useLocation()
   const navigate = useNavigate()
-  const workspaceTitle = location.pathname === '/workspace' ? '工作台' : '系统设置'
+  const workspaceTitle = location.pathname === '/chat' ? '工作台' : '系统设置'
 
   return (
     <Layout.Header className="app-header">
