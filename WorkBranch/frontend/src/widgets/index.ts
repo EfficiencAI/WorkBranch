@@ -1,5 +1,3 @@
-export { AppHeader } from './app-header/AppHeader'
-export { GlobalStatusBar } from './status-bar/GlobalStatusBar'
 export { ConversationCanvas } from './workspace/ConversationCanvas'
 export { DetailPanel } from './workspace/DetailPanel'
 export { MessageComposer } from './workspace/MessageComposer'

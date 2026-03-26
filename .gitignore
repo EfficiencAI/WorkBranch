@@ -1,16 +1,16 @@
 .venv/
 .dev/
+.claude/
 AGENTS.md
 
 __pycache__/
 .agent_states/
 *.py[cod]
 *$py.class
+node_modules/
 
 .temp/
 
 *.db
 logs/
 .test/
-
-node_modules/

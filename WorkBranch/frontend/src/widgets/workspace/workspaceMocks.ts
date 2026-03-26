@@ -4,6 +4,11 @@ import type { UserProfile } from '../../entities/user/model/types'
 
 type StaticTone = 'default' | 'success' | 'warning' | 'error' | 'processing'
 
+type CanvasPosition = {
+  left: string
+  top: string
+}
+
 export type SessionListItem = SessionSummary & {
   preview: string
   statusLabel: string
@@ -15,9 +20,10 @@ export type CanvasMessage = MessageNode & {
   summary: string
   statusLabel: string
   tone: StaticTone
+  position: CanvasPosition
 }
 
-export const currentSessionTitle = '阶段四：静态工作台搭建'
+export const currentSessionTitle = '阶段四：全屏工作台静态重构'
 export const currentWorkspaceId = 'workspace-demo-001'
 
 export const mockUser: UserProfile = {
@@ -28,8 +34,8 @@ export const mockUser: UserProfile = {
 export const mockSessions: SessionListItem[] = [
   {
     id: 'session-001',
-    title: '阶段四：静态工作台搭建',
-    preview: '补齐 AppHeader、SessionSidebar、ConversationCanvas。',
+    title: '阶段四：全屏工作台静态重构',
+    preview: '切换为悬浮入口、覆盖侧栏、全屏会话图。',
     statusLabel: '当前会话',
     tone: 'processing',
     status: 'active',
@@ -55,8 +61,8 @@ export const mockSessions: SessionListItem[] = [
   },
   {
     id: 'session-004',
-    title: '消息树布局草图',
-    preview: '为后续 React Flow 节点展示预留结构。',
+    title: 'React Flow 树图准备',
+    preview: '为后续真实节点、边与 fitView 交互预留结构。',
     statusLabel: '草稿',
     tone: 'default',
     status: 'draft',
@@ -72,8 +78,8 @@ export const currentSessionDetail: SessionDetail & {
   id: 'session-001',
   title: currentSessionTitle,
   status: '静态预览中',
-  createdAt: '2026-03-25 09:10',
-  updatedAt: '2026-03-25 10:48',
+  createdAt: '2026-03-26 09:10',
+  updatedAt: '2026-03-26 10:48',
   workspaceId: currentWorkspaceId,
   nodeCount: 4,
   branchCount: 2,
@@ -85,49 +91,55 @@ export const mockMessages: CanvasMessage[] = [
     parentId: null,
     role: 'system',
     title: '系统上下文',
-    summary: '确认阶段四只做静态 UI，不接真实数据与状态管理。',
-    content: '请先完成工作台静态结构：头部、会话侧栏、中心内容区、输入区和详情面板。',
+    summary: '当前阶段先修正全屏主视口与图层关系，不接真实数据与状态管理。',
+    content: '先完成全屏会话图、悬浮入口、覆盖侧栏、图内详情与图内新建节点输入区。',
     createdAt: '09:12',
     status: 'ready',
     statusLabel: '已就绪',
     tone: 'success',
+    position: { left: '8%', top: '18%' },
   },
   {
     id: 'node-002',
     parentId: 'node-001',
     role: 'user',
     title: '用户需求',
-    summary: '实现阶段四静态界面。',
-    content: '工作台要接近目标线框图，但先不要接 Zustand、SSE 和真实接口。',
+    summary: '图必须成为工作台主画面，不能继续被页面块和减高规则挤占。',
+    content: '进入工作台后应首先看到完整图面；侧栏、HUD、详情都应该覆盖在图上，而不是压缩图。',
     createdAt: '09:15',
     status: 'active',
-    statusLabel: '选中节点',
+    statusLabel: '当前聚焦源',
     tone: 'processing',
+    position: { left: '28%', top: '30%' },
   },
   {
     id: 'node-003',
     parentId: 'node-002',
     role: 'assistant',
     title: '实现建议',
-    summary: '先替换占位组件，再统一样式。',
-    content: '建议保留 pages -> widgets -> shared 结构，用静态 mock 数据驱动三栏 UI。',
+    summary: '保留 overlay 结构，但让图视口直接占满工作台，并为后续 React Flow 保留语义入口。',
+    content: '缩放控件保持 zoomIn/zoomOut/fitView 语义；后续树图阶段将把真实节点数据映射到 React Flow nodes/edges。',
     createdAt: '09:18',
     status: 'done',
     statusLabel: '主分支',
     tone: 'success',
+    position: { left: '52%', top: '20%' },
   },
   {
     id: 'node-004',
     parentId: 'node-002',
     role: 'assistant',
-    title: '备选分支',
-    summary: '是否提前引入 React Flow。',
-    content: '本阶段先保留普通静态内容区，等后续树形模块阶段再接入真实节点图。',
+    title: '后续树图阶段',
+    summary: 'React Flow 已是既定方案，下一阶段接入真实树图渲染与视口能力。',
+    content: '届时会补齐节点/边转换、拖拽缩放、fitView 与真实会话数据联动，而不是继续停留在静态图感。',
     createdAt: '09:19',
     status: 'draft',
-    statusLabel: '分支草稿',
+    statusLabel: '既定路线',
     tone: 'warning',
+    position: { left: '66%', top: '46%' },
   },
 ]
 
-export const selectedNode = mockMessages[1]
+export function getSelectedNode(nodeId: string) {
+  return mockMessages.find((message) => message.id === nodeId) ?? mockMessages[1]
+}
