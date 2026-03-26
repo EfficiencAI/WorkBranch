@@ -39,7 +39,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
   const selectSession = useChatWorkbenchStore((state) => state.selectSession)
   const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
-  const [peekNav, setPeekNav] = useState(true)
+  const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
 
@@ -58,13 +58,6 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
     if (isSettingsRoute) {
       navigate('/chat')
     }
-  }
-
-  function closeWorkspaceLayers() {
-    setFocusedNodeId(null)
-    setPeekNav(true)
-    setActiveSidebar(null)
-    navigate('/chat')
   }
 
   function openSidebar(mode: SidebarMode) {
@@ -130,7 +123,11 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
 
         <div
           className={navClassName}
-          onMouseEnter={() => setPeekNav(true)}
+          onMouseEnter={() => {
+            if (!activeSidebar) {
+              setPeekNav(true)
+            }
+          }}
           onMouseLeave={() => {
             if (!activeSidebar) {
               setPeekNav(false)
@@ -138,51 +135,54 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
           }}
         >
           <div className="workspace-shell__nav-head">
-            <Button
-              type="primary"
-              shape="round"
-              className="workspace-shell__nav-trigger"
-              aria-label="展开或收起工作台侧边栏"
-              aria-expanded={navExpanded}
-              onClick={collapseNav}
-            >
-              WB
-            </Button>
+            <div className="workspace-shell__nav-trigger-slot">
+              <Button
+                type="text"
+                shape="round"
+                className="workspace-shell__nav-trigger"
+                aria-label="展开或收起工作台侧边栏"
+                aria-expanded={navExpanded}
+                onClick={collapseNav}
+              >
+                WB
+              </Button>
+            </div>
 
-            <div className={navExpanded ? 'workspace-shell__nav-actions workspace-shell__nav-actions--visible' : 'workspace-shell__nav-actions'}>
-              <Button className="workspace-shell__nav-button" onClick={closeWorkspaceLayers}>
-                工作台
-              </Button>
-              <Button
-                className={activeSidebar === 'history' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
-                onClick={() => openSidebar('history')}
-              >
-                会话历史
-              </Button>
-              <Button
-                className={activeSidebar === 'settings' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
-                onClick={() => openSidebar('settings')}
-              >
-                设置
-              </Button>
+            <div className="workspace-shell__nav-actions-slot">
+              <div className={navExpanded ? 'workspace-shell__nav-actions workspace-shell__nav-actions--visible' : 'workspace-shell__nav-actions'}>
+                <Button
+                  className={activeSidebar === 'history' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
+                  onClick={() => openSidebar('history')}
+                >
+                  会话历史
+                </Button>
+                <Button
+                  className={activeSidebar === 'settings' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
+                  onClick={() => openSidebar('settings')}
+                >
+                  设置
+                </Button>
+              </div>
             </div>
           </div>
 
           <div className={activeSidebar ? 'workspace-shell__nav-body workspace-shell__nav-body--visible' : 'workspace-shell__nav-body'}>
-            {activeSidebar === 'history' ? (
-              <SessionSidebar
-                user={user}
-                sessions={sessions}
-                selectedSessionId={selectedSessionId}
-                onSelectSession={handleSelectSession}
-              />
-            ) : null}
+            <div className="workspace-shell__nav-panel">
+              {activeSidebar === 'history' ? (
+                <SessionSidebar
+                  user={user}
+                  sessions={sessions}
+                  selectedSessionId={selectedSessionId}
+                  onSelectSession={handleSelectSession}
+                />
+              ) : null}
 
-            {activeSidebar === 'settings' ? (
-              <div className="workspace-shell__settings">
-                <SettingsPage embedded />
-              </div>
-            ) : null}
+              {activeSidebar === 'settings' ? (
+                <div className="workspace-shell__settings">
+                  <SettingsPage embedded />
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
 
