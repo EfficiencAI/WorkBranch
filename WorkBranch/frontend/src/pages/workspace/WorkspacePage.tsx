@@ -1,5 +1,6 @@
 import { Alert, App as AntdApp } from 'antd'
 import { useCallback, useEffect, useMemo } from 'react'
+import { useLocation } from 'react-router-dom'
 import type { UserProfile } from '../../entities'
 import {
   selectChatWorkbenchError,
@@ -11,6 +12,7 @@ import { LoadingState } from '../../shared/ui'
 import { WorkspaceShell } from '../../widgets'
 
 export function WorkspacePage() {
+  const location = useLocation()
   const { message } = AntdApp.useApp()
   const loading = useChatWorkbenchStore(selectChatWorkbenchLoading)
   const error = useChatWorkbenchStore(selectChatWorkbenchError)
@@ -37,5 +39,7 @@ export function WorkspacePage() {
     return <Alert type="error" showIcon message={error} />
   }
 
-  return <WorkspaceShell user={mockUser} onSendError={handleSendError} onRequestError={handleRequestError} />
+  const isSettingsView = location.pathname === '/settings'
+
+  return <WorkspaceShell user={mockUser} onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
 }

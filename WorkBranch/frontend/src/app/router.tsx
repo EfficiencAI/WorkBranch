@@ -1,6 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { SettingsPage, WorkspacePage } from '../pages'
+import { WorkspacePage } from '../pages'
 
 export const router = createBrowserRouter([
   {
@@ -17,7 +17,7 @@ export const router = createBrowserRouter([
       },
       {
         path: 'settings',
-        element: <SettingsPage />,
+        element: <WorkspacePage />,
       },
       {
         path: '*',

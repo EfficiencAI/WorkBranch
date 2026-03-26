@@ -7,6 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/chat': 'http://127.0.0.1:8000',
+      '/settings': 'http://127.0.0.1:8000',
       '/workspaces': 'http://127.0.0.1:8000',
     },
   },

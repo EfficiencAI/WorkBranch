@@ -3,11 +3,9 @@ import {
   App as AntdApp,
   Button,
   Card,
-  Col,
   Flex,
   Input,
   InputNumber,
-  Row,
   Space,
   Switch,
   Typography,
@@ -131,7 +129,11 @@ function parseEditorValue(kind: EditorKind, value: string | number | boolean | n
   }
 }
 
-export function SettingsPage() {
+type SettingsPageProps = {
+  embedded?: boolean
+}
+
+export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const { message } = AntdApp.useApp()
   const [settings, setSettings] = useState<SettingNode | null>(null)
   const [loading, setLoading] = useState(true)
@@ -353,10 +355,15 @@ export function SettingsPage() {
   }
 
   return (
-    <Space direction="vertical" size="large" style={{ width: '100%' }}>
+    <Space
+      direction="vertical"
+      size={embedded ? 'middle' : 'large'}
+      style={{ width: '100%' }}
+      className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}
+    >
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <div>
-          <Typography.Title level={2}>设置</Typography.Title>
+          <Typography.Title level={embedded ? 3 : 2}>设置</Typography.Title>
           <Typography.Paragraph type="secondary">
             当前页面根据后端返回的树形设置 JSON 动态生成，支持叶子节点编辑与提交。
           </Typography.Paragraph>
@@ -373,17 +380,15 @@ export function SettingsPage() {
       {saveError ? <Alert type="error" message="设置保存失败" description={saveError} showIcon /> : null}
 
       {!loading && !error ? (
-        <Row gutter={[16, 16]}>
+        <Space direction="vertical" size={16} style={{ width: '100%' }}>
           {entries.map(([rootKey, rootValue]) => (
-            <Col xs={24} xl={12} key={rootKey}>
-              <Card title={rootKey} className="settings-card">
-                {isPlainObject(rootValue)
-                  ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1))
-                  : renderNode(rootKey, [], rootValue, 1)}
-              </Card>
-            </Col>
+            <Card title={rootKey} className="settings-card" key={rootKey}>
+              {isPlainObject(rootValue)
+                ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1))
+                : renderNode(rootKey, [], rootValue, 1)}
+            </Card>
           ))}
-        </Row>
+        </Space>
       ) : null}
     </Space>
   )

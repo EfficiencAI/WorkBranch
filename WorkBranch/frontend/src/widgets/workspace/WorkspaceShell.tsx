@@ -1,6 +1,6 @@
 import { Button, Space, Typography } from 'antd'
 import { useCallback, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import type { UserProfile } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
@@ -13,6 +13,7 @@ import {
   useChatWorkbenchStore,
 } from '../../features'
 import { StatusTag } from '../../shared/ui'
+import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { ConversationCanvas } from './ConversationCanvas'
 import { DetailPanel } from './DetailPanel'
 import { SessionSidebar } from './SessionSidebar'
@@ -23,9 +24,11 @@ type WorkspaceShellProps = {
   user: UserProfile
   onSendError: (content: string) => void
   onRequestError: (error: unknown) => void
+  view: 'chat' | 'settings'
 }
 
-export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceShellProps) {
+export function WorkspaceShell({ user, onSendError, onRequestError, view }: WorkspaceShellProps) {
+  const location = useLocation()
   const navigate = useNavigate()
   const sessions = useChatWorkbenchStore(selectChatWorkbenchSessions)
   const selectedSessionId = useChatWorkbenchStore(selectChatWorkbenchSelectedSessionId)
@@ -36,10 +39,11 @@ export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceS
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
   const selectSession = useChatWorkbenchStore((state) => state.selectSession)
   const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
-  const [peekNav, setPeekNav] = useState(false)
-  const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(null)
+  const [peekNav, setPeekNav] = useState(true)
+  const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
 
+  const isSettingsRoute = location.pathname === '/settings'
   const navExpanded = peekNav || activeSidebar !== null
   const navClassName = activeSidebar
     ? 'workspace-shell__nav workspace-shell__nav--open'
@@ -50,42 +54,66 @@ export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceS
   function collapseNav() {
     setPeekNav(false)
     setActiveSidebar(null)
+
+    if (isSettingsRoute) {
+      navigate('/chat')
+    }
   }
 
   function closeWorkspaceLayers() {
-    setActiveSidebar(null)
     setFocusedNodeId(null)
     setPeekNav(true)
+    setActiveSidebar(null)
+    navigate('/chat')
   }
 
   function openSidebar(mode: SidebarMode) {
-    setActiveSidebar(mode)
     setFocusedNodeId(null)
     setPeekNav(true)
+    setActiveSidebar(mode)
+
+    if (mode === 'settings' && !isSettingsRoute) {
+      navigate('/settings')
+      return
+    }
+
+    if (mode === 'history' && isSettingsRoute) {
+      navigate('/chat')
+    }
   }
 
   function focusNode(nodeId: string) {
     setFocusedNodeId(nodeId)
     setActiveSidebar(null)
+
+    if (isSettingsRoute) {
+      navigate('/chat')
+    }
   }
 
-  const handleSelectSession = useCallback((sessionId: string | number) => {
-    void selectSession(sessionId)
-  }, [selectSession])
+  const handleSelectSession = useCallback(
+    (sessionId: string | number) => {
+      void selectSession(sessionId)
+    },
+    [selectSession],
+  )
 
-  const handleSendMessage = useCallback(async (message: string) => {
-    try {
-      await sendMessage(message, {
-        onStreamError(event) {
-          if (event.content) {
-            onSendError(String(event.content))
-          }
-        },
-      })
-    } catch (caughtError) {
-      onRequestError(caughtError)
-    }
-  }, [onRequestError, onSendError, sendMessage])
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      try {
+        await sendMessage(message, {
+          onStreamError(event) {
+            if (event.content) {
+              onSendError(String(event.content))
+            }
+          },
+        })
+      } catch (caughtError) {
+        onRequestError(caughtError)
+      }
+    },
+    [onRequestError, onSendError, sendMessage],
+  )
 
   return (
     <section className="workspace-shell">
@@ -141,15 +169,19 @@ export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceS
           </div>
 
           <div className={activeSidebar ? 'workspace-shell__nav-body workspace-shell__nav-body--visible' : 'workspace-shell__nav-body'}>
-            {activeSidebar ? (
+            {activeSidebar === 'history' ? (
               <SessionSidebar
-                mode={activeSidebar}
                 user={user}
                 sessions={sessions}
                 selectedSessionId={selectedSessionId}
                 onSelectSession={handleSelectSession}
-                onOpenSettingsPage={() => navigate('/settings')}
               />
+            ) : null}
+
+            {activeSidebar === 'settings' ? (
+              <div className="workspace-shell__settings">
+                <SettingsPage embedded />
+              </div>
             ) : null}
           </div>
         </div>
@@ -158,12 +190,16 @@ export function WorkspaceShell({ user, onSendError, onRequestError }: WorkspaceS
           <Space direction="vertical" size={8}>
             <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
             <Typography.Title level={3} className="workspace-shell__title">
-              {conversationDetail?.conversationId ? `对话 ${conversationDetail.conversationId}` : '当前暂无活跃对话'}
+              {isSettingsRoute
+                ? '系统设置'
+                : conversationDetail?.conversationId
+                  ? `对话 ${conversationDetail.conversationId}`
+                  : '当前暂无活跃对话'}
             </Typography.Title>
             <Space wrap>
-              {sessionDetail ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
+              {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
               <StatusTag label="阶段五" tone="processing" />
-              <StatusTag label="全屏会话图" tone="success" />
+              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>
           </Space>

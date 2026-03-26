@@ -418,6 +418,46 @@ button {
   width: 100%;
 }
 
+.workspace-shell__settings {
+  width: 100%;
+  max-height: min(62vh, 720px);
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.settings-page--embedded {
+  padding-top: 4px;
+}
+
+.settings-page--embedded .ant-typography {
+  color: #f8fafc;
+}
+
+.settings-page--embedded .ant-typography.ant-typography-secondary,
+.settings-page--embedded .settings-tree-leaf__path.ant-typography,
+.settings-page--embedded .settings-tree-leaf__hint.ant-typography {
+  color: rgba(226, 232, 240, 0.72) !important;
+}
+
+.settings-page--embedded .settings-card,
+.settings-page--embedded .ant-alert {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.14);
+}
+
+.settings-page--embedded .ant-card-head,
+.settings-page--embedded .ant-card-body {
+  background: transparent;
+}
+
+.settings-page--embedded .settings-tree-node {
+  border-left-color: rgba(148, 163, 184, 0.3);
+}
+
+.settings-page--embedded .settings-tree-leaf {
+  border-top-color: rgba(148, 163, 184, 0.14);
+}
+
 .session-sidebar__profile,
 .session-sidebar__shortcut-card,
 .session-sidebar__item,
@@ -498,7 +538,7 @@ button {
 
 .settings-tree-node {
   padding-left: 12px;
-  border-left: 2px solid #e5e7eb;
+  border-left: 2px solid rgba(148, 163, 184, 0.38);
 }
 
 .settings-tree-node__title.ant-typography {
@@ -507,7 +547,7 @@ button {
 
 .settings-tree-leaf {
   padding: 12px 0;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid rgba(148, 163, 184, 0.18);
 }
 
 .settings-tree-leaf:first-child {
@@ -557,7 +597,7 @@ button {
 
   .workspace-shell__nav--peek,
   .workspace-shell__nav--open {
-    width: min(360px, calc(100vw - 32px));
+    width: min(420px, calc(100vw - 32px));
   }
 
   .workspace-shell__hud {

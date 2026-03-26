@@ -3,24 +3,20 @@ import type { SessionSummary, UserProfile } from '../../entities'
 import { StatusTag } from '../../shared/ui'
 
 type SessionSidebarProps = {
-  mode: 'history' | 'settings'
   user: UserProfile
   sessions: SessionSummary[]
   selectedSessionId: string | number | null
   onSelectSession: (sessionId: string | number) => void
-  onOpenSettingsPage: () => void
 }
 
-export function SessionSidebar({ mode, user, sessions, selectedSessionId, onSelectSession, onOpenSettingsPage }: SessionSidebarProps) {
+export function SessionSidebar({ user, sessions, selectedSessionId, onSelectSession }: SessionSidebarProps) {
   return (
     <div className="session-sidebar" aria-label="工作台内嵌侧边栏内容">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Space direction="vertical" size={2}>
-          <Typography.Text strong>{mode === 'history' ? '会话历史' : '工作台入口'}</Typography.Text>
+          <Typography.Text strong>会话历史</Typography.Text>
           <Typography.Text type="secondary">
-            {mode === 'history'
-              ? '侧边栏继续按 session 展示历史；workspace 归属在当前 conversation 视图中体现。'
-              : '设置入口保持在同一侧边栏容器内部，不再切成独立面板。'}
+            侧边栏继续按 session 展示历史；workspace 归属在当前 conversation 视图中体现。
           </Typography.Text>
         </Space>
 
@@ -35,19 +31,6 @@ export function SessionSidebar({ mode, user, sessions, selectedSessionId, onSele
           </Space>
         </Card>
 
-        {mode === 'settings' ? (
-          <Card size="small" className="session-sidebar__shortcut-card">
-            <Space direction="vertical" size={12} style={{ width: '100%' }}>
-              <Typography.Text strong>设置入口</Typography.Text>
-              <Typography.Text type="secondary">
-                当前阶段设置仍保持独立路由，但入口继续收纳在同一个侧边栏背景中。
-              </Typography.Text>
-              <Button type="primary" onClick={onOpenSettingsPage}>
-                打开设置页
-              </Button>
-            </Space>
-          </Card>
-        ) : null}
 
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
           <Typography.Text strong>搜索会话</Typography.Text>
