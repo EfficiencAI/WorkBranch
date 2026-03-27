@@ -3,9 +3,6 @@ export {
   selectChatWorkbenchError,
   selectChatWorkbenchLoading,
   selectChatWorkbenchNodes,
-  selectChatWorkbenchSelectedSessionId,
-  selectChatWorkbenchSessionDetail,
-  selectChatWorkbenchSessions,
   selectChatWorkbenchStreaming,
   selectChatWorkbenchWorkspaceDetail,
 } from './model/selectors'

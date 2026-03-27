@@ -3,13 +3,12 @@ import type { SessionId } from '../../../entities'
 import {
   fetchConversationDetail,
   fetchConversationNodes,
-  fetchSessionDetail,
-  fetchSessions,
   fetchWorkspaceDetail,
   getErrorMessage,
   streamSessionMessage,
 } from '../../../shared/api'
 import type { ChatStreamEvent } from '../../../shared/api'
+import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers } from './types'
 
 async function loadConversationBundle(conversationId: string) {
@@ -23,9 +22,6 @@ async function loadConversationBundle(conversationId: string) {
 }
 
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
-  sessions: [],
-  selectedSessionId: null,
-  sessionDetail: null,
   conversationDetail: null,
   workspaceDetail: null,
   nodes: [],
@@ -43,9 +39,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
   resetAll() {
     set({
-      sessions: [],
-      selectedSessionId: null,
-      sessionDetail: null,
       conversationDetail: null,
       workspaceDetail: null,
       nodes: [],
@@ -55,29 +48,35 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     })
   },
 
+  async loadConversationBundle(conversationId: string) {
+    try {
+      set({ loading: true, error: null })
+      const bundle = await loadConversationBundle(conversationId)
+      set({
+        conversationDetail: bundle.detail,
+        workspaceDetail: bundle.nextWorkspace,
+        nodes: bundle.nextNodes,
+      })
+    } catch (caughtError) {
+      set({ error: getErrorMessage(caughtError, '对话数据加载失败') })
+    } finally {
+      set({ loading: false })
+    }
+  },
+
   async loadChatWorkbench(preferredSessionId?: SessionId | null) {
     try {
       set({ loading: true, error: null })
 
-      const nextSessions = await fetchSessions()
-      const nextSessionId = preferredSessionId ?? nextSessions[0]?.id ?? null
+      await useSessionStore.getState().loadSessions(preferredSessionId)
+      const { activeConversationId } = useSessionStore.getState()
 
-      set({ sessions: nextSessions, selectedSessionId: nextSessionId })
-
-      if (nextSessionId === null || nextSessionId === undefined) {
-        set({ sessionDetail: null, conversationDetail: null, workspaceDetail: null, nodes: [] })
-        return
-      }
-
-      const detail = await fetchSessionDetail(nextSessionId)
-      set({ sessionDetail: detail })
-
-      if (!detail.activeConversationId) {
+      if (!activeConversationId) {
         set({ conversationDetail: null, workspaceDetail: null, nodes: [] })
         return
       }
 
-      const bundle = await loadConversationBundle(detail.activeConversationId)
+      const bundle = await loadConversationBundle(activeConversationId)
       set({
         conversationDetail: bundle.detail,
         workspaceDetail: bundle.nextWorkspace,
@@ -90,14 +89,11 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
   },
 
-  async selectSession(sessionId: SessionId) {
-    await get().loadChatWorkbench(sessionId)
-  },
-
   async sendMessage(messageText: string, handlers: SendMessageHandlers = {}) {
-    const { selectedSessionId, conversationDetail } = get()
+    const { currentSessionId } = useSessionStore.getState()
+    const { conversationDetail } = get()
 
-    if (!selectedSessionId || !conversationDetail) {
+    if (!currentSessionId || !conversationDetail) {
       return
     }
 
@@ -107,7 +103,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       set({ streaming: true })
 
       await streamSessionMessage(
-        selectedSessionId,
+        currentSessionId,
         {
           message: messageText,
           workspace_id: conversationDetail.workspaceId,
@@ -123,7 +119,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         },
       )
 
-      await get().loadChatWorkbench(selectedSessionId)
+      await get().loadChatWorkbench(currentSessionId)
     } finally {
       set({ streaming: false })
     }

@@ -5,12 +5,14 @@ import type { UserProfile } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
   selectChatWorkbenchNodes,
-  selectChatWorkbenchSelectedSessionId,
-  selectChatWorkbenchSessionDetail,
-  selectChatWorkbenchSessions,
   selectChatWorkbenchStreaming,
   selectChatWorkbenchWorkspaceDetail,
+  selectCurrentSessionDetail,
+  selectCurrentSessionId,
+  selectSessionList,
   useChatWorkbenchStore,
+  useSessionStore,
+  createConversationForCurrentSession,
 } from '../../features'
 import { StatusTag } from '../../shared/ui'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
@@ -30,18 +32,27 @@ type WorkspaceShellProps = {
 export function WorkspaceShell({ user, onSendError, onRequestError, view }: WorkspaceShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
-  const sessions = useChatWorkbenchStore(selectChatWorkbenchSessions)
-  const selectedSessionId = useChatWorkbenchStore(selectChatWorkbenchSelectedSessionId)
-  const sessionDetail = useChatWorkbenchStore(selectChatWorkbenchSessionDetail)
+  const sessions = useSessionStore(selectSessionList)
+  const selectedSessionId = useSessionStore(selectCurrentSessionId)
+  const sessionDetail = useSessionStore(selectCurrentSessionDetail)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
   const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
-  const selectSession = useChatWorkbenchStore((state) => state.selectSession)
+  const selectSession = useSessionStore((state) => state.selectSession)
   const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
+  const loadConversationBundle = useChatWorkbenchStore((state) => state.loadConversationBundle)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
+
+  const handleCreateConversation = useCallback(async () => {
+    try {
+      await createConversationForCurrentSession()
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [onRequestError])
 
   const isSettingsRoute = location.pathname === '/settings'
   const navExpanded = peekNav || activeSidebar !== null
@@ -85,10 +96,15 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
   }
 
   const handleSelectSession = useCallback(
-    (sessionId: string | number) => {
-      void selectSession(sessionId)
+    async (sessionId: string | number) => {
+      const detail = await selectSession(sessionId)
+      if (!detail?.activeConversationId) {
+        useChatWorkbenchStore.getState().resetConversationState()
+        return
+      }
+      await loadConversationBundle(detail.activeConversationId)
     },
-    [selectSession],
+    [loadConversationBundle, selectSession],
   )
 
   const handleSendMessage = useCallback(
@@ -119,6 +135,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
           nodes={nodes}
           sending={sending}
           onSendMessage={handleSendMessage}
+          onCreateConversation={handleCreateConversation}
         />
 
         <div
@@ -198,7 +215,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
             </Typography.Title>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段五" tone="processing" />
+              <StatusTag label="阶段六" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>

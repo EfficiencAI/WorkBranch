@@ -1,5 +1,5 @@
 import type { ConversationDetail, MessageNode, SessionConversationRef, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
-import { get } from './http'
+import { get, patch, post } from './http'
 import { ApiError } from './error'
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
@@ -74,6 +74,24 @@ export async function fetchSessions() {
 export async function fetchSessionDetail(sessionId: string | number) {
   const data = await get<Record<string, unknown>>(`/chat/sessions/${sessionId}`)
   return toSessionDetail(data)
+}
+
+export async function patchSessionActiveConversation(sessionId: string | number, activeConversationId: string | null) {
+  const data = await patch<Record<string, unknown>>(`/chat/sessions/${sessionId}`, {
+    active_conversation_id: activeConversationId,
+  })
+  return toSessionDetail(data)
+}
+
+export async function createConversation(sessionId: string | number, workspaceId?: string | null) {
+  const data = await post<Record<string, unknown>, { workspace_id?: string | null }>(`/chat/sessions/${sessionId}/conversations`, {
+    workspace_id: workspaceId,
+  })
+
+  return {
+    conversationId: String(data.conversation_id ?? ''),
+    sessionId: Number(data.session_id ?? sessionId),
+  }
 }
 
 export async function fetchSessionConversations(sessionId: string | number) {

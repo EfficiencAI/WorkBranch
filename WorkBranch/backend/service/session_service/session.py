@@ -58,6 +58,21 @@ class SessionService:
     def get_session(self, session_id: int) -> Optional[Session]:
         return self._session_history.get_session(session_id)
 
+    async def create_conversation(self, session_id: int, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        conversation_id = await self._conversation_creator.create_conversation(
+            session_id=session_id,
+            workspace_id=workspace_id,
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "session_id": session_id,
+        }
+
     async def send_message(
         self,
         session_id: int,
@@ -112,7 +127,20 @@ class SessionService:
             return result
 
     def get_active_conversation_id(self, session_id: int) -> Optional[str]:
-        return self._active_conversations.get(session_id)
+        session = self.get_session(session_id)
+        if not session:
+            return None
+        return session.active_conversation_id
+
+    def update_session_active_conversation(self, session_id: int, active_conversation_id: Optional[str]) -> Optional[Session]:
+        session = self.get_session(session_id)
+        if not session:
+            return None
+        self._dao.update_session_active_conversation(session_id, active_conversation_id)
+        return self.get_session(session_id)
+
+    def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
+        return self._dao.get_conversation_by_id(conversation_id)
 
     def list_conversation_refs(self, session_id: int) -> List[Dict[str, str]]:
         conversations = self._dao.list_conversations_by_session(session_id)
@@ -129,7 +157,7 @@ class SessionService:
         return result
 
     def has_active_conversation(self, session_id: int) -> bool:
-        return session_id in self._active_conversations
+        return self.get_active_conversation_id(session_id) is not None
 
     async def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         persisted = self._dao.get_conversation_by_id(conversation_id)

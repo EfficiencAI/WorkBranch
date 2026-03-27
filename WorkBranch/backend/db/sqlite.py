@@ -39,6 +39,7 @@ class Database:
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER,
                     title TEXT,
+                    active_conversation_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(user_id) REFERENCES users(id)
@@ -73,6 +74,9 @@ class Database:
                     FOREIGN KEY(parent_id) REFERENCES nodes(id) ON DELETE CASCADE
                 )
             ''')
+
+            if not self._column_exists(cursor, "sessions", "active_conversation_id"):
+                cursor.execute('ALTER TABLE sessions ADD COLUMN active_conversation_id TEXT')
 
             if not self._column_exists(cursor, "nodes", "conversation_id"):
                 cursor.execute('ALTER TABLE nodes ADD COLUMN conversation_id TEXT')

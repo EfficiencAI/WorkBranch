@@ -12,6 +12,7 @@ export interface SessionSummary {
 
 export interface SessionDetail extends SessionSummary {
   userId?: number
+  conversationRefs?: SessionConversationRef[]
 }
 
 export interface SessionConversationRef {
