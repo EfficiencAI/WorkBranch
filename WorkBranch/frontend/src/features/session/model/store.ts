@@ -1,12 +1,23 @@
 import { create } from 'zustand'
 import type { SessionId } from '../../../entities'
 import {
+  createSession as createSessionRequest,
+  deleteSession as deleteSessionRequest,
   fetchSessionConversations,
   fetchSessionDetail,
   fetchSessions,
   getErrorMessage,
 } from '../../../shared/api'
 import type { SessionStore } from './types'
+
+function pickNextSessionIdAfterDelete(sessionIds: SessionId[], sessionId: SessionId) {
+  const currentIndex = sessionIds.findIndex((id) => id === sessionId)
+  if (currentIndex === -1) {
+    return null
+  }
+
+  return sessionIds[currentIndex + 1] ?? sessionIds[currentIndex - 1] ?? null
+}
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessionList: [],
@@ -15,6 +26,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   activeConversationId: null,
   sessionLoading: false,
   sessionError: null,
+  creatingSession: false,
+  deletingSessionId: null,
 
   clearSessionError() {
     set({ sessionError: null })
@@ -28,6 +41,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       activeConversationId: null,
       sessionLoading: false,
       sessionError: null,
+      creatingSession: false,
+      deletingSessionId: null,
     })
   },
 
@@ -92,7 +107,62 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   async selectSession(sessionId: SessionId) {
+    const { currentSessionId, currentSessionDetail } = get()
+    if (currentSessionId === sessionId && currentSessionDetail) {
+      return currentSessionDetail
+    }
+
     set({ currentSessionId: sessionId })
     return get().loadSessionDetail(sessionId)
+  },
+
+  async createSession(title?: string) {
+    try {
+      set({ creatingSession: true, sessionError: null })
+
+      const detail = await createSessionRequest(title)
+      const nextSessions = await fetchSessions()
+
+      set({ sessionList: nextSessions, currentSessionId: detail.id })
+      return await get().loadSessionDetail(detail.id)
+    } catch (caughtError) {
+      set({ sessionError: getErrorMessage(caughtError, '会话创建失败') })
+      return null
+    } finally {
+      set({ creatingSession: false })
+    }
+  },
+
+  async deleteSession(sessionId: SessionId) {
+    try {
+      set({ deletingSessionId: sessionId, sessionError: null })
+
+      const { currentSessionId, sessionList } = get()
+      const sessionIds = sessionList.map((item) => item.id)
+      const nextSelectedId =
+        currentSessionId === sessionId ? pickNextSessionIdAfterDelete(sessionIds, sessionId) : currentSessionId
+
+      await deleteSessionRequest(sessionId)
+
+      const nextSessions = await fetchSessions()
+      set({ sessionList: nextSessions })
+
+      const resolvedNextId = nextSelectedId
+        ? nextSessions.find((item) => item.id === nextSelectedId)?.id ?? null
+        : null
+
+      if (!resolvedNextId) {
+        set({ currentSessionId: null, currentSessionDetail: null, activeConversationId: null })
+        return null
+      }
+
+      set({ currentSessionId: resolvedNextId })
+      return await get().loadSessionDetail(resolvedNextId)
+    } catch (caughtError) {
+      set({ sessionError: getErrorMessage(caughtError, '会话删除失败') })
+      return null
+    } finally {
+      set({ deletingSessionId: null })
+    }
   },
 }))

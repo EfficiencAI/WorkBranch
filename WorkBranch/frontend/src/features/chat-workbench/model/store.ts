@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SessionId } from '../../../entities'
+import type { SessionDetail, SessionId } from '../../../entities'
 import {
   fetchConversationDetail,
   fetchConversationNodes,
@@ -9,7 +9,8 @@ import {
 } from '../../../shared/api'
 import type { ChatStreamEvent } from '../../../shared/api'
 import { useSessionStore } from '../../session'
-import type { ChatWorkbenchStore, SendMessageHandlers } from './types'
+import { isApiError } from '../../../shared/api'
+import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
 
 async function loadConversationBundle(conversationId: string) {
   const detail = await fetchConversationDetail(conversationId)
@@ -59,8 +60,30 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       })
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '对话数据加载失败') })
+      throw caughtError
     } finally {
       set({ loading: false })
+    }
+  },
+
+  async enterSessionContext(sessionDetail: SessionDetail | null): Promise<SessionContextResult> {
+    if (!sessionDetail?.activeConversationId) {
+      get().resetConversationState()
+      return 'overview'
+    }
+
+    try {
+      await get().loadConversationBundle(sessionDetail.activeConversationId)
+      return 'focused'
+    } catch (caughtError) {
+      // loadConversationBundle already writes store.error; we only normalize invalid references.
+      if (isApiError(caughtError) && caughtError.status === 404) {
+        get().resetConversationState()
+        return 'invalid-active-conversation'
+      }
+
+      get().resetConversationState()
+      return 'overview'
     }
   },
 
@@ -69,19 +92,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       set({ loading: true, error: null })
 
       await useSessionStore.getState().loadSessions(preferredSessionId)
-      const { activeConversationId } = useSessionStore.getState()
-
-      if (!activeConversationId) {
-        set({ conversationDetail: null, workspaceDetail: null, nodes: [] })
-        return
-      }
-
-      const bundle = await loadConversationBundle(activeConversationId)
-      set({
-        conversationDetail: bundle.detail,
-        workspaceDetail: bundle.nextWorkspace,
-        nodes: bundle.nextNodes,
-      })
+      const { currentSessionDetail } = useSessionStore.getState()
+      await get().enterSessionContext(currentSessionDetail)
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '工作台数据加载失败') })
     } finally {

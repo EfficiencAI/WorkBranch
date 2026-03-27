@@ -1,5 +1,7 @@
-import type { ConversationDetail, MessageNode, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import type { ChatStreamEvent } from '../../../shared/api'
+
+export type SessionContextResult = 'overview' | 'focused' | 'invalid-active-conversation'
 
 export type ChatWorkbenchState = {
   conversationDetail: ConversationDetail | null
@@ -20,6 +22,7 @@ export type SendMessageHandlers = {
 export type ChatWorkbenchActions = {
   loadChatWorkbench: (preferredSessionId?: SessionId | null) => Promise<void>
   loadConversationBundle: (conversationId: string) => Promise<void>
+  enterSessionContext: (sessionDetail: SessionDetail | null) => Promise<SessionContextResult>
   sendMessage: (messageText: string, handlers?: SendMessageHandlers) => Promise<void>
 
   clearError: () => void

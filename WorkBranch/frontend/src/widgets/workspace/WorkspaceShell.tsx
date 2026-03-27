@@ -1,14 +1,16 @@
 import { Button, Space, Typography } from 'antd'
 import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { UserProfile } from '../../entities'
+import type { SessionId, UserProfile } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
   selectChatWorkbenchNodes,
   selectChatWorkbenchStreaming,
   selectChatWorkbenchWorkspaceDetail,
+  selectCreatingSession,
   selectCurrentSessionDetail,
   selectCurrentSessionId,
+  selectDeletingSessionId,
   selectSessionList,
   useChatWorkbenchStore,
   useSessionStore,
@@ -35,13 +37,17 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
   const sessions = useSessionStore(selectSessionList)
   const selectedSessionId = useSessionStore(selectCurrentSessionId)
   const sessionDetail = useSessionStore(selectCurrentSessionDetail)
+  const creatingSession = useSessionStore(selectCreatingSession)
+  const deletingSessionId = useSessionStore(selectDeletingSessionId)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
   const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
   const selectSession = useSessionStore((state) => state.selectSession)
+  const createSession = useSessionStore((state) => state.createSession)
+  const deleteSession = useSessionStore((state) => state.deleteSession)
   const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
-  const loadConversationBundle = useChatWorkbenchStore((state) => state.loadConversationBundle)
+  const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
@@ -96,15 +102,35 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
   }
 
   const handleSelectSession = useCallback(
-    async (sessionId: string | number) => {
+    async (sessionId: SessionId) => {
+      setFocusedNodeId(null)
       const detail = await selectSession(sessionId)
-      if (!detail?.activeConversationId) {
-        useChatWorkbenchStore.getState().resetConversationState()
-        return
-      }
-      await loadConversationBundle(detail.activeConversationId)
+      await enterSessionContext(detail)
     },
-    [loadConversationBundle, selectSession],
+    [enterSessionContext, selectSession],
+  )
+
+  const handleCreateSession = useCallback(async () => {
+    try {
+      setFocusedNodeId(null)
+      const detail = await createSession()
+      await enterSessionContext(detail)
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [createSession, enterSessionContext, onRequestError])
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: SessionId) => {
+      try {
+        setFocusedNodeId(null)
+        const detail = await deleteSession(sessionId)
+        await enterSessionContext(detail)
+      } catch (caughtError) {
+        onRequestError(caughtError)
+      }
+    },
+    [deleteSession, enterSessionContext, onRequestError],
   )
 
   const handleSendMessage = useCallback(
@@ -190,6 +216,10 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
                   user={user}
                   sessions={sessions}
                   selectedSessionId={selectedSessionId}
+                  creatingSession={creatingSession}
+                  deletingSessionId={deletingSessionId}
+                  onCreateSession={handleCreateSession}
+                  onDeleteSession={handleDeleteSession}
                   onSelectSession={handleSelectSession}
                 />
               ) : null}
@@ -215,7 +245,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
             </Typography.Title>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段六" tone="processing" />
+              <StatusTag label="阶段七" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>

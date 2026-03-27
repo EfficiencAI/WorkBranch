@@ -1,15 +1,39 @@
-import { Avatar, Button, Card, Input, List, Space, Typography } from 'antd'
-import type { SessionSummary, UserProfile } from '../../entities'
+import { Avatar, Button, Card, Input, List, Modal, Space, Typography } from 'antd'
+import type { SessionId, SessionSummary, UserProfile } from '../../entities'
 import { StatusTag } from '../../shared/ui'
 
 type SessionSidebarProps = {
   user: UserProfile
   sessions: SessionSummary[]
-  selectedSessionId: string | number | null
-  onSelectSession: (sessionId: string | number) => void
+  selectedSessionId: SessionId | null
+  creatingSession: boolean
+  deletingSessionId: SessionId | null
+  onCreateSession: () => Promise<void>
+  onDeleteSession: (sessionId: SessionId) => Promise<void>
+  onSelectSession: (sessionId: SessionId) => Promise<void>
 }
 
-export function SessionSidebar({ user, sessions, selectedSessionId, onSelectSession }: SessionSidebarProps) {
+export function SessionSidebar({
+  user,
+  sessions,
+  selectedSessionId,
+  creatingSession,
+  deletingSessionId,
+  onCreateSession,
+  onDeleteSession,
+  onSelectSession,
+}: SessionSidebarProps) {
+  function handleDeleteSession(sessionId: SessionId) {
+    Modal.confirm({
+      title: '确认删除该会话？',
+      content: '删除后无法恢复。若当前正在查看该会话，将自动切换到其他可用会话。',
+      okText: '删除',
+      okButtonProps: { danger: true },
+      cancelText: '取消',
+      onOk: () => onDeleteSession(sessionId),
+    })
+  }
+
   return (
     <div className="session-sidebar" aria-label="工作台内嵌侧边栏内容">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
@@ -31,31 +55,45 @@ export function SessionSidebar({ user, sessions, selectedSessionId, onSelectSess
           </Space>
         </Card>
 
-
         <Space direction="vertical" size="small" style={{ width: '100%' }}>
           <Typography.Text strong>搜索会话</Typography.Text>
           <Input.Search placeholder="按标题、关键字或状态筛选" allowClear />
         </Space>
 
         <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-          <Button type="primary">新建会话</Button>
-          <Button danger ghost disabled>
-            删除占位
+          <Button type="primary" loading={creatingSession} onClick={() => void onCreateSession()}>
+            新建会话
           </Button>
         </Space>
 
         <div className="session-sidebar__list">
           <List
             split={false}
+            locale={{ emptyText: '暂无会话，可先创建新会话。' }}
             dataSource={sessions}
             renderItem={(session) => {
               const isActive = selectedSessionId === session.id
+              const isDeleting = deletingSessionId === session.id
 
               return (
                 <List.Item
                   className={isActive ? 'session-sidebar__item session-sidebar__item--active' : 'session-sidebar__item'}
-                  onClick={() => onSelectSession(session.id)}
+                  onClick={() => void onSelectSession(session.id)}
                   style={{ cursor: 'pointer' }}
+                  actions={[
+                    <Button
+                      key="delete"
+                      danger
+                      type="text"
+                      loading={isDeleting}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        handleDeleteSession(session.id)
+                      }}
+                    >
+                      删除
+                    </Button>,
+                  ]}
                 >
                   <Space direction="vertical" size={8} style={{ width: '100%' }}>
                     <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">

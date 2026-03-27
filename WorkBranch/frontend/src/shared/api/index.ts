@@ -3,6 +3,8 @@ export { connectSse } from './sse'
 export { del, get, patch, post, put, request } from './http'
 export {
   createConversation,
+  createSession,
+  deleteSession,
   fetchConversationDetail,
   fetchConversationNodes,
   fetchSessionConversations,

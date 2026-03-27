@@ -1,5 +1,5 @@
 import type { ConversationDetail, MessageNode, SessionConversationRef, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
-import { get, patch, post } from './http'
+import { del, get, patch, post } from './http'
 import { ApiError } from './error'
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
@@ -66,9 +66,18 @@ function toWorkspaceDetail(payload: Record<string, unknown>): WorkspaceDetail {
   }
 }
 
+export async function createSession(title = '新会话') {
+  const data = await post<Record<string, unknown>>(`/chat/sessions?title=${encodeURIComponent(title)}`)
+  return toSessionDetail(data)
+}
+
 export async function fetchSessions() {
   const data = await get<Array<Record<string, unknown>>>('/chat/sessions')
   return data.map(toSessionSummary)
+}
+
+export async function deleteSession(sessionId: string | number) {
+  await del(`/chat/sessions/${sessionId}`)
 }
 
 export async function fetchSessionDetail(sessionId: string | number) {

@@ -146,6 +146,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- ThemeProvider and useTheme intentionally share one module
 export function useTheme() {
   const context = useContext(ThemeContext)
 

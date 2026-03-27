@@ -7,12 +7,19 @@ export type SessionState = {
   activeConversationId: string | null
   sessionLoading: boolean
   sessionError: string | null
+
+  creatingSession: boolean
+  deletingSessionId: SessionId | null
 }
 
 export type SessionActions = {
   loadSessions: (preferredSessionId?: SessionId | null) => Promise<void>
   loadSessionDetail: (sessionId: SessionId) => Promise<SessionDetail | null>
   selectSession: (sessionId: SessionId) => Promise<SessionDetail | null>
+
+  createSession: (title?: string) => Promise<SessionDetail | null>
+  deleteSession: (sessionId: SessionId) => Promise<SessionDetail | null>
+
   setSessionDetail: (detail: SessionDetail | null) => void
   clearSessionError: () => void
   resetSessionState: () => void
