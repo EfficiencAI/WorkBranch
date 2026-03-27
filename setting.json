@@ -14,5 +14,8 @@
     },
     "mq": {
         "max_size": 1000
+    },
+    "ui": {
+        "theme_mode": "light"
     }
 }

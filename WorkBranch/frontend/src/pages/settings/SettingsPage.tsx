@@ -7,6 +7,7 @@ import {
   Input,
   InputNumber,
   Space,
+  Radio,
   Switch,
   Typography,
 } from 'antd'
@@ -17,6 +18,7 @@ import { getErrorMessage, get, patch } from '../../shared/api'
 import { settingsConfig } from '../../shared/config/settings'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { LoadingState, StatusTag } from '../../shared/ui'
+import { useTheme } from '../../app/theme'
 
 type EditorKind = 'string' | 'number' | 'boolean' | 'json' | 'secret'
 
@@ -161,7 +163,26 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     void loadSettings()
   }, [loadSettings])
 
-  const entries = useMemo(() => Object.entries(settings ?? {}), [settings])
+  const { themeMode, setThemeMode } = useTheme()
+
+  const entries = useMemo(() => {
+    const allEntries = Object.entries(settings ?? {})
+
+    return allEntries
+      .map(([rootKey, rootValue]) => {
+        if (rootKey !== 'ui' || !isPlainObject(rootValue)) {
+          return [rootKey, rootValue] as const
+        }
+
+        const filteredUiEntries = Object.entries(rootValue).filter(([childKey]) => childKey !== 'theme_mode')
+        if (filteredUiEntries.length === 0) {
+          return null
+        }
+
+        return [rootKey, Object.fromEntries(filteredUiEntries) as SettingValue] as const
+      })
+      .filter((entry): entry is readonly [string, SettingValue] => entry !== null)
+  }, [settings])
 
   function cancelEditing() {
     setEditing(null)
@@ -240,6 +261,53 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setSaveError(getErrorMessage(caughtError, '设置保存失败'))
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function saveBooleanLeaf(rootKey: string, path: string[], checked: boolean) {
+    if (!settings) {
+      return
+    }
+
+    const originalRoot = settings[rootKey]
+    if (originalRoot === undefined) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setSaveError(null)
+
+      const updatedRoot = setValueAtPath(cloneDeepJson(originalRoot), path, checked)
+      await patch<void, Partial<SettingNode>>(settingsConfig.endpoint, {
+        [rootKey]: updatedRoot,
+      })
+
+      setSettings((current) => {
+        if (!current) {
+          return current
+        }
+
+        return {
+          ...current,
+          [rootKey]: updatedRoot,
+        }
+      })
+
+      message.success('设置已保存')
+    } catch (caughtError) {
+      setSaveError(getErrorMessage(caughtError, '设置保存失败'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function handleThemeModeChange(nextThemeMode: 'dark' | 'light' | 'system') {
+    try {
+      await setThemeMode(nextThemeMode)
+      message.success('主题已更新')
+    } catch (caughtError) {
+      message.error(getErrorMessage(caughtError, '主题切换失败'))
     }
   }
 
@@ -335,6 +403,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                   取消
                 </Button>
               </>
+            ) : typeof value === 'boolean' ? (
+              <Switch
+                checked={value}
+                loading={saving}
+                disabled={editing !== null}
+                onChange={(checked) => void saveBooleanLeaf(rootKey, path, checked)}
+              />
             ) : (
               <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
                 编辑
@@ -381,6 +456,29 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
       {!loading && !error ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
+          <Card title="界面" className="settings-card" key="ui-preferences">
+            <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
+                <div className="settings-tree-leaf__meta">
+                  <Typography.Text strong>主题模式</Typography.Text>
+                  <Typography.Paragraph type="secondary" className="settings-tree-leaf__path">
+                    ui.theme_mode
+                  </Typography.Paragraph>
+                </div>
+                <Radio.Group
+                  value={themeMode}
+                  onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')}
+                  optionType="button"
+                  buttonStyle="solid"
+                >
+                  <Radio.Button value="dark">深色</Radio.Button>
+                  <Radio.Button value="light">浅色</Radio.Button>
+                  <Radio.Button value="system">跟随系统</Radio.Button>
+                </Radio.Group>
+              </Flex>
+            </Space>
+          </Card>
+
           {entries.map(([rootKey, rootValue]) => (
             <Card title={rootKey} className="settings-card" key={rootKey}>
               {isPlainObject(rootValue)

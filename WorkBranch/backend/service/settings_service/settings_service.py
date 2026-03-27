@@ -2,6 +2,9 @@ from data.file_storage_system import FileStorageSystem
 
 
 DEFAULT_SETTINGS = {
+    "ui": {
+        "theme_mode": "system"
+    },
     "database": {
         "path": "workbranch.db"
     },
