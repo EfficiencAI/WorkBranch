@@ -1,8 +1,9 @@
 import { Button, Space, Typography } from 'antd'
 import { useCallback, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import type { SessionId, UserProfile } from '../../entities'
+import type { SessionId } from '../../entities'
 import {
+  createConversationForCurrentSession,
   selectChatWorkbenchConversationDetail,
   selectChatWorkbenchNodes,
   selectChatWorkbenchStreaming,
@@ -12,9 +13,10 @@ import {
   selectCurrentSessionId,
   selectDeletingSessionId,
   selectSessionList,
+  selectUserProfile,
   useChatWorkbenchStore,
   useSessionStore,
-  createConversationForCurrentSession,
+  useUserStore,
 } from '../../features'
 import { StatusTag } from '../../shared/ui'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
@@ -25,13 +27,12 @@ import { SessionSidebar } from './SessionSidebar'
 type SidebarMode = 'history' | 'settings'
 
 type WorkspaceShellProps = {
-  user: UserProfile
   onSendError: (content: string) => void
   onRequestError: (error: unknown) => void
   view: 'chat' | 'settings'
 }
 
-export function WorkspaceShell({ user, onSendError, onRequestError, view }: WorkspaceShellProps) {
+export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const sessions = useSessionStore(selectSessionList)
@@ -39,6 +40,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
   const sessionDetail = useSessionStore(selectCurrentSessionDetail)
   const creatingSession = useSessionStore(selectCreatingSession)
   const deletingSessionId = useSessionStore(selectDeletingSessionId)
+  const user = useUserStore(selectUserProfile)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
   const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
@@ -211,7 +213,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
 
           <div className={activeSidebar ? 'workspace-shell__nav-body workspace-shell__nav-body--visible' : 'workspace-shell__nav-body'}>
             <div className="workspace-shell__nav-panel">
-              {activeSidebar === 'history' ? (
+              {activeSidebar === 'history' && user ? (
                 <SessionSidebar
                   user={user}
                   sessions={sessions}
@@ -245,7 +247,7 @@ export function WorkspaceShell({ user, onSendError, onRequestError, view }: Work
             </Typography.Title>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段七" tone="processing" />
+              <StatusTag label="阶段八" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>

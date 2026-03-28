@@ -1,14 +1,16 @@
 import { Alert, App as AntdApp } from 'antd'
-import { useCallback, useEffect, useMemo } from 'react'
+import { useCallback, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
-import type { UserProfile } from '../../entities'
 import {
   selectChatWorkbenchError,
   selectChatWorkbenchLoading,
   selectSessionError,
   selectSessionLoading,
+  selectUserError,
+  selectUserLoading,
   useChatWorkbenchStore,
   useSessionStore,
+  useUserStore,
 } from '../../features'
 import { getErrorMessage } from '../../shared/api'
 import { LoadingState } from '../../shared/ui'
@@ -21,12 +23,14 @@ export function WorkspacePage() {
   const chatError = useChatWorkbenchStore(selectChatWorkbenchError)
   const sessionLoading = useSessionStore(selectSessionLoading)
   const sessionError = useSessionStore(selectSessionError)
+  const userLoading = useUserStore(selectUserLoading)
+  const userError = useUserStore(selectUserError)
   const loadChatWorkbench = useChatWorkbenchStore((state) => state.loadChatWorkbench)
-  const mockUser = useMemo<UserProfile>(() => ({ id: 'user-demo', name: 'Misak' }), [])
+  const loadProfile = useUserStore((state) => state.loadProfile)
 
   useEffect(() => {
-    void loadChatWorkbench()
-  }, [loadChatWorkbench])
+    void Promise.all([loadChatWorkbench(), loadProfile()])
+  }, [loadChatWorkbench, loadProfile])
 
   const handleSendError = useCallback((content: string) => {
     void message.error(content)
@@ -36,15 +40,15 @@ export function WorkspacePage() {
     void message.error(getErrorMessage(caughtError, '消息发送失败'))
   }, [message])
 
-  if (chatLoading || sessionLoading) {
+  if (chatLoading || sessionLoading || userLoading) {
     return <LoadingState tip="正在加载工作台数据..." />
   }
 
-  if (chatError || sessionError) {
-    return <Alert type="error" showIcon message={chatError ?? sessionError ?? '工作台数据加载失败'} />
+  if (chatError || sessionError || userError) {
+    return <Alert type="error" showIcon message={chatError ?? sessionError ?? userError ?? '工作台数据加载失败'} />
   }
 
   const isSettingsView = location.pathname === '/settings'
 
-  return <WorkspaceShell user={mockUser} onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
+  return <WorkspaceShell onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
 }

@@ -1,5 +1,7 @@
-import { Avatar, Button, Card, Input, List, Modal, Space, Typography } from 'antd'
+import { App as AntdApp, Avatar, Button, Card, Input, List, Modal, Space, Typography } from 'antd'
+import { useState } from 'react'
 import type { SessionId, SessionSummary, UserProfile } from '../../entities'
+import { selectUpdateUserNamePending, useUserStore } from '../../features'
 import { StatusTag } from '../../shared/ui'
 
 type SessionSidebarProps = {
@@ -23,6 +25,12 @@ export function SessionSidebar({
   onDeleteSession,
   onSelectSession,
 }: SessionSidebarProps) {
+  const { message } = AntdApp.useApp()
+  const updateNamePending = useUserStore(selectUpdateUserNamePending)
+  const updateProfileName = useUserStore((state) => state.updateProfileName)
+  const [isEditingName, setIsEditingName] = useState(false)
+  const [draftName, setDraftName] = useState(user.name ?? '')
+
   function handleDeleteSession(sessionId: SessionId) {
     Modal.confirm({
       title: '确认删除该会话？',
@@ -33,6 +41,27 @@ export function SessionSidebar({
       onOk: () => onDeleteSession(sessionId),
     })
   }
+
+  async function handleSaveUserName() {
+    const trimmedName = draftName.trim()
+    if (!trimmedName) {
+      void message.error('用户名不能为空')
+      return
+    }
+
+    const profile = await updateProfileName(trimmedName)
+    if (!profile) {
+      void message.error('用户名保存失败')
+      return
+    }
+
+    void message.success('用户名已更新')
+    setIsEditingName(false)
+  }
+
+  const trimmedDraftName = draftName.trim()
+  const currentName = user.name?.trim() ?? ''
+  const disableSaveName = updateNamePending || !trimmedDraftName || trimmedDraftName === currentName
 
   return (
     <div className="session-sidebar" aria-label="工作台内嵌侧边栏内容">
@@ -47,10 +76,51 @@ export function SessionSidebar({
         <Card size="small" className="session-sidebar__profile">
           <Space align="start" size="middle">
             <Avatar size={48}>{user.name?.slice(0, 1) ?? 'U'}</Avatar>
-            <Space direction="vertical" size={2}>
-              <Typography.Text strong>{user.name ?? '未命名用户'}</Typography.Text>
-              <Typography.Text type="secondary">AI Coding Workspace</Typography.Text>
-              <StatusTag label="同层展开" tone="success" />
+            <Space direction="vertical" size={2} style={{ width: '100%' }}>
+              {isEditingName ? (
+                <>
+                  <Input
+                    value={draftName}
+                    maxLength={64}
+                    disabled={updateNamePending}
+                    placeholder="请输入用户名"
+                    onChange={(event) => setDraftName(event.target.value)}
+                    onPressEnter={() => void handleSaveUserName()}
+                  />
+                  <Space>
+                    <Button
+                      type="primary"
+                      size="small"
+                      loading={updateNamePending}
+                      disabled={disableSaveName}
+                      onClick={() => void handleSaveUserName()}
+                    >
+                      保存
+                    </Button>
+                    <Button
+                      size="small"
+                      disabled={updateNamePending}
+                      onClick={() => {
+                        setDraftName(user.name ?? '')
+                        setIsEditingName(false)
+                      }}
+                    >
+                      取消
+                    </Button>
+                  </Space>
+                </>
+              ) : (
+                <>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
+                    <Typography.Text strong>{user.name ?? '未命名用户'}</Typography.Text>
+                    <Button size="small" type="text" onClick={() => setIsEditingName(true)}>
+                      编辑
+                    </Button>
+                  </Space>
+                  <Typography.Text type="secondary">AI Coding Workspace</Typography.Text>
+                  <StatusTag label="同层展开" tone="success" />
+                </>
+              )}
             </Space>
           </Space>
         </Card>
