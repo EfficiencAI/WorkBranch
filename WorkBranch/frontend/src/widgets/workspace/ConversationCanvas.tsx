@@ -1,16 +1,10 @@
-import {
-  Background,
-  Controls,
-  MiniMap,
-  ReactFlow,
-  ReactFlowProvider,
-  useReactFlow,
-} from '@xyflow/react'
+import { Background, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button, Card, Dropdown, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useEffect, useMemo } from 'react'
+import { useSettings } from '../../app/settings'
 import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { MessageComposer } from './MessageComposer'
@@ -96,7 +90,7 @@ function buildOverviewNodes(sessionDetail: SessionDetail | null): MessageNode[] 
     id: ref.conversationId,
     parentId: index === 0 ? null : sessionDetail?.conversationRefs?.[index - 1]?.conversationId ?? null,
     role: 'assistant',
-    content: `Conversation ${ref.conversationId}`,
+    content: '空对话\n双击进入开始聊天',
     status: sessionDetail?.activeConversationId === ref.conversationId ? 'focused' : 'ready',
   }))
 }
@@ -117,14 +111,24 @@ function FlowViewport({
   onCreateConversation,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
+  const { settings } = useSettings()
+
+  const isFocused = Boolean(activeConversationId)
+  const showDebugOverlay = settings?.ui && typeof settings.ui === 'object' && settings.ui !== null && 'show_debug_overlay' in settings.ui
+    ? settings.ui.show_debug_overlay === true
+    : false
 
   const displayNodes = useMemo(() => {
-    if (activeConversationId && nodes.length) {
+    if (!isFocused) {
+      return buildOverviewNodes(sessionDetail)
+    }
+
+    if (nodes.length) {
       return nodes
     }
 
-    return buildOverviewNodes(sessionDetail)
-  }, [activeConversationId, nodes, sessionDetail])
+    return []
+  }, [isFocused, nodes, sessionDetail])
 
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
     return displayNodes.map((node, index) => ({
@@ -179,7 +183,7 @@ function FlowViewport({
         const targetNode = flowNodes.find((node) => node.id === activeConversationId) ?? flowNodes[0]
         if (targetNode) {
           void reactFlow.setCenter(targetNode.position.x + 160, targetNode.position.y + 90, {
-            zoom: nodes.length ? 1.2 : 0.9,
+            zoom: 1.2,
             duration: 240,
           })
           return
@@ -188,7 +192,7 @@ function FlowViewport({
 
       void reactFlow.fitView({ padding: 0.2, duration: 240 })
     })
-  }, [activeConversationId, flowNodes, nodes.length, reactFlow])
+  }, [activeConversationId, flowNodes, reactFlow])
 
 
 
@@ -215,19 +219,21 @@ function FlowViewport({
       trigger={['contextMenu']}
     >
       <div className="conversation-canvas__viewport">
-        <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
-          <Space wrap>
-            <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
-            <StatusTag label={`节点 ${displayNodes.length}`} tone="processing" />
-            <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
-            <StatusTag label={activeConversationId ? '聚焦态' : '概览态'} tone={activeConversationId ? 'success' : 'default'} />
-          </Space>
-          <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-            {activeConversationId
-              ? '当前处于 React Flow 聚焦态；双击置值进入，拖拽/缩放/空白区域操作会退出。'
-              : '当前处于 React Flow 概览态；可双击会话节点进入聚焦查看。'}
-          </Typography.Text>
-        </div>
+        {showDebugOverlay ? (
+          <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
+            <Space wrap>
+              <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
+              <StatusTag label={`节点 ${displayNodes.length}`} tone="processing" />
+              <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
+              <StatusTag label={activeConversationId ? '聚焦态' : '概览态'} tone={activeConversationId ? 'success' : 'default'} />
+            </Space>
+            <Typography.Text type="secondary" className="conversation-canvas__meta-text">
+              {activeConversationId
+                ? '当前处于对话聚焦态；可在底部输入消息，拖拽/缩放/空白区域操作会返回概览。'
+                : '当前处于会话概览态；可双击会话节点进入聚焦查看，或右键空白处创建对话。'}
+            </Typography.Text>
+          </div>
+        ) : null}
 
         <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
           <Button
@@ -304,26 +310,32 @@ function FlowViewport({
           proOptions={{ hideAttribution: true }}
         >
           <Background gap={32} size={1} color="var(--app-grid-color)" />
-          <MiniMap pannable zoomable className="conversation-canvas__minimap" />
-          <Controls className="conversation-canvas__flow-controls" showInteractive={false} />
         </ReactFlow>
 
-        <div className="conversation-canvas__composer-shell">
-          <div className="conversation-node conversation-node--composer">
-            <Card size="small" className="conversation-node__card conversation-node__card--composer">
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Space wrap>
-                    <Typography.Text strong>新对话节点</Typography.Text>
-                    <Typography.Text type="secondary">Draft</Typography.Text>
-                  </Space>
-                  <StatusTag label={sending ? '发送中' : '待发送'} tone="processing" />
-                </Space>
-                <MessageComposer workspaceId={conversationDetail?.workspaceId ?? null} sending={sending} onSend={onSendMessage} />
-              </Space>
-            </Card>
+        {activeConversationId && !nodes.length ? (
+          <div className="conversation-canvas__focused-empty-state">
+            <EmptyState title="当前对话暂无消息" description="在底部输入第一条消息后，将继续停留在当前对话并刷新出真实节点。" />
           </div>
-        </div>
+        ) : null}
+
+        {activeConversationId ? (
+          <div className="conversation-canvas__composer-shell">
+            <div className="conversation-node conversation-node--composer">
+              <Card size="small" className="conversation-node__card conversation-node__card--composer">
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                    <Space wrap>
+                      <Typography.Text strong>当前对话输入区</Typography.Text>
+                      <Typography.Text type="secondary">Focused</Typography.Text>
+                    </Space>
+                    <StatusTag label={sending ? '发送中' : '待发送'} tone="processing" />
+                  </Space>
+                  <MessageComposer workspaceId={conversationDetail?.workspaceId ?? null} sending={sending} onSend={onSendMessage} />
+                </Space>
+              </Card>
+            </div>
+          </div>
+        ) : null}
 
         {!conversationDetail && !activeConversationId ? (
           <div className="conversation-canvas__hint">

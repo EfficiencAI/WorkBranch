@@ -1,6 +1,7 @@
 import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd'
 import type { PropsWithChildren } from 'react'
 import type { ThemeConfig } from 'antd'
+import { SettingsProvider } from './settings'
 import { ThemeProvider, useTheme } from './theme'
 
 const sharedTokens: ThemeConfig['token'] = {
@@ -43,8 +44,10 @@ function ThemeConfigProvider({ children }: PropsWithChildren) {
 
 export function AppProviders({ children }: PropsWithChildren) {
   return (
-    <ThemeProvider>
-      <ThemeConfigProvider>{children}</ThemeConfigProvider>
-    </ThemeProvider>
+    <SettingsProvider>
+      <ThemeProvider>
+        <ThemeConfigProvider>{children}</ThemeConfigProvider>
+      </ThemeProvider>
+    </SettingsProvider>
   )
 }

@@ -396,7 +396,6 @@ button {
   stroke-width: 2;
 }
 
-.conversation-canvas__flow .react-flow__controls,
 .conversation-canvas__flow .react-flow__minimap {
   border: 1px solid var(--app-border);
   border-radius: 16px;
@@ -405,15 +404,24 @@ button {
   box-shadow: var(--app-shadow-sm);
 }
 
-.conversation-canvas__flow-controls {
-  right: 24px;
-  bottom: 24px;
-}
-
 .conversation-canvas__minimap {
   right: 24px;
-  bottom: 96px;
+  bottom: 176px;
   overflow: hidden;
+}
+
+.conversation-canvas__focused-empty-state {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 3;
+  width: min(420px, calc(100vw - 64px));
+  padding: 8px;
+  border: 1px solid var(--app-border);
+  border-radius: 24px;
+  background: var(--app-card-bg);
+  box-shadow: var(--app-shadow-md);
+  transform: translate(-50%, -50%);
 }
 
 .conversation-canvas__composer-shell {
@@ -425,23 +433,6 @@ button {
   transform: translateX(-50%);
 }
 
-.conversation-canvas__stage-shell {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-}
-
-.conversation-canvas__stage {
-  position: relative;
-  width: 1800px;
-  height: 1400px;
-  transform-origin: top left;
-  background:
-    linear-gradient(var(--app-grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px),
-    var(--app-grid-bg);
-  background-size: 32px 32px, 32px 32px, auto;
-}
 
 .conversation-node {
   position: relative;
@@ -500,23 +491,6 @@ button {
   color: var(--app-text) !important;
 }
 
-.conversation-canvas__stage-shell {
-  width: 100%;
-  height: 100%;
-  overflow: auto;
-}
-
-.conversation-canvas__stage {
-  position: relative;
-  width: 1800px;
-  height: 1400px;
-  transform-origin: top left;
-  background:
-    linear-gradient(var(--app-grid-color) 1px, transparent 1px),
-    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px),
-    var(--app-grid-bg);
-  background-size: 32px 32px, 32px 32px, auto;
-}
 
 .conversation-node {
   position: absolute;
@@ -814,6 +788,10 @@ button {
     width: 520px;
   }
 
+  .conversation-canvas__focused-empty-state {
+    width: min(380px, calc(100vw - 32px));
+  }
+
   .conversation-canvas__composer-shell {
     left: 50%;
     right: auto;
@@ -903,6 +881,10 @@ button {
 
   .conversation-node--composer {
     width: 460px;
+  }
+
+  .conversation-canvas__focused-empty-state {
+    width: min(340px, calc(100vw - 32px));
   }
 
   .conversation-canvas__composer-shell {

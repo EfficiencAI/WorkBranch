@@ -306,7 +306,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             </Space>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段九C" tone="processing" />
+              <StatusTag label="阶段十" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>

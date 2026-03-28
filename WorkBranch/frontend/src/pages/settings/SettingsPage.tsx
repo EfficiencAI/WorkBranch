@@ -12,13 +12,13 @@ import {
   Typography,
 } from 'antd'
 import type { ReactNode } from 'react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { SettingNode, SettingValue } from '../../entities'
-import { getErrorMessage, get, patch } from '../../shared/api'
-import { settingsConfig } from '../../shared/config/settings'
+import { useMemo, useState } from 'react'
+import type { SettingValue } from '../../entities'
+import { getErrorMessage } from '../../shared/api'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { LoadingState, StatusTag } from '../../shared/ui'
 import { useTheme } from '../../app/theme'
+import { useSettings } from '../../app/settings'
 
 type EditorKind = 'string' | 'number' | 'boolean' | 'json' | 'secret'
 
@@ -137,31 +137,11 @@ type SettingsPageProps = {
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const { message } = AntdApp.useApp()
-  const [settings, setSettings] = useState<SettingNode | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { settings, loading, error, patchSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [draftRoot, setDraftRoot] = useState<SettingValue | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-
-  const loadSettings = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      const result = await get<SettingNode>(settingsConfig.endpoint)
-      setSettings(result)
-    } catch (caughtError) {
-      setError(getErrorMessage(caughtError, '设置加载失败'))
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void loadSettings()
-  }, [loadSettings])
 
   const { themeMode, setThemeMode } = useTheme()
 
@@ -240,19 +220,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const nextRoot = cloneDeepJson(draftRoot)
       const updatedRoot = setValueAtPath(nextRoot, editing.path, parsedValue)
 
-      await patch<void, Partial<SettingNode>>(settingsConfig.endpoint, {
+      await patchSettings({
         [editing.rootKey]: updatedRoot,
-      })
-
-      setSettings((current) => {
-        if (!current) {
-          return current
-        }
-
-        return {
-          ...current,
-          [editing.rootKey]: updatedRoot,
-        }
       })
 
       message.success('设置已保存')
@@ -279,19 +248,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setSaveError(null)
 
       const updatedRoot = setValueAtPath(cloneDeepJson(originalRoot), path, checked)
-      await patch<void, Partial<SettingNode>>(settingsConfig.endpoint, {
+      await patchSettings({
         [rootKey]: updatedRoot,
-      })
-
-      setSettings((current) => {
-        if (!current) {
-          return current
-        }
-
-        return {
-          ...current,
-          [rootKey]: updatedRoot,
-        }
       })
 
       message.success('设置已保存')

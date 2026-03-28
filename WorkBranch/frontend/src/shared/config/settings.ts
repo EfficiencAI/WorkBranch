@@ -1,3 +1,3 @@
 export const settingsConfig = {
-  endpoint: '/settings',
+  endpoint: '/api/settings',
 } as const

@@ -8,7 +8,7 @@ type MessageComposerProps = {
 }
 
 export function MessageComposer({ workspaceId, sending, onSend }: MessageComposerProps) {
-  const [message, setMessage] = useState('请基于当前节点继续展开下一轮对话。')
+  const [message, setMessage] = useState('')
 
   return (
     <div className="message-composer">

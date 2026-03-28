@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import type { PropsWithChildren } from 'react'
-import { get, patch } from '../shared/api'
-import { settingsConfig } from '../shared/config/settings'
+import { useSettings } from './settings'
 import { cloneDeepJson, isPlainObject } from '../shared/lib'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
@@ -54,10 +53,9 @@ function getUiSettingsPatch(settings: SettingsNodeLike | null, themeMode: ThemeM
 }
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsNodeLike | null>(null)
+  const { settings, loading: settingsLoading, patchSettings } = useSettings()
   const [themeMode, setThemeModeState] = useState<ThemeMode>(DEFAULT_THEME_MODE)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(DEFAULT_THEME_MODE))
-  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     setResolvedTheme(resolveTheme(themeMode))
@@ -81,66 +79,39 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   }, [themeMode])
 
   useEffect(() => {
-    let cancelled = false
-
-    async function loadThemeMode() {
-      try {
-        const settings = await get<SettingsNodeLike>(settingsConfig.endpoint)
-        if (cancelled) {
-          return
-        }
-
-        setSettingsSnapshot(settings)
-        const nextThemeMode = isThemeMode(settings.ui?.theme_mode) ? settings.ui.theme_mode : DEFAULT_THEME_MODE
-        setThemeModeState(nextThemeMode)
-      } finally {
-        if (!cancelled) {
-          setLoading(false)
-        }
-      }
+    if (settingsLoading) {
+      return
     }
 
-    void loadThemeMode()
-
-    return () => {
-      cancelled = true
-    }
-  }, [])
+    const ui = isPlainObject(settings?.ui) ? (settings.ui as UiSettingsNode) : null
+    const nextThemeMode = isThemeMode(ui?.theme_mode) ? (ui.theme_mode as ThemeMode) : DEFAULT_THEME_MODE
+    setThemeModeState(nextThemeMode)
+  }, [settings, settingsLoading])
 
   const setThemeMode = useCallback(
     async (nextThemeMode: ThemeMode) => {
-      const previousSettingsSnapshot = settingsSnapshot
-      const previousThemeMode = isThemeMode(previousSettingsSnapshot?.ui?.theme_mode)
-        ? previousSettingsSnapshot.ui.theme_mode
-        : themeMode
-      const updates = getUiSettingsPatch(previousSettingsSnapshot, nextThemeMode)
-      const nextSettingsSnapshot = {
-        ...(previousSettingsSnapshot ?? {}),
-        ...updates,
-      }
-
+      const updates = getUiSettingsPatch(settings as SettingsNodeLike | null, nextThemeMode)
       setThemeModeState(nextThemeMode)
-      setSettingsSnapshot(nextSettingsSnapshot)
-
       try {
-        await patch<void, typeof updates>(settingsConfig.endpoint, updates)
+        await patchSettings(updates)
       } catch (error) {
+        const ui = isPlainObject(settings?.ui) ? (settings.ui as UiSettingsNode) : null
+        const previousThemeMode = isThemeMode(ui?.theme_mode) ? (ui.theme_mode as ThemeMode) : DEFAULT_THEME_MODE
         setThemeModeState(previousThemeMode)
-        setSettingsSnapshot(previousSettingsSnapshot)
         throw error
       }
     },
-    [settingsSnapshot, themeMode],
+    [patchSettings, settings],
   )
 
   const value = useMemo<ThemeContextValue>(
     () => ({
-      loading,
+      loading: settingsLoading,
       themeMode,
       resolvedTheme,
       setThemeMode,
     }),
-    [loading, resolvedTheme, setThemeMode, themeMode],
+    [resolvedTheme, setThemeMode, settingsLoading, themeMode],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

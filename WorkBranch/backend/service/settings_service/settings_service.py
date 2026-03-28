@@ -1,9 +1,40 @@
 from data.file_storage_system import FileStorageSystem
 
 
+def _merge_missing_defaults(defaults, current):
+    """Deep-merge defaults into current, only filling missing keys.
+
+    Returns: (merged, changed)
+    """
+    if not isinstance(defaults, dict):
+        return current, False
+
+    if not isinstance(current, dict):
+        return defaults, True
+
+    merged = dict(current)
+    changed = False
+
+    for key, default_value in defaults.items():
+        if key not in merged:
+            merged[key] = default_value
+            changed = True
+            continue
+
+        current_value = merged[key]
+        if isinstance(default_value, dict):
+            next_value, nested_changed = _merge_missing_defaults(default_value, current_value)
+            if nested_changed:
+                merged[key] = next_value
+                changed = True
+
+    return merged, changed
+
+
 DEFAULT_SETTINGS = {
     "ui": {
-        "theme_mode": "system"
+        "theme_mode": "system",
+        "show_debug_overlay": False
     },
     "database": {
         "path": "workbranch.db"
@@ -61,7 +92,11 @@ class SettingsService:
     # ── 私有工具 ────────────────────────────────────────────────────────────────
 
     def _reload(self):
-        self._data: dict = self._fs.read_settings()
+        data = self._fs.read_settings()
+        merged, changed = _merge_missing_defaults(DEFAULT_SETTINGS, data)
+        self._data = merged
+        if changed:
+            self._persist()
 
     def _persist(self):
         self._fs.write_settings(self._data)
