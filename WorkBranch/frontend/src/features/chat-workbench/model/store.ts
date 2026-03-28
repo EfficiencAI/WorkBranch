@@ -14,10 +14,18 @@ import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } fr
 
 async function loadConversationBundle(conversationId: string) {
   const detail = await fetchConversationDetail(conversationId)
-  const [nextNodes, nextWorkspace] = await Promise.all([
-    fetchConversationNodes(conversationId),
-    detail.workspaceId ? fetchWorkspaceDetail(detail.workspaceId) : Promise.resolve(null),
-  ])
+
+  const workspacePromise = detail.workspaceId
+    ? fetchWorkspaceDetail(detail.workspaceId).catch((caughtError) => {
+        if (isApiError(caughtError) && caughtError.status === 404) {
+          return null
+        }
+
+        throw caughtError
+      })
+    : Promise.resolve(null)
+
+  const [nextNodes, nextWorkspace] = await Promise.all([fetchConversationNodes(conversationId), workspacePromise])
 
   return { detail, nextNodes, nextWorkspace }
 }

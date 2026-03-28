@@ -14,12 +14,13 @@ import {
   selectDeletingSessionId,
   selectSessionList,
   selectUserProfile,
+  setActiveConversationForSession,
   useChatWorkbenchStore,
   useSessionStore,
   useUserStore,
 } from '../../features'
-import { StatusTag } from '../../shared/ui'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
+import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas } from './ConversationCanvas'
 import { DetailPanel } from './DetailPanel'
 import { SessionSidebar } from './SessionSidebar'
@@ -46,21 +47,13 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
   const selectSession = useSessionStore((state) => state.selectSession)
+  const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
   const createSession = useSessionStore((state) => state.createSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
-  const sendMessage = useChatWorkbenchStore((state) => state.sendMessage)
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
-
-  const handleCreateConversation = useCallback(async () => {
-    try {
-      await createConversationForCurrentSession()
-    } catch (caughtError) {
-      onRequestError(caughtError)
-    }
-  }, [onRequestError])
 
   const isSettingsRoute = location.pathname === '/settings'
   const navExpanded = peekNav || activeSidebar !== null
@@ -69,6 +62,109 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     : navExpanded
       ? 'workspace-shell__nav workspace-shell__nav--peek'
       : 'workspace-shell__nav'
+
+  const runSessionContext = useCallback(
+    async (detail: Awaited<ReturnType<typeof selectSession>>) => {
+      const result = await enterSessionContext(detail)
+
+      if (result === 'invalid-active-conversation' && detail) {
+        await setActiveConversationForSession(detail.id, null)
+      }
+    },
+    [enterSessionContext],
+  )
+
+  const handleCreateConversation = useCallback(async () => {
+    try {
+      await createConversationForCurrentSession()
+      setFocusedNodeId(null)
+
+      if (selectedSessionId) {
+        await loadSessionDetail(selectedSessionId)
+      }
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [loadSessionDetail, onRequestError, selectedSessionId])
+
+  const handleSelectSession = useCallback(
+    async (sessionId: SessionId) => {
+      setFocusedNodeId(null)
+      const detail = await selectSession(sessionId)
+      await runSessionContext(detail)
+    },
+    [runSessionContext, selectSession],
+  )
+
+  const handleCreateSession = useCallback(async () => {
+    try {
+      setFocusedNodeId(null)
+      const detail = await createSession()
+      await runSessionContext(detail)
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [createSession, onRequestError, runSessionContext])
+
+  const handleDeleteSession = useCallback(
+    async (sessionId: SessionId) => {
+      try {
+        setFocusedNodeId(null)
+        const detail = await deleteSession(sessionId)
+        await runSessionContext(detail)
+      } catch (caughtError) {
+        onRequestError(caughtError)
+      }
+    },
+    [deleteSession, onRequestError, runSessionContext],
+  )
+
+  const handleSendMessage = useCallback(
+    async (message: string) => {
+      try {
+        await useChatWorkbenchStore.getState().sendMessage(message, {
+          onStreamError(event) {
+            if (event.content) {
+              onSendError(String(event.content))
+            }
+          },
+        })
+      } catch (caughtError) {
+        onRequestError(caughtError)
+      }
+    },
+    [onRequestError, onSendError],
+  )
+
+  const handleEnterConversationFocus = useCallback(
+    async (conversationId: string) => {
+      if (!selectedSessionId) {
+        return
+      }
+
+      try {
+        setFocusedNodeId(null)
+        await setActiveConversationForSession(selectedSessionId, conversationId)
+      } catch (caughtError) {
+        onRequestError(caughtError)
+      }
+    },
+    [onRequestError, selectedSessionId],
+  )
+
+  const handleReturnToOverview = useCallback(async () => {
+    if (!selectedSessionId || !sessionDetail?.activeConversationId) {
+      setFocusedNodeId(null)
+      return
+    }
+
+    try {
+      setFocusedNodeId(null)
+      await setActiveConversationForSession(selectedSessionId, null)
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [onRequestError, selectedSessionId, sessionDetail?.activeConversationId])
 
   function collapseNav() {
     setPeekNav(false)
@@ -94,7 +190,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     }
   }
 
-  function focusNode(nodeId: string) {
+  function focusNode(nodeId: string | null) {
     setFocusedNodeId(nodeId)
     setActiveSidebar(null)
 
@@ -103,62 +199,18 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     }
   }
 
-  const handleSelectSession = useCallback(
-    async (sessionId: SessionId) => {
-      setFocusedNodeId(null)
-      const detail = await selectSession(sessionId)
-      await enterSessionContext(detail)
-    },
-    [enterSessionContext, selectSession],
-  )
-
-  const handleCreateSession = useCallback(async () => {
-    try {
-      setFocusedNodeId(null)
-      const detail = await createSession()
-      await enterSessionContext(detail)
-    } catch (caughtError) {
-      onRequestError(caughtError)
-    }
-  }, [createSession, enterSessionContext, onRequestError])
-
-  const handleDeleteSession = useCallback(
-    async (sessionId: SessionId) => {
-      try {
-        setFocusedNodeId(null)
-        const detail = await deleteSession(sessionId)
-        await enterSessionContext(detail)
-      } catch (caughtError) {
-        onRequestError(caughtError)
-      }
-    },
-    [deleteSession, enterSessionContext, onRequestError],
-  )
-
-  const handleSendMessage = useCallback(
-    async (message: string) => {
-      try {
-        await sendMessage(message, {
-          onStreamError(event) {
-            if (event.content) {
-              onSendError(String(event.content))
-            }
-          },
-        })
-      } catch (caughtError) {
-        onRequestError(caughtError)
-      }
-    },
-    [onRequestError, onSendError, sendMessage],
-  )
-
   return (
     <section className="workspace-shell">
       <div className="workspace-shell__canvas-layer">
         <ConversationCanvas
+          currentSessionId={selectedSessionId}
+          activeConversationId={sessionDetail?.activeConversationId ?? null}
           focusedNodeId={focusedNodeId}
           onFocusNode={focusNode}
+          onEnterConversationFocus={handleEnterConversationFocus}
+          onExitConversationFocus={handleReturnToOverview}
           conversationDetail={conversationDetail}
+          sessionDetail={sessionDetail}
           workspaceDetail={workspaceDetail}
           nodes={nodes}
           sending={sending}
@@ -238,31 +290,29 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         <div className="workspace-shell__hud">
           <Space direction="vertical" size={8}>
             <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
-            <Typography.Title level={3} className="workspace-shell__title">
-              {isSettingsRoute
-                ? '系统设置'
-                : conversationDetail?.conversationId
-                  ? `对话 ${conversationDetail.conversationId}`
-                  : '当前暂无活跃对话'}
-            </Typography.Title>
+            <Space align="start" size={12}>
+              <Typography.Title level={3} className="workspace-shell__title">
+                {isSettingsRoute
+                  ? '系统设置'
+                  : conversationDetail?.conversationId
+                    ? `对话 ${conversationDetail.conversationId}`
+                    : '当前暂无活跃对话'}
+              </Typography.Title>
+              {!isSettingsRoute && sessionDetail?.activeConversationId ? (
+                <Button size="small" onClick={() => void handleReturnToOverview()}>
+                  返回概览
+                </Button>
+              ) : null}
+            </Space>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段八" tone="processing" />
+              <StatusTag label="阶段九C" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
               <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
             </Space>
           </Space>
         </div>
       </div>
-
-      {focusedNodeId ? (
-        <button
-          type="button"
-          className="workspace-shell__scrim workspace-shell__scrim--detail"
-          aria-label="关闭节点聚焦详情"
-          onClick={() => setFocusedNodeId(null)}
-        />
-      ) : null}
 
       {focusedNodeId && conversationDetail && sessionDetail ? (
         <DetailPanel

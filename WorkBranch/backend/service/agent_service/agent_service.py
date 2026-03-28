@@ -95,7 +95,7 @@ class AgentService:
         """
         conv_id = self._generate_id()
         session_id = session_id or self._generate_id()
-        workspace_id = workspace_id or self._generate_id()
+        workspace_id = workspace_id or conv_id
         
         self.ws.register(workspace_id, session_id)
         

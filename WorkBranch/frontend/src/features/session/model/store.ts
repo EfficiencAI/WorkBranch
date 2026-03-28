@@ -47,9 +47,17 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   setSessionDetail(detail) {
+    const existingConversationRefs = get().currentSessionDetail?.conversationRefs
+    const nextDetail = detail
+      ? {
+          ...detail,
+          conversationRefs: detail.conversationRefs ?? existingConversationRefs,
+        }
+      : null
+
     set({
-      currentSessionDetail: detail,
-      activeConversationId: detail?.activeConversationId ?? null,
+      currentSessionDetail: nextDetail,
+      activeConversationId: nextDetail?.activeConversationId ?? null,
     })
   },
 

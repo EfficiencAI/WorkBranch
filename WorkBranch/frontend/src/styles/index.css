@@ -369,18 +369,88 @@ button {
   overflow: hidden;
 }
 
-.conversation-canvas__overlay {
-  position: absolute;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 16px 18px;
+.conversation-canvas__flow {
+  width: 100%;
+  height: 100%;
+  background: transparent;
+}
+
+.conversation-canvas__flow .react-flow__renderer,
+.conversation-canvas__flow .react-flow__pane,
+.conversation-canvas__flow .react-flow__viewport {
+  background: transparent;
+}
+
+.conversation-canvas__flow .react-flow__node {
+  width: auto;
+  background: transparent;
+  border: none;
+}
+
+.conversation-canvas__flow .react-flow__node.selected .conversation-node {
+  transform: translateY(-4px);
+}
+
+.conversation-canvas__flow .react-flow__edge-path {
+  stroke: rgba(148, 163, 184, 0.42);
+  stroke-width: 2;
+}
+
+.conversation-canvas__flow .react-flow__controls,
+.conversation-canvas__flow .react-flow__minimap {
   border: 1px solid var(--app-border);
-  border-radius: 20px;
-  background: var(--app-panel-bg-soft);
+  border-radius: 16px;
+  background: var(--app-card-bg);
   backdrop-filter: blur(16px);
-  box-shadow: 0 20px 48px rgba(2, 6, 23, 0.24);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.conversation-canvas__flow-controls {
+  right: 24px;
+  bottom: 24px;
+}
+
+.conversation-canvas__minimap {
+  right: 24px;
+  bottom: 96px;
+  overflow: hidden;
+}
+
+.conversation-canvas__composer-shell {
+  position: absolute;
+  left: 50%;
+  bottom: 32px;
+  z-index: 4;
+  width: min(580px, calc(100vw - 48px));
+  transform: translateX(-50%);
+}
+
+.conversation-canvas__stage-shell {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.conversation-canvas__stage {
+  position: relative;
+  width: 1800px;
+  height: 1400px;
+  transform-origin: top left;
+  background:
+    linear-gradient(var(--app-grid-color) 1px, transparent 1px),
+    linear-gradient(90deg, var(--app-grid-color) 1px, transparent 1px),
+    var(--app-grid-bg);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+.conversation-node {
+  position: relative;
+  width: 320px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  transition: transform 220ms ease, opacity 220ms ease;
 }
 
 .conversation-canvas__overlay--meta {
@@ -744,6 +814,13 @@ button {
     width: 520px;
   }
 
+  .conversation-canvas__composer-shell {
+    left: 50%;
+    right: auto;
+    width: min(520px, calc(100vw - 32px));
+    transform: translateX(-50%);
+  }
+
   .detail-panel {
     inset: 16px;
   }
@@ -826,6 +903,10 @@ button {
 
   .conversation-node--composer {
     width: 460px;
+  }
+
+  .conversation-canvas__composer-shell {
+    width: min(460px, calc(100vw - 32px));
   }
 
   .conversation-canvas__hint {

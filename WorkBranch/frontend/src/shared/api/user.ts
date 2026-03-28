@@ -9,12 +9,12 @@ function toUserProfile(payload: Record<string, unknown>): UserProfile {
 }
 
 export async function fetchUserProfile() {
-  const data = await get<Record<string, unknown>>('/user/profile')
+  const data = await get<Record<string, unknown>>('/api/user/profile')
   return toUserProfile(data)
 }
 
 export async function updateUserName(name: string) {
-  const data = await put<Record<string, unknown>, { name: string }>('/user/profile/name', {
+  const data = await put<Record<string, unknown>, { name: string }>('/api/user/profile/name', {
     name,
   })
   return toUserProfile(data)

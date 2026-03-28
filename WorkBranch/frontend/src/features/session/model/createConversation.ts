@@ -1,5 +1,4 @@
 import { createConversation } from '../../../shared/api'
-import { setActiveConversationForSession } from './currentConversation'
 import { useSessionStore } from './store'
 
 export async function createConversationForCurrentSession() {
@@ -8,7 +7,5 @@ export async function createConversationForCurrentSession() {
     return null
   }
 
-  const created = await createConversation(currentSessionId)
-  await setActiveConversationForSession(currentSessionId, created.conversationId)
-  return created
+  return await createConversation(currentSessionId)
 }
