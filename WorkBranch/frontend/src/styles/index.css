@@ -691,6 +691,10 @@ button {
   border-radius: 16px;
 }
 
+.settings-search-bar {
+  width: 100%;
+}
+
 .settings-tree-node,
 .settings-tree-leaf {
   width: 100%;
@@ -733,11 +737,101 @@ button {
   margin: 8px 0 0;
 }
 
+.settings-leaf-inline-editor {
+  width: 100%;
+}
+
+.settings-leaf-inline-editor .ant-space-compact-item {
+  flex: none;
+}
+
+.settings-leaf-inline-editor > .ant-input,
+.settings-leaf-inline-editor > .ant-input-number,
+.settings-leaf-inline-editor > .ant-input-affix-wrapper,
+.settings-leaf-inline-editor > .ant-input-number-group-wrapper {
+  flex: 1;
+}
+
+.settings-leaf-footer-actions {
+  margin-top: 12px;
+}
+
+.settings-array-readonly {
+  width: 100%;
+}
+
+.settings-array-readonly-item {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+}
+
+.settings-array-editor {
+  width: 100%;
+}
+
+.settings-array-item {
+  width: 100%;
+}
+
+.settings-array-item__main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 12px;
+}
+
+.settings-array-item--active .settings-array-item__main {
+  border-color: rgba(59, 130, 246, 0.65);
+}
+
+.settings-array-item__index {
+  flex: none;
+  min-width: 36px;
+}
+
+.settings-array-item__input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-array-item__inline-actions,
+.settings-array-item__move-actions {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.settings-array-item:hover .settings-array-item__inline-actions,
+.settings-array-item:hover .settings-array-item__move-actions,
+.settings-array-item:focus-within .settings-array-item__inline-actions,
+.settings-array-item:focus-within .settings-array-item__move-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.settings-array-item__move-actions {
+  margin-top: 8px;
+}
+
 .settings-pre {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+@media (hover: none) {
+  .settings-array-item__inline-actions,
+  .settings-array-item__move-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
