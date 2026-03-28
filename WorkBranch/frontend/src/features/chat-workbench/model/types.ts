@@ -1,7 +1,7 @@
 import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import type { ChatStreamEvent } from '../../../shared/api'
 
-export type SessionContextResult = 'overview' | 'focused' | 'invalid-active-conversation'
+export type SessionContextResult = 'empty-session' | 'ready'
 
 export type ChatWorkbenchState = {
   conversationDetail: ConversationDetail | null

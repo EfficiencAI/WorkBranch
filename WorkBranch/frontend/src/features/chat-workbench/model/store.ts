@@ -1,18 +1,25 @@
 import { create } from 'zustand'
-import type { SessionDetail, SessionId } from '../../../entities'
+import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   fetchConversationDetail,
   fetchConversationNodes,
+  fetchSessionConversations,
   fetchWorkspaceDetail,
   getErrorMessage,
   streamSessionMessage,
 } from '../../../shared/api'
 import type { ChatStreamEvent } from '../../../shared/api'
-import { useSessionStore } from '../../session'
 import { isApiError } from '../../../shared/api'
+import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
 
-async function loadConversationBundle(conversationId: string) {
+type AggregatedConversation = {
+  detail: ConversationDetail
+  workspace: WorkspaceDetail | null
+  nodes: MessageNode[]
+}
+
+async function loadConversation(conversationId: string): Promise<AggregatedConversation> {
   const detail = await fetchConversationDetail(conversationId)
 
   const workspacePromise = detail.workspaceId
@@ -25,9 +32,13 @@ async function loadConversationBundle(conversationId: string) {
       })
     : Promise.resolve(null)
 
-  const [nextNodes, nextWorkspace] = await Promise.all([fetchConversationNodes(conversationId), workspacePromise])
+  const [nodes, workspace] = await Promise.all([fetchConversationNodes(conversationId), workspacePromise])
 
-  return { detail, nextNodes, nextWorkspace }
+  return { detail, workspace, nodes }
+}
+
+function pickPrimaryConversation(conversations: AggregatedConversation[]): AggregatedConversation | null {
+  return conversations[conversations.length - 1] ?? null
 }
 
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
@@ -60,11 +71,11 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   async loadConversationBundle(conversationId: string) {
     try {
       set({ loading: true, error: null })
-      const bundle = await loadConversationBundle(conversationId)
+      const conversation = await loadConversation(conversationId)
       set({
-        conversationDetail: bundle.detail,
-        workspaceDetail: bundle.nextWorkspace,
-        nodes: bundle.nextNodes,
+        conversationDetail: conversation.detail,
+        workspaceDetail: conversation.workspace,
+        nodes: conversation.nodes,
       })
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '对话数据加载失败') })
@@ -75,23 +86,38 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   },
 
   async enterSessionContext(sessionDetail: SessionDetail | null): Promise<SessionContextResult> {
-    if (!sessionDetail?.activeConversationId) {
+    if (!sessionDetail) {
       get().resetConversationState()
-      return 'overview'
+      return 'empty-session'
+    }
+
+    const conversationRefs = sessionDetail.conversationRefs ?? await fetchSessionConversations(sessionDetail.id)
+    if (!conversationRefs.length) {
+      get().resetConversationState()
+      return 'empty-session'
     }
 
     try {
-      await get().loadConversationBundle(sessionDetail.activeConversationId)
-      return 'focused'
-    } catch (caughtError) {
-      // loadConversationBundle already writes store.error; we only normalize invalid references.
-      if (isApiError(caughtError) && caughtError.status === 404) {
-        get().resetConversationState()
-        return 'invalid-active-conversation'
-      }
+      set({ loading: true, error: null })
 
+      const conversations = await Promise.all(conversationRefs.map((ref) => loadConversation(ref.conversationId)))
+
+      const mergedNodes = conversations.flatMap((item) => item.nodes)
+      const primaryConversation = pickPrimaryConversation(conversations)
+
+      set({
+        conversationDetail: primaryConversation?.detail ?? null,
+        workspaceDetail: primaryConversation?.workspace ?? null,
+        nodes: mergedNodes,
+      })
+
+      return mergedNodes.length || primaryConversation ? 'ready' : 'empty-session'
+    } catch (caughtError) {
       get().resetConversationState()
-      return 'overview'
+      set({ error: getErrorMessage(caughtError, '会话节点树加载失败') })
+      return 'empty-session'
+    } finally {
+      set({ loading: false })
     }
   },
 

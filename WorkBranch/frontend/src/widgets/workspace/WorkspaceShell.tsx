@@ -1,5 +1,5 @@
 import { Button, Space, Typography } from 'antd'
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { SessionId } from '../../entities'
 import {
@@ -12,17 +12,18 @@ import {
   selectCurrentSessionDetail,
   selectCurrentSessionId,
   selectDeletingSessionId,
+  selectFocusedNodeId,
+  selectSelectedNodeId,
   selectSessionList,
   selectUserProfile,
-  setActiveConversationForSession,
   useChatWorkbenchStore,
   useSessionStore,
+  useTreeStore,
   useUserStore,
 } from '../../features'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas } from './ConversationCanvas'
-import { DetailPanel } from './DetailPanel'
 import { SessionSidebar } from './SessionSidebar'
 
 type SidebarMode = 'history' | 'settings'
@@ -46,14 +47,16 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
   const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
+  const focusedNodeId = useTreeStore(selectFocusedNodeId)
+  const selectedNodeId = useTreeStore(selectSelectedNodeId)
   const selectSession = useSessionStore((state) => state.selectSession)
   const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
   const createSession = useSessionStore((state) => state.createSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
+  const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
-  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null)
 
   const isSettingsRoute = location.pathname === '/settings'
   const navExpanded = peekNav || activeSidebar !== null
@@ -63,33 +66,33 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
       ? 'workspace-shell__nav workspace-shell__nav--peek'
       : 'workspace-shell__nav'
 
+  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
+  const focusedNode = useMemo(() => nodes.find((node) => node.id === focusedNodeId) ?? null, [focusedNodeId, nodes])
+
   const runSessionContext = useCallback(
     async (detail: Awaited<ReturnType<typeof selectSession>>) => {
-      const result = await enterSessionContext(detail)
-
-      if (result === 'invalid-active-conversation' && detail) {
-        await setActiveConversationForSession(detail.id, null)
-      }
+      resetTreeUiState()
+      await enterSessionContext(detail)
     },
-    [enterSessionContext],
+    [enterSessionContext, resetTreeUiState],
   )
 
   const handleCreateConversation = useCallback(async () => {
     try {
+      resetTreeUiState()
       await createConversationForCurrentSession()
-      setFocusedNodeId(null)
 
       if (selectedSessionId) {
-        await loadSessionDetail(selectedSessionId)
+        const detail = await loadSessionDetail(selectedSessionId)
+        await enterSessionContext(detail)
       }
     } catch (caughtError) {
       onRequestError(caughtError)
     }
-  }, [loadSessionDetail, onRequestError, selectedSessionId])
+  }, [enterSessionContext, loadSessionDetail, onRequestError, resetTreeUiState, selectedSessionId])
 
   const handleSelectSession = useCallback(
     async (sessionId: SessionId) => {
-      setFocusedNodeId(null)
       const detail = await selectSession(sessionId)
       await runSessionContext(detail)
     },
@@ -98,7 +101,6 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
 
   const handleCreateSession = useCallback(async () => {
     try {
-      setFocusedNodeId(null)
       const detail = await createSession()
       await runSessionContext(detail)
     } catch (caughtError) {
@@ -109,7 +111,6 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleDeleteSession = useCallback(
     async (sessionId: SessionId) => {
       try {
-        setFocusedNodeId(null)
         const detail = await deleteSession(sessionId)
         await runSessionContext(detail)
       } catch (caughtError) {
@@ -136,36 +137,6 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     [onRequestError, onSendError],
   )
 
-  const handleEnterConversationFocus = useCallback(
-    async (conversationId: string) => {
-      if (!selectedSessionId) {
-        return
-      }
-
-      try {
-        setFocusedNodeId(null)
-        await setActiveConversationForSession(selectedSessionId, conversationId)
-      } catch (caughtError) {
-        onRequestError(caughtError)
-      }
-    },
-    [onRequestError, selectedSessionId],
-  )
-
-  const handleReturnToOverview = useCallback(async () => {
-    if (!selectedSessionId || !sessionDetail?.activeConversationId) {
-      setFocusedNodeId(null)
-      return
-    }
-
-    try {
-      setFocusedNodeId(null)
-      await setActiveConversationForSession(selectedSessionId, null)
-    } catch (caughtError) {
-      onRequestError(caughtError)
-    }
-  }, [onRequestError, selectedSessionId, sessionDetail?.activeConversationId])
-
   function collapseNav() {
     setPeekNav(false)
     setActiveSidebar(null)
@@ -176,7 +147,6 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   }
 
   function openSidebar(mode: SidebarMode) {
-    setFocusedNodeId(null)
     setPeekNav(true)
     setActiveSidebar(mode)
 
@@ -190,27 +160,15 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     }
   }
 
-  function focusNode(nodeId: string | null) {
-    setFocusedNodeId(nodeId)
-    setActiveSidebar(null)
-
-    if (isSettingsRoute) {
-      navigate('/chat')
-    }
-  }
-
   return (
     <section className="workspace-shell">
       <div className="workspace-shell__canvas-layer">
         <ConversationCanvas
           currentSessionId={selectedSessionId}
-          activeConversationId={sessionDetail?.activeConversationId ?? null}
           focusedNodeId={focusedNodeId}
-          onFocusNode={focusNode}
-          onEnterConversationFocus={handleEnterConversationFocus}
-          onExitConversationFocus={handleReturnToOverview}
-          conversationDetail={conversationDetail}
+          selectedNodeId={selectedNodeId}
           sessionDetail={sessionDetail}
+          conversationDetail={conversationDetail}
           workspaceDetail={workspaceDetail}
           nodes={nodes}
           sending={sending}
@@ -290,40 +248,21 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         <div className="workspace-shell__hud">
           <Space direction="vertical" size={8}>
             <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
-            <Space align="start" size={12}>
+            <Space align="start" size={12} wrap>
               <Typography.Title level={3} className="workspace-shell__title">
-                {isSettingsRoute
-                  ? '系统设置'
-                  : conversationDetail?.conversationId
-                    ? `对话 ${conversationDetail.conversationId}`
-                    : '当前暂无活跃对话'}
+                {isSettingsRoute ? '系统设置' : focusedNode ? `节点 ${focusedNode.id}` : sessionDetail ? `会话 ${sessionDetail.title}` : '当前暂无会话'}
               </Typography.Title>
-              {!isSettingsRoute && sessionDetail?.activeConversationId ? (
-                <Button size="small" onClick={() => void handleReturnToOverview()}>
-                  返回概览
-                </Button>
-              ) : null}
             </Space>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段十" tone="processing" />
-              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '全屏会话图'} tone="success" />
-              <StatusTag label={conversationDetail ? '真实数据' : '空状态'} tone="warning" />
+              <StatusTag label="阶段十一" tone="processing" />
+              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '节点树工作台'} tone="success" />
+              <StatusTag label={focusedNodeId ? '聚焦态' : '概览态'} tone={focusedNodeId ? 'warning' : 'default'} />
+              <StatusTag label={selectedNode ? `目标 ${selectedNode.id}` : '未选目标'} tone={selectedNode ? 'processing' : 'default'} />
             </Space>
           </Space>
         </div>
       </div>
-
-      {focusedNodeId && conversationDetail && sessionDetail ? (
-        <DetailPanel
-          nodeId={focusedNodeId}
-          onClose={() => setFocusedNodeId(null)}
-          nodes={nodes}
-          conversationDetail={conversationDetail}
-          sessionDetail={sessionDetail}
-          workspaceDetail={workspaceDetail}
-        />
-      ) : null}
     </section>
   )
 }
