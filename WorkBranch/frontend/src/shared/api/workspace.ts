@@ -1,4 +1,4 @@
-import type { ConversationDetail, MessageNode, SessionConversationRef, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
+import type { ConversationDetail, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 import { del, get, patch, post } from './http'
 import { ApiError } from './error'
 
@@ -20,9 +20,18 @@ function toSessionDetail(payload: Record<string, unknown>): SessionDetail {
   }
 }
 
-function toConversationRef(payload: Record<string, unknown>): SessionConversationRef {
+function toConversationSummary(payload: Record<string, unknown>): SessionConversationSummary {
   return {
     conversationId: String(payload.conversation_id ?? ''),
+    parentConversationId:
+      payload.parent_conversation_id === null || payload.parent_conversation_id === undefined
+        ? null
+        : String(payload.parent_conversation_id),
+    title: payload.title === null || payload.title === undefined ? null : String(payload.title),
+    state: String(payload.state ?? 'pending'),
+    messageCount: Number(payload.message_count ?? 0),
+    createdAt: payload.created_at ? String(payload.created_at) : undefined,
+    updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
   }
 }
 
@@ -31,6 +40,11 @@ function toConversationDetail(payload: Record<string, unknown>): ConversationDet
     conversationId: String(payload.conversation_id ?? ''),
     sessionId: Number(payload.session_id ?? 0),
     workspaceId: payload.workspace_id ? String(payload.workspace_id) : null,
+    parentConversationId:
+      payload.parent_conversation_id === null || payload.parent_conversation_id === undefined
+        ? null
+        : String(payload.parent_conversation_id),
+    title: payload.title === null || payload.title === undefined ? null : String(payload.title),
     state: String(payload.state ?? 'idle'),
     createdAt: String(payload.created_at ?? ''),
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
@@ -92,20 +106,29 @@ export async function patchSessionActiveConversation(sessionId: string | number,
   return toSessionDetail(data)
 }
 
-export async function createConversation(sessionId: string | number, workspaceId?: string | null) {
-  const data = await post<Record<string, unknown>, { workspace_id?: string | null }>(`/api/chat/sessions/${sessionId}/conversations`, {
+export async function createConversation(
+  sessionId: string | number,
+  workspaceId?: string | null,
+  parentConversationId?: string | null,
+) {
+  const data = await post<Record<string, unknown>, { workspace_id?: string | null; parent_conversation_id?: string | null }>(`/api/chat/sessions/${sessionId}/conversations`, {
     workspace_id: workspaceId,
+    parent_conversation_id: parentConversationId,
   })
 
   return {
     conversationId: String(data.conversation_id ?? ''),
     sessionId: Number(data.session_id ?? sessionId),
+    parentConversationId:
+      data.parent_conversation_id === null || data.parent_conversation_id === undefined
+        ? null
+        : String(data.parent_conversation_id),
   }
 }
 
 export async function fetchSessionConversations(sessionId: string | number) {
   const data = await get<Array<Record<string, unknown>>>(`/api/chat/sessions/${sessionId}/conversations`)
-  return data.map(toConversationRef)
+  return data.map(toConversationSummary)
 }
 
 export async function fetchConversationDetail(conversationId: string) {
@@ -113,8 +136,8 @@ export async function fetchConversationDetail(conversationId: string) {
   return toConversationDetail(data)
 }
 
-export async function fetchConversationNodes(conversationId: string) {
-  const data = await get<Array<Record<string, unknown>>>(`/api/chat/conversations/${conversationId}/nodes`)
+export async function fetchConversationMessages(conversationId: string) {
+  const data = await get<Array<Record<string, unknown>>>(`/api/chat/conversations/${conversationId}/messages`)
   return data.map(toMessageNode)
 }
 

@@ -2,6 +2,7 @@
 .dev/
 .claude/
 AGENTS.md
+setting.json
 
 __pycache__/
 .agent_states/

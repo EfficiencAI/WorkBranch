@@ -6,7 +6,7 @@ export {
   createSession,
   deleteSession,
   fetchConversationDetail,
-  fetchConversationNodes,
+  fetchConversationMessages,
   fetchSessionConversations,
   fetchSessionDetail,
   fetchSessions,

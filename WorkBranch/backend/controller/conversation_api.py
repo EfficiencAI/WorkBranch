@@ -18,8 +18,8 @@ async def get_conversation(
     return Result.success(data=conversation)
 
 
-@router.get("/{conversation_id}/nodes")
-async def get_conversation_nodes(
+@router.get("/{conversation_id}/messages")
+async def get_conversation_messages(
     conversation_id: str,
     service: SessionService = Depends(get_session_service),
 ) -> Result:
@@ -27,5 +27,5 @@ async def get_conversation_nodes(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
-    nodes = await service.get_conversation_nodes(conversation_id)
-    return Result.success(data=nodes)
+    messages = await service.get_conversation_messages(conversation_id)
+    return Result.success(data=messages)

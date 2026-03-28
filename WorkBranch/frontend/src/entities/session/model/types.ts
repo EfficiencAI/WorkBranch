@@ -12,9 +12,15 @@ export interface SessionSummary {
 
 export interface SessionDetail extends SessionSummary {
   userId?: number
-  conversationRefs?: SessionConversationRef[]
+  conversations?: SessionConversationSummary[]
 }
 
-export interface SessionConversationRef {
+export interface SessionConversationSummary {
   conversationId: string
+  parentConversationId: string | null
+  title: string | null
+  state: string
+  messageCount: number
+  createdAt?: string
+  updatedAt?: string
 }

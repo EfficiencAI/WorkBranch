@@ -58,19 +58,33 @@ class SessionService:
     def get_session(self, session_id: int) -> Optional[Session]:
         return self._session_history.get_session(session_id)
 
-    async def create_conversation(self, session_id: int, workspace_id: Optional[str] = None) -> Dict[str, Any]:
+    async def create_conversation(
+        self,
+        session_id: int,
+        workspace_id: Optional[str] = None,
+        parent_conversation_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         session = self.get_session(session_id)
         if not session:
             raise ValueError(f"Session {session_id} not found")
 
+        if parent_conversation_id is not None:
+            parent_conversation = self._dao.get_conversation_by_id(parent_conversation_id)
+            if not parent_conversation:
+                raise ValueError(f"Conversation {parent_conversation_id} not found")
+            if parent_conversation.session_id != session_id:
+                raise ValueError("Parent conversation does not belong to this session")
+
         conversation_id = await self._conversation_creator.create_conversation(
             session_id=session_id,
             workspace_id=workspace_id,
+            parent_conversation_id=parent_conversation_id,
         )
 
         return {
             "conversation_id": conversation_id,
             "session_id": session_id,
+            "parent_conversation_id": parent_conversation_id,
         }
 
     async def send_message(
@@ -142,9 +156,20 @@ class SessionService:
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
 
-    def list_conversation_refs(self, session_id: int) -> List[Dict[str, str]]:
+    def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
         conversations = self._dao.list_conversations_by_session(session_id)
-        return [{"conversation_id": conversation.id} for conversation in conversations]
+        return [
+            {
+                "conversation_id": conversation.id,
+                "parent_conversation_id": conversation.parent_conversation_id,
+                "title": conversation.title,
+                "state": conversation.state,
+                "message_count": conversation.message_count,
+                "created_at": conversation.created_at,
+                "updated_at": conversation.updated_at,
+            }
+            for conversation in conversations
+        ]
 
     async def list_active_conversations(self) -> List[Dict[str, Any]]:
         result = []
@@ -171,6 +196,8 @@ class SessionService:
                 "conversation_id": persisted.id,
                 "session_id": persisted.session_id,
                 "workspace_id": persisted.workspace_id,
+                "parent_conversation_id": persisted.parent_conversation_id,
+                "title": persisted.title,
                 "state": persisted.state,
                 "created_at": persisted.created_at,
                 "updated_at": persisted.updated_at,
@@ -182,7 +209,8 @@ class SessionService:
             detail = {
                 "conversation_id": runtime["conversation_id"],
                 "session_id": runtime["session_id"],
-                "workspace_id": runtime["workspace_id"],
+                "parent_conversation_id": runtime.get("parent_conversation_id"),
+                "title": runtime.get("title"),
                 "state": runtime["state"],
                 "created_at": runtime["created_at"],
                 "updated_at": runtime["created_at"],
@@ -194,6 +222,8 @@ class SessionService:
         if runtime:
             detail.update({
                 "workspace_id": runtime.get("workspace_id"),
+                "parent_conversation_id": runtime.get("parent_conversation_id"),
+                "title": runtime.get("title"),
                 "state": runtime.get("state"),
                 "created_at": runtime.get("created_at"),
                 "message_count": runtime.get("message_count"),
@@ -202,7 +232,7 @@ class SessionService:
 
         return detail
 
-    async def get_conversation_nodes(self, conversation_id: str) -> List[Dict[str, Any]]:
+    async def get_conversation_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
         persisted_nodes = self._dao.get_nodes_by_conversation(conversation_id)
         result = [
             {

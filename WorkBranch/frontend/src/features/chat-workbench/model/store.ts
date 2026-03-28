@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   fetchConversationDetail,
-  fetchConversationNodes,
+  fetchConversationMessages,
   fetchSessionConversations,
   fetchWorkspaceDetail,
   getErrorMessage,
@@ -32,7 +32,7 @@ async function loadConversation(conversationId: string): Promise<AggregatedConve
       })
     : Promise.resolve(null)
 
-  const [nodes, workspace] = await Promise.all([fetchConversationNodes(conversationId), workspacePromise])
+  const [nodes, workspace] = await Promise.all([fetchConversationMessages(conversationId), workspacePromise])
 
   return { detail, workspace, nodes }
 }
@@ -91,8 +91,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       return 'empty-session'
     }
 
-    const conversationRefs = sessionDetail.conversationRefs ?? await fetchSessionConversations(sessionDetail.id)
-    if (!conversationRefs.length) {
+    const conversations = sessionDetail.conversations ?? await fetchSessionConversations(sessionDetail.id)
+    if (!conversations.length) {
       get().resetConversationState()
       return 'empty-session'
     }
@@ -100,10 +100,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     try {
       set({ loading: true, error: null })
 
-      const conversations = await Promise.all(conversationRefs.map((ref) => loadConversation(ref.conversationId)))
+      const conversationsData = await Promise.all(conversations.map((conversation) => loadConversation(conversation.conversationId)))
 
-      const mergedNodes = conversations.flatMap((item) => item.nodes)
-      const primaryConversation = pickPrimaryConversation(conversations)
+      const mergedNodes = conversationsData.flatMap((item) => item.nodes)
+      const primaryConversation = pickPrimaryConversation(conversationsData)
 
       set({
         conversationDetail: primaryConversation?.detail ?? null,

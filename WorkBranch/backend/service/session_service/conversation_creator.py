@@ -23,6 +23,8 @@ class ConversationInfo:
     conversation_id: str
     session_id: int
     workspace_id: str
+    parent_conversation_id: Optional[str] = None
+    title: Optional[str] = None
     state: ConversationState = ConversationState.PENDING
     created_at: datetime = field(default_factory=datetime.now)
     task: Optional[asyncio.Task] = None
@@ -53,7 +55,9 @@ class ConversationCreator:
     async def create_conversation(
         self,
         session_id: int,
-        workspace_id: Optional[str] = None
+        workspace_id: Optional[str] = None,
+        parent_conversation_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> str:
         agent_conv_id = await self._agent.create_conversation(
             workspace_id=workspace_id,
@@ -66,6 +70,8 @@ class ConversationCreator:
             conversation_id=agent_conv_id,
             session_id=session_id,
             workspace_id=resolved_workspace_id,
+            parent_conversation_id=parent_conversation_id,
+            title=title,
             state=ConversationState.PENDING.value,
         )
 
@@ -74,6 +80,8 @@ class ConversationCreator:
                 conversation_id=agent_conv_id,
                 session_id=session_id,
                 workspace_id=resolved_workspace_id,
+                parent_conversation_id=parent_conversation_id,
+                title=title,
                 state=ConversationState.PENDING
             )
 
@@ -95,6 +103,8 @@ class ConversationCreator:
                     conversation_id=persisted.id,
                     session_id=persisted.session_id,
                     workspace_id=persisted.workspace_id or conversation_id,
+                    parent_conversation_id=persisted.parent_conversation_id,
+                    title=persisted.title,
                     state=ConversationState(persisted.state or ConversationState.PENDING.value),
                     created_at=datetime.fromisoformat(persisted.created_at) if 'T' in persisted.created_at else datetime.now(),
                     error=persisted.error,
@@ -178,6 +188,8 @@ class ConversationCreator:
                     conversation_id=persisted.id,
                     session_id=persisted.session_id,
                     workspace_id=persisted.workspace_id or conversation_id,
+                    parent_conversation_id=persisted.parent_conversation_id,
+                    title=persisted.title,
                     state=ConversationState(persisted.state or ConversationState.PENDING.value),
                     created_at=datetime.now(),
                     error=persisted.error,
@@ -218,6 +230,8 @@ class ConversationCreator:
                     conversation_id=persisted.id,
                     session_id=persisted.session_id,
                     workspace_id=persisted.workspace_id or conversation_id,
+                    parent_conversation_id=persisted.parent_conversation_id,
+                    title=persisted.title,
                     state=ConversationState(persisted.state or ConversationState.PENDING.value),
                     created_at=datetime.now(),
                     error=persisted.error,
@@ -250,6 +264,8 @@ class ConversationCreator:
                 "conversation_id": persisted.id,
                 "session_id": persisted.session_id,
                 "workspace_id": persisted.workspace_id,
+                "parent_conversation_id": persisted.parent_conversation_id,
+                "title": persisted.title,
                 "state": persisted.state,
                 "created_at": persisted.created_at,
                 "message_count": persisted.message_count,
@@ -260,6 +276,8 @@ class ConversationCreator:
             "conversation_id": conv_info.conversation_id,
             "session_id": conv_info.session_id,
             "workspace_id": conv_info.workspace_id,
+            "parent_conversation_id": conv_info.parent_conversation_id,
+            "title": conv_info.title,
             "state": conv_info.state.value,
             "created_at": conv_info.created_at.isoformat(),
             "message_count": conv_info.message_count,

@@ -47,11 +47,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   setSessionDetail(detail) {
-    const existingConversationRefs = get().currentSessionDetail?.conversationRefs
+    const existingConversations = get().currentSessionDetail?.conversations
     const nextDetail = detail
       ? {
           ...detail,
-          conversationRefs: detail.conversationRefs ?? existingConversationRefs,
+          conversations: detail.conversations ?? existingConversations,
         }
       : null
 
@@ -92,11 +92,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({ sessionLoading: true, sessionError: null })
 
       const detail = await fetchSessionDetail(sessionId)
-      const conversationRefs = await fetchSessionConversations(sessionId)
+      const conversations = await fetchSessionConversations(sessionId)
 
       const nextDetail = {
         ...detail,
-        conversationRefs,
+        conversations,
       }
 
       set({

@@ -24,6 +24,7 @@ class UpdateSessionBody(BaseModel):
 
 class CreateConversationBody(BaseModel):
     workspace_id: Optional[str] = None
+    parent_conversation_id: Optional[str] = None
 
 
 @router.post("/sessions")
@@ -87,7 +88,7 @@ def list_session_conversations(
     session = service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return Result.success(data=service.list_conversation_refs(session_id))
+    return Result.success(data=service.list_conversation_summaries(session_id))
 
 
 @router.patch("/sessions/{session_id}")
@@ -141,7 +142,14 @@ async def create_conversation(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
-    result = await service.create_conversation(session_id=session_id, workspace_id=body.workspace_id)
+    try:
+        result = await service.create_conversation(
+            session_id=session_id,
+            workspace_id=body.workspace_id,
+            parent_conversation_id=body.parent_conversation_id,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     return Result.success(data=result)
 
 

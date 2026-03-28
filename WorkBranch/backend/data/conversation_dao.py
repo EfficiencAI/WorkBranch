@@ -20,6 +20,8 @@ class Conversation:
     id: str
     session_id: int
     workspace_id: Optional[str]
+    parent_conversation_id: Optional[str]
+    title: Optional[str]
     state: Optional[str]
     created_at: str
     updated_at: str
@@ -70,19 +72,23 @@ class ConversationDAO:
         session_id: int,
         workspace_id: Optional[str],
         state: str,
+        parent_conversation_id: Optional[str] = None,
+        title: Optional[str] = None,
     ) -> None:
         sql = '''
             INSERT OR IGNORE INTO conversations (
-                id, session_id, workspace_id, state, message_count
-            ) VALUES (?, ?, ?, ?, 0)
+                id, session_id, workspace_id, parent_conversation_id, title, state, message_count
+            ) VALUES (?, ?, ?, ?, ?, ?, 0)
         '''
-        self._db.execute(sql, (conversation_id, session_id, workspace_id, state))
+        self._db.execute(sql, (conversation_id, session_id, workspace_id, parent_conversation_id, title, state))
 
     def update_conversation(
         self,
         conversation_id: str,
         *,
         workspace_id: Optional[str] = None,
+        parent_conversation_id: Optional[str] = None,
+        title: Optional[str] = None,
         state: Optional[str] = None,
         message_count: Optional[int] = None,
         error: Optional[str] = None,
@@ -94,6 +100,12 @@ class ConversationDAO:
         if workspace_id is not None:
             updates.append('workspace_id = ?')
             params.append(workspace_id)
+        if parent_conversation_id is not None:
+            updates.append('parent_conversation_id = ?')
+            params.append(parent_conversation_id)
+        if title is not None:
+            updates.append('title = ?')
+            params.append(title)
         if state is not None:
             updates.append('state = ?')
             params.append(state)
@@ -113,7 +125,7 @@ class ConversationDAO:
 
     def get_conversation_by_id(self, conversation_id: str) -> Optional[Conversation]:
         sql = '''
-            SELECT id, session_id, workspace_id, state, created_at, updated_at, ended_at, message_count, error
+            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error
             FROM conversations
             WHERE id = ?
         '''
@@ -124,10 +136,10 @@ class ConversationDAO:
 
     def list_conversations_by_session(self, session_id: int) -> List[Conversation]:
         sql = '''
-            SELECT id, session_id, workspace_id, state, created_at, updated_at, ended_at, message_count, error
+            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error
             FROM conversations
             WHERE session_id = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC
         '''
         rows = self._db.fetch_all(sql, (session_id,))
         return [Conversation(**dict(row)) for row in rows]
@@ -154,7 +166,7 @@ class ConversationDAO:
             SELECT id, session_id, conversation_id, parent_id, role, content, created_at
             FROM nodes
             WHERE conversation_id = ?
-            ORDER BY created_at ASC
+            ORDER BY created_at ASC, id ASC
         '''
         rows = self._db.fetch_all(sql, (conversation_id,))
         return [Node(**dict(row)) for row in rows]

@@ -51,13 +51,16 @@ class Database:
                     id TEXT PRIMARY KEY,
                     session_id INTEGER NOT NULL,
                     workspace_id TEXT,
+                    parent_conversation_id TEXT,
+                    title TEXT,
                     state TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     ended_at TIMESTAMP,
                     message_count INTEGER DEFAULT 0,
                     error TEXT,
-                    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE
+                    FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE,
+                    FOREIGN KEY(parent_conversation_id) REFERENCES conversations(id) ON DELETE SET NULL
                 )
             ''')
 
@@ -81,6 +84,12 @@ class Database:
             if not self._column_exists(cursor, "nodes", "conversation_id"):
                 cursor.execute('ALTER TABLE nodes ADD COLUMN conversation_id TEXT')
 
+            if not self._column_exists(cursor, "conversations", "parent_conversation_id"):
+                cursor.execute('ALTER TABLE conversations ADD COLUMN parent_conversation_id TEXT')
+
+            if not self._column_exists(cursor, "conversations", "title"):
+                cursor.execute('ALTER TABLE conversations ADD COLUMN title TEXT')
+
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_nodes_session_id ON nodes(session_id)
             ''')
@@ -95,6 +104,9 @@ class Database:
             ''')
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_conversations_session_id ON conversations(session_id)
+            ''')
+            cursor.execute('''
+                CREATE INDEX IF NOT EXISTS idx_conversations_parent_conversation_id ON conversations(parent_conversation_id)
             ''')
 
             self._backfill_legacy_conversations(cursor)
