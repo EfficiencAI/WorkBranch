@@ -3,25 +3,25 @@ import { useEffect, useState } from 'react'
 
 type MessageComposerProps = {
   workspaceId: string | null
-  selectedNodeId: string | null
-  selectedNodeLabel: string | null
+  selectedConversationId: string | null
+  selectedConversationLabel: string | null
   sending: boolean
   onSend: (message: string) => Promise<void>
 }
 
-export function MessageComposer({ workspaceId, selectedNodeId, selectedNodeLabel, sending, onSend }: MessageComposerProps) {
+export function MessageComposer({ workspaceId, selectedConversationId, selectedConversationLabel, sending, onSend }: MessageComposerProps) {
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
 
   useEffect(() => {
-    if (selectedNodeId) {
+    if (selectedConversationId) {
       setCollapsed(false)
     }
-  }, [selectedNodeId])
+  }, [selectedConversationId])
 
   async function handleSend() {
     const nextMessage = message.trim()
-    if (!nextMessage || !selectedNodeId || sending) {
+    if (!nextMessage || !selectedConversationId || sending) {
       return
     }
 
@@ -47,9 +47,9 @@ export function MessageComposer({ workspaceId, selectedNodeId, selectedNodeLabel
       <Space direction="vertical" size="middle" style={{ width: '100%' }}>
         <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
           <Space direction="vertical" size={2}>
-            <Typography.Text strong>当前构建目标</Typography.Text>
-            <Typography.Text type={selectedNodeId ? undefined : 'secondary'}>
-              {selectedNodeId ? `${selectedNodeLabel ?? selectedNodeId}` : '请先右键或单击选择一个节点'}
+            <Typography.Text strong>当前目标对话</Typography.Text>
+            <Typography.Text type={selectedConversationId ? undefined : 'secondary'}>
+              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : '请先右键或单击选择一个对话'}
             </Typography.Text>
           </Space>
           <Button size="small" onClick={() => setCollapsed(true)}>
@@ -61,7 +61,7 @@ export function MessageComposer({ workspaceId, selectedNodeId, selectedNodeLabel
           rows={4}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder={selectedNodeId ? '输入下一步指令...' : '请先选择构建目标节点'}
+          placeholder={selectedConversationId ? '输入下一步指令...' : '请先选择目标对话'}
         />
 
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -71,13 +71,13 @@ export function MessageComposer({ workspaceId, selectedNodeId, selectedNodeLabel
 
         <Space className="message-composer__footer" wrap>
           <Typography.Text type="secondary">
-            {selectedNodeId
-              ? `消息将以节点 ${selectedNodeLabel ?? selectedNodeId} 为当前构建目标。`
-              : '发送前必须先选择构建目标节点。'}
+            {selectedConversationId
+              ? `消息将发送到当前选中的对话 ${selectedConversationLabel ?? selectedConversationId}。`
+              : '发送前必须先选择一个目标对话。'}
           </Typography.Text>
           <Space>
             <Button disabled={sending}>停止</Button>
-            <Button type="primary" loading={sending} disabled={!message.trim() || !selectedNodeId || sending} onClick={() => void handleSend()}>
+            <Button type="primary" loading={sending} disabled={!message.trim() || !selectedConversationId || sending} onClick={() => void handleSend()}>
               发送
             </Button>
           </Space>

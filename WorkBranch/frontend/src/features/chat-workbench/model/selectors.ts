@@ -4,5 +4,5 @@ export const selectChatWorkbenchLoading = (state: ChatWorkbenchStore) => state.l
 export const selectChatWorkbenchError = (state: ChatWorkbenchStore) => state.error
 export const selectChatWorkbenchConversationDetail = (state: ChatWorkbenchStore) => state.conversationDetail
 export const selectChatWorkbenchWorkspaceDetail = (state: ChatWorkbenchStore) => state.workspaceDetail
-export const selectChatWorkbenchNodes = (state: ChatWorkbenchStore) => state.nodes
+export const selectChatWorkbenchConversationNodes = (state: ChatWorkbenchStore) => state.conversationNodes
 export const selectChatWorkbenchStreaming = (state: ChatWorkbenchStore) => state.streaming

@@ -1,8 +1,7 @@
 import { create } from 'zustand'
-import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   fetchConversationDetail,
-  fetchConversationMessages,
   fetchSessionConversations,
   fetchWorkspaceDetail,
   getErrorMessage,
@@ -13,13 +12,10 @@ import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
 
-type AggregatedConversation = {
+async function loadConversationDetailBundle(conversationId: string): Promise<{
   detail: ConversationDetail
   workspace: WorkspaceDetail | null
-  nodes: MessageNode[]
-}
-
-async function loadConversation(conversationId: string): Promise<AggregatedConversation> {
+}> {
   const detail = await fetchConversationDetail(conversationId)
 
   const workspacePromise = detail.workspaceId
@@ -32,19 +28,25 @@ async function loadConversation(conversationId: string): Promise<AggregatedConve
       })
     : Promise.resolve(null)
 
-  const [nodes, workspace] = await Promise.all([fetchConversationMessages(conversationId), workspacePromise])
-
-  return { detail, workspace, nodes }
+  const workspace = await workspacePromise
+  return { detail, workspace }
 }
 
-function pickPrimaryConversation(conversations: AggregatedConversation[]): AggregatedConversation | null {
-  return conversations[conversations.length - 1] ?? null
+function pickPrimaryConversationId(sessionDetail: SessionDetail, conversationNodes: ConversationNode[]) {
+  if (sessionDetail.activeConversationId) {
+    const hit = conversationNodes.find((node) => node.conversationId === sessionDetail.activeConversationId)
+    if (hit) {
+      return hit.conversationId
+    }
+  }
+
+  return conversationNodes[conversationNodes.length - 1]?.conversationId ?? null
 }
 
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   conversationDetail: null,
   workspaceDetail: null,
-  nodes: [],
+  conversationNodes: [],
   loading: false,
   streaming: false,
   error: null,
@@ -54,14 +56,14 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   },
 
   resetConversationState() {
-    set({ conversationDetail: null, workspaceDetail: null, nodes: [] })
+    set({ conversationDetail: null, workspaceDetail: null, conversationNodes: [] })
   },
 
   resetAll() {
     set({
       conversationDetail: null,
       workspaceDetail: null,
-      nodes: [],
+      conversationNodes: [],
       loading: false,
       streaming: false,
       error: null,
@@ -71,11 +73,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   async loadConversationBundle(conversationId: string) {
     try {
       set({ loading: true, error: null })
-      const conversation = await loadConversation(conversationId)
+      const bundle = await loadConversationDetailBundle(conversationId)
       set({
-        conversationDetail: conversation.detail,
-        workspaceDetail: conversation.workspace,
-        nodes: conversation.nodes,
+        conversationDetail: bundle.detail,
+        workspaceDetail: bundle.workspace,
       })
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '对话数据加载失败') })
@@ -91,8 +92,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       return 'empty-session'
     }
 
-    const conversations = sessionDetail.conversations ?? await fetchSessionConversations(sessionDetail.id)
-    if (!conversations.length) {
+    const summaries = sessionDetail.conversations ?? (await fetchSessionConversations(sessionDetail.id))
+    if (!summaries.length) {
       get().resetConversationState()
       return 'empty-session'
     }
@@ -100,21 +101,22 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     try {
       set({ loading: true, error: null })
 
-      const conversationsData = await Promise.all(conversations.map((conversation) => loadConversation(conversation.conversationId)))
+      const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+      const primaryConversationId = pickPrimaryConversationId(sessionDetail, conversationNodes)
 
-      const mergedNodes = conversationsData.flatMap((item) => item.nodes)
-      const primaryConversation = pickPrimaryConversation(conversationsData)
+      set({ conversationNodes })
 
-      set({
-        conversationDetail: primaryConversation?.detail ?? null,
-        workspaceDetail: primaryConversation?.workspace ?? null,
-        nodes: mergedNodes,
-      })
+      if (primaryConversationId) {
+        const bundle = await loadConversationDetailBundle(primaryConversationId)
+        set({ conversationDetail: bundle.detail, workspaceDetail: bundle.workspace })
+      } else {
+        set({ conversationDetail: null, workspaceDetail: null })
+      }
 
-      return mergedNodes.length || primaryConversation ? 'ready' : 'empty-session'
+      return 'ready'
     } catch (caughtError) {
       get().resetConversationState()
-      set({ error: getErrorMessage(caughtError, '会话节点树加载失败') })
+      set({ error: getErrorMessage(caughtError, '会话对话树加载失败') })
       return 'empty-session'
     } finally {
       set({ loading: false })

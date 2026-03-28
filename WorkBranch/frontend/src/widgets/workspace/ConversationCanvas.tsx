@@ -5,84 +5,84 @@ import { Button, Card, Dropdown, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useEffect, useMemo } from 'react'
 import { useSettings } from '../../app/settings'
-import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
-import { selectFocusedNodeId, selectSelectedNodeId, useTreeStore } from '../../features'
+import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
+import { selectFocusedConversationId, selectSelectedConversationId, useTreeStore } from '../../features'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { MessageComposer } from './MessageComposer'
 
-const roleLabelMap = {
-  system: 'System',
-  user: '用户',
-  assistant: 'Agent',
-  tool: 'Tool',
-} as const
-
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
-  focusedNodeId: string | null
-  selectedNodeId: string | null
+  focusedConversationId: string | null
+  selectedConversationId: string | null
   sessionDetail: SessionDetail | null
   conversationDetail: ConversationDetail | null
   workspaceDetail: WorkspaceDetail | null
-  nodes: MessageNode[]
+  conversationNodes: ConversationNode[]
   sending: boolean
   onSendMessage: (message: string) => Promise<void>
-  onCreateConversation: () => Promise<void>
+  onCreateConversation: (parentConversationId: string | null) => Promise<void>
 }
 
 type FlowNodeData = {
-  node: MessageNode
+  conversation: ConversationNode
   focused: boolean
   selected: boolean
-  onClick: (nodeId: string) => void
-  onDoubleClick: (nodeId: string) => void
-  onBuildFromNode: (nodeId: string) => void
+  onClick: (conversationId: string) => void
+  onDoubleClick: (conversationId: string) => void
+  onCreateChildConversation: (parentConversationId: string) => void
 }
 
-function summarizeContent(content: string) {
-  const normalized = content.replace(/\s+/g, ' ').trim()
-  if (!normalized) {
-    return '空对话'
+function summarizeConversation(conversation: ConversationNode) {
+  if (conversation.title?.trim()) {
+    return conversation.title.trim()
   }
 
-  return normalized.length > 96 ? `${normalized.slice(0, 96)}…` : normalized
+  if (conversation.messageCount > 0) {
+    return `未命名对话 · ${conversation.messageCount} 条消息`
+  }
+
+  return '空对话'
 }
 
-function buildTreeLayout(nodes: MessageNode[]) {
-  const childMap = new Map<string | null, MessageNode[]>()
-  for (const node of nodes) {
-    const key = node.parentId ?? null
+function buildTreeLayout(conversationNodes: ConversationNode[]) {
+  const childMap = new Map<string | null, ConversationNode[]>()
+  for (const conversation of conversationNodes) {
+    const key = conversation.parentConversationId ?? null
     const siblings = childMap.get(key) ?? []
-    siblings.push(node)
+    siblings.push(conversation)
     childMap.set(key, siblings)
   }
 
   for (const siblings of childMap.values()) {
-    siblings.sort((left, right) => (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.id.localeCompare(right.id))
+    siblings.sort(
+      (left, right) =>
+        (left.createdAt ?? '').localeCompare(right.createdAt ?? '') ||
+        left.conversationId.localeCompare(right.conversationId),
+    )
   }
 
-  const levels: MessageNode[][] = []
-  const queue = (childMap.get(null) ?? []).map((node) => ({ node, depth: 0 }))
+  const levels: ConversationNode[][] = []
+  const queue = (childMap.get(null) ?? []).map((conversation) => ({ conversation, depth: 0 }))
   const seen = new Set<string>()
 
   while (queue.length) {
     const current = queue.shift()
-    if (!current || seen.has(current.node.id)) {
+    if (!current || seen.has(current.conversation.conversationId)) {
       continue
     }
 
-    seen.add(current.node.id)
+    seen.add(current.conversation.conversationId)
     if (!levels[current.depth]) {
       levels[current.depth] = []
     }
-    levels[current.depth].push(current.node)
+    levels[current.depth].push(current.conversation)
 
-    for (const child of childMap.get(current.node.id) ?? []) {
-      queue.push({ node: child, depth: current.depth + 1 })
+    for (const child of childMap.get(current.conversation.conversationId) ?? []) {
+      queue.push({ conversation: child, depth: current.depth + 1 })
     }
   }
 
-  const fallbackNodes = nodes.filter((node) => !seen.has(node.id))
+  const fallbackNodes = conversationNodes.filter((conversation) => !seen.has(conversation.conversationId))
   if (fallbackNodes.length) {
     const depth = levels.length
     levels[depth] = fallbackNodes
@@ -90,8 +90,8 @@ function buildTreeLayout(nodes: MessageNode[]) {
 
   const positions = new Map<string, { x: number; y: number }>()
   levels.forEach((level, depth) => {
-    level.forEach((node, index) => {
-      positions.set(node.id, {
+    level.forEach((conversation, index) => {
+      positions.set(conversation.conversationId, {
         x: index * 380,
         y: depth * 240,
       })
@@ -102,11 +102,11 @@ function buildTreeLayout(nodes: MessageNode[]) {
 }
 
 function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
-  const { node, focused, selected, onClick, onDoubleClick, onBuildFromNode } = data
+  const { conversation, focused, selected, onClick, onDoubleClick, onCreateChildConversation } = data
   const menuItems: MenuProps['items'] = [
     {
-      key: 'build-from-node',
-      label: '为此节点构建消息',
+      key: 'create-child-conversation',
+      label: '创建子对话',
     },
   ]
 
@@ -115,8 +115,8 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       menu={{
         items: menuItems,
         onClick: ({ key }) => {
-          if (key === 'build-from-node') {
-            onBuildFromNode(node.id)
+          if (key === 'create-child-conversation') {
+            onCreateChildConversation(conversation.conversationId)
           }
         },
       }}
@@ -125,20 +125,26 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       <button
         type="button"
         className={focused ? 'conversation-node conversation-node--focused' : selected ? 'conversation-node conversation-node--selected' : 'conversation-node'}
-        onClick={() => onClick(node.id)}
-        onDoubleClick={() => onDoubleClick(node.id)}
-        aria-label={`查看节点 ${node.id}`}
+        onClick={() => onClick(conversation.conversationId)}
+        onDoubleClick={() => onDoubleClick(conversation.conversationId)}
+        aria-label={`查看对话 ${conversation.conversationId}`}
       >
-        <Card size="small" className={`conversation-node__card conversation-node__card--${node.role}`}>
+        <Card size="small" className="conversation-node__card conversation-node__card--assistant">
           <Space direction="vertical" size={10} style={{ width: '100%' }}>
             <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-              <Space wrap>
-                <Typography.Text strong>{node.id}</Typography.Text>
-                <Typography.Text type="secondary">{roleLabelMap[node.role]}</Typography.Text>
+              <Space direction="vertical" size={2}>
+                <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
+                <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
               </Space>
-              <StatusTag label={focused ? 'focused' : selected ? 'selected' : node.status ?? 'ready'} tone={focused ? 'warning' : selected ? 'processing' : 'default'} />
+              <StatusTag
+                label={focused ? 'focused' : selected ? 'selected' : conversation.state}
+                tone={focused ? 'warning' : selected ? 'processing' : 'default'}
+              />
             </Space>
-            <Typography.Paragraph className="conversation-node__summary">{summarizeContent(node.content)}</Typography.Paragraph>
+            <Space wrap>
+              <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
+              {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
+            </Space>
           </Space>
         </Card>
       </button>
@@ -152,82 +158,105 @@ const nodeTypes = {
 
 function FlowViewport({
   currentSessionId,
-  focusedNodeId,
-  selectedNodeId,
+  focusedConversationId,
+  selectedConversationId,
   sessionDetail,
   conversationDetail,
   workspaceDetail,
-  nodes,
+  conversationNodes,
   sending,
   onSendMessage,
   onCreateConversation,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
   const { settings } = useSettings()
-  const setFocusedNodeId = useTreeStore((state) => state.setFocusedNodeId)
-  const setSelectedNodeId = useTreeStore((state) => state.setSelectedNodeId)
-  const storeFocusedNodeId = useTreeStore(selectFocusedNodeId)
-  const storeSelectedNodeId = useTreeStore(selectSelectedNodeId)
+  const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
+  const setSelectedConversationId = useTreeStore((state) => state.setSelectedConversationId)
+  const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
+  const storeSelectedConversationId = useTreeStore(selectSelectedConversationId)
 
-  const showDebugOverlay = settings?.ui && typeof settings.ui === 'object' && settings.ui !== null && 'show_debug_overlay' in settings.ui
-    ? settings.ui.show_debug_overlay === true
-    : false
+  const showDebugOverlay =
+    settings?.ui && typeof settings.ui === 'object' && settings.ui !== null && 'show_debug_overlay' in settings.ui
+      ? settings.ui.show_debug_overlay === true
+      : false
 
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
-  const focusedNode = useMemo(() => nodes.find((node) => node.id === focusedNodeId) ?? null, [focusedNodeId, nodes])
-  const displayNodes = useMemo(() => (focusedNode ? [focusedNode] : nodes), [focusedNode, nodes])
-  const layoutMap = useMemo(() => buildTreeLayout(nodes), [nodes])
+  const selectedConversation = useMemo(
+    () => conversationNodes.find((conversation) => conversation.conversationId === selectedConversationId) ?? null,
+    [conversationNodes, selectedConversationId],
+  )
+  const focusedConversation = useMemo(
+    () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
+    [conversationNodes, focusedConversationId],
+  )
+  const displayConversations = useMemo(
+    () => (focusedConversation ? [focusedConversation] : conversationNodes),
+    [focusedConversation, conversationNodes],
+  )
+  const layoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
 
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
-    if (focusedNode) {
+    if (focusedConversation) {
       return [
         {
-          id: focusedNode.id,
+          id: focusedConversation.conversationId,
           type: 'conversation',
           position: { x: 0, y: 0 },
           data: {
-            node: focusedNode,
+            conversation: focusedConversation,
             focused: true,
-            selected: storeSelectedNodeId === focusedNode.id,
-            onClick: setSelectedNodeId,
-            onDoubleClick: setFocusedNodeId,
-            onBuildFromNode: setSelectedNodeId,
+            selected: storeSelectedConversationId === focusedConversation.conversationId,
+            onClick: setSelectedConversationId,
+            onDoubleClick: setFocusedConversationId,
+            onCreateChildConversation: (parentConversationId) => {
+              void onCreateConversation(parentConversationId)
+            },
           },
           draggable: false,
         },
       ]
     }
 
-    return displayNodes.map((node) => ({
-      id: node.id,
+    return displayConversations.map((conversation) => ({
+      id: conversation.conversationId,
       type: 'conversation',
-      position: layoutMap.get(node.id) ?? { x: 0, y: 0 },
+      position: layoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 },
       data: {
-        node,
-        focused: storeFocusedNodeId === node.id,
-        selected: storeSelectedNodeId === node.id,
-        onClick: setSelectedNodeId,
-        onDoubleClick: setFocusedNodeId,
-        onBuildFromNode: setSelectedNodeId,
+        conversation,
+        focused: storeFocusedConversationId === conversation.conversationId,
+        selected: storeSelectedConversationId === conversation.conversationId,
+        onClick: setSelectedConversationId,
+        onDoubleClick: setFocusedConversationId,
+        onCreateChildConversation: (parentConversationId) => {
+          void onCreateConversation(parentConversationId)
+        },
       },
       draggable: false,
     }))
-  }, [displayNodes, focusedNode, layoutMap, setFocusedNodeId, setSelectedNodeId, storeFocusedNodeId, storeSelectedNodeId])
+  }, [
+    displayConversations,
+    focusedConversation,
+    layoutMap,
+    onCreateConversation,
+    setFocusedConversationId,
+    setSelectedConversationId,
+    storeFocusedConversationId,
+    storeSelectedConversationId,
+  ])
 
   const flowEdges = useMemo<Edge[]>(() => {
-    if (focusedNode) {
+    if (focusedConversation) {
       return []
     }
 
-    return displayNodes
-      .filter((node) => node.parentId)
-      .map((node) => ({
-        id: `${node.parentId}-${node.id}`,
-        source: node.parentId as string,
-        target: node.id,
-        animated: selectedNodeId === node.id,
+    return displayConversations
+      .filter((conversation) => conversation.parentConversationId)
+      .map((conversation) => ({
+        id: `${conversation.parentConversationId}-${conversation.conversationId}`,
+        source: conversation.parentConversationId as string,
+        target: conversation.conversationId,
+        animated: selectedConversationId === conversation.conversationId,
       }))
-  }, [displayNodes, focusedNode, selectedNodeId])
+  }, [displayConversations, focusedConversation, selectedConversationId])
 
   useEffect(() => {
     if (!flowNodes.length) {
@@ -235,20 +264,20 @@ function FlowViewport({
     }
 
     requestAnimationFrame(() => {
-      if (focusedNode) {
+      if (focusedConversation) {
         void reactFlow.setCenter(180, 120, { zoom: 1.1, duration: 240 })
         return
       }
 
       void reactFlow.fitView({ padding: 0.2, duration: 240 })
     })
-  }, [flowNodes, focusedNode, reactFlow])
+  }, [flowNodes, focusedConversation, reactFlow])
 
   const canvasMenuItems = useMemo<MenuProps['items']>(
     () => [
       {
-        key: 'create-conversation',
-        label: '创建对话',
+        key: 'create-root-conversation',
+        label: '创建根对话',
       },
     ],
     [],
@@ -259,8 +288,8 @@ function FlowViewport({
       menu={{
         items: canvasMenuItems,
         onClick: ({ key }) => {
-          if (key === 'create-conversation') {
-            void onCreateConversation()
+          if (key === 'create-root-conversation') {
+            void onCreateConversation(null)
           }
         },
       }}
@@ -272,35 +301,35 @@ function FlowViewport({
             <Space wrap>
               <StatusTag label={`session ${currentSessionId ?? 'N/A'}`} tone="default" />
               <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
-              <StatusTag label={`节点 ${nodes.length}`} tone="processing" />
+              <StatusTag label={`对话 ${conversationNodes.length}`} tone="processing" />
               <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
-              <StatusTag label={focusedNode ? '聚焦态' : '概览态'} tone={focusedNode ? 'success' : 'default'} />
+              <StatusTag label={focusedConversation ? '聚焦态' : '概览态'} tone={focusedConversation ? 'success' : 'default'} />
             </Space>
             <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-              {focusedNode ? '当前处于节点聚焦态；仅展示该节点完整内容，需点击按钮返回概览。' : '当前显示该 session 下聚合后的真实节点树，可右键节点设置构建目标。'}
+              {focusedConversation ? '当前处于对话聚焦态；仅展示该对话卡片，消息列表将在后续阶段补齐。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
             </Typography.Text>
           </div>
         ) : null}
 
         <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
-          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomOut({ duration: 180 })} disabled={Boolean(focusedNode)}>
+          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomOut({ duration: 180 })} disabled={Boolean(focusedConversation)}>
             -
           </Button>
-          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomIn({ duration: 180 })} disabled={Boolean(focusedNode)}>
+          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomIn({ duration: 180 })} disabled={Boolean(focusedConversation)}>
             +
           </Button>
           <Button
             className="conversation-canvas__control-button"
             onClick={() => {
-              if (focusedNode) {
-                setFocusedNodeId(null)
+              if (focusedConversation) {
+                setFocusedConversationId(null)
                 return
               }
 
               void reactFlow.fitView({ padding: 0.2, duration: 240 })
             }}
           >
-            {focusedNode ? '返回' : '适配'}
+            {focusedConversation ? '返回' : '适配'}
           </Button>
         </div>
 
@@ -311,16 +340,16 @@ function FlowViewport({
           nodeTypes={nodeTypes}
           fitView
           nodesDraggable={false}
-          panOnDrag={!focusedNode}
-          zoomOnScroll={!focusedNode}
-          zoomOnPinch={!focusedNode}
-          zoomOnDoubleClick={!focusedNode}
+          panOnDrag={!focusedConversation}
+          zoomOnScroll={!focusedConversation}
+          zoomOnPinch={!focusedConversation}
+          zoomOnDoubleClick={!focusedConversation}
           nodesConnectable={false}
           elementsSelectable
-          onNodeClick={(_, node) => setSelectedNodeId(node.id)}
+          onNodeClick={(_, node) => setSelectedConversationId(node.id)}
           onPaneClick={() => {
-            if (!focusedNode) {
-              setSelectedNodeId(null)
+            if (!focusedConversation) {
+              setSelectedConversationId(null)
             }
           }}
           proOptions={{ hideAttribution: true }}
@@ -328,33 +357,33 @@ function FlowViewport({
           <Background gap={32} size={1} color="var(--app-grid-color)" />
         </ReactFlow>
 
-        {!nodes.length ? (
+        {!conversationNodes.length ? (
           <div className="conversation-canvas__focused-empty-state">
-            <EmptyState title="当前 session 暂无消息节点" description={sessionDetail ? '可右键空白处创建对话，并选择节点作为消息构建目标。' : '请先创建或切换到一个会话。'} />
+            <EmptyState title="当前 session 暂无对话节点" description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'} />
           </div>
         ) : null}
 
-        {focusedNode ? (
+        {focusedConversation ? (
           <div className="conversation-canvas__focused-panel">
-            <Card size="small" className={`conversation-node__card conversation-node__card--${focusedNode.role}`}>
+            <Card size="small" className="conversation-node__card conversation-node__card--assistant">
               <Space direction="vertical" size={16} style={{ width: '100%' }}>
                 <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                   <Space direction="vertical" size={4}>
-                    <Typography.Text strong>{focusedNode.id}</Typography.Text>
-                    <Typography.Text type="secondary">{roleLabelMap[focusedNode.role]}</Typography.Text>
+                    <Typography.Text strong>{summarizeConversation(focusedConversation)}</Typography.Text>
+                    <Typography.Text type="secondary">{focusedConversation.conversationId}</Typography.Text>
                   </Space>
                   <Space wrap>
-                    <Button size="small" onClick={() => setSelectedNodeId(focusedNode.id)}>
-                      为此节点构建消息
+                    <Button size="small" onClick={() => void onCreateConversation(focusedConversation.conversationId)}>
+                      创建子对话
                     </Button>
-                    <Button size="small" onClick={() => setFocusedNodeId(null)}>
+                    <Button size="small" onClick={() => setFocusedConversationId(null)}>
                       退出聚焦态
                     </Button>
                   </Space>
                 </Space>
                 <div className="conversation-canvas__focused-content">
                   <Typography.Paragraph className="conversation-canvas__focused-text">
-                    {focusedNode.content || '空对话'}
+                    当前聚焦的是对话节点。完整消息列表将在阶段三接入，这一阶段仅完成主画布 ConversationNode 迁移。
                   </Typography.Paragraph>
                 </div>
               </Space>
@@ -369,14 +398,14 @@ function FlowViewport({
                 <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                   <Space wrap>
                     <Typography.Text strong>全局底部输入区</Typography.Text>
-                    <Typography.Text type="secondary">Selected Target</Typography.Text>
+                    <Typography.Text type="secondary">Selected Conversation</Typography.Text>
                   </Space>
-                  <StatusTag label={sending ? '发送中' : selectedNode ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedNode ? 'success' : 'default'} />
+                  <StatusTag label={sending ? '发送中' : selectedConversation ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation ? 'success' : 'default'} />
                 </Space>
                 <MessageComposer
                   workspaceId={conversationDetail?.workspaceId ?? null}
-                  selectedNodeId={selectedNode?.id ?? null}
-                  selectedNodeLabel={selectedNode ? `${roleLabelMap[selectedNode.role]} · ${selectedNode.id}` : null}
+                  selectedConversationId={selectedConversation?.conversationId ?? null}
+                  selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
                   sending={sending}
                   onSend={onSendMessage}
                 />

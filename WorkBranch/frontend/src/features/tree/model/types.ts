@@ -1,13 +1,13 @@
 export type TreeState = {
-  focusedNodeId: string | null
-  selectedNodeId: string | null
+  focusedConversationId: string | null
+  selectedConversationId: string | null
 }
 
 export type TreeActions = {
-  setFocusedNodeId: (nodeId: string | null) => void
-  clearFocusedNodeId: () => void
-  setSelectedNodeId: (nodeId: string | null) => void
-  clearSelectedNodeId: () => void
+  setFocusedConversationId: (conversationId: string | null) => void
+  clearFocusedConversationId: () => void
+  setSelectedConversationId: (conversationId: string | null) => void
+  clearSelectedConversationId: () => void
   resetTreeUiState: () => void
 }
 

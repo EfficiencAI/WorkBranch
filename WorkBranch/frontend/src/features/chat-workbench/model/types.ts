@@ -1,4 +1,4 @@
-import type { ConversationDetail, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import type { ChatStreamEvent } from '../../../shared/api'
 
 export type SessionContextResult = 'empty-session' | 'ready'
@@ -6,7 +6,7 @@ export type SessionContextResult = 'empty-session' | 'ready'
 export type ChatWorkbenchState = {
   conversationDetail: ConversationDetail | null
   workspaceDetail: WorkspaceDetail | null
-  nodes: MessageNode[]
+  conversationNodes: ConversationNode[]
 
   loading: boolean
   streaming: boolean

@@ -5,15 +5,15 @@ import type { SessionId } from '../../entities'
 import {
   createConversationForCurrentSession,
   selectChatWorkbenchConversationDetail,
-  selectChatWorkbenchNodes,
+  selectChatWorkbenchConversationNodes,
   selectChatWorkbenchStreaming,
   selectChatWorkbenchWorkspaceDetail,
   selectCreatingSession,
   selectCurrentSessionDetail,
   selectCurrentSessionId,
   selectDeletingSessionId,
-  selectFocusedNodeId,
-  selectSelectedNodeId,
+  selectFocusedConversationId,
+  selectSelectedConversationId,
   selectSessionList,
   selectUserProfile,
   useChatWorkbenchStore,
@@ -45,10 +45,10 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const user = useUserStore(selectUserProfile)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
-  const nodes = useChatWorkbenchStore(selectChatWorkbenchNodes)
+  const conversationNodes = useChatWorkbenchStore(selectChatWorkbenchConversationNodes)
   const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
-  const focusedNodeId = useTreeStore(selectFocusedNodeId)
-  const selectedNodeId = useTreeStore(selectSelectedNodeId)
+  const focusedConversationId = useTreeStore(selectFocusedConversationId)
+  const selectedConversationId = useTreeStore(selectSelectedConversationId)
   const selectSession = useSessionStore((state) => state.selectSession)
   const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
   const createSession = useSessionStore((state) => state.createSession)
@@ -66,8 +66,14 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
       ? 'workspace-shell__nav workspace-shell__nav--peek'
       : 'workspace-shell__nav'
 
-  const selectedNode = useMemo(() => nodes.find((node) => node.id === selectedNodeId) ?? null, [nodes, selectedNodeId])
-  const focusedNode = useMemo(() => nodes.find((node) => node.id === focusedNodeId) ?? null, [focusedNodeId, nodes])
+  const selectedConversation = useMemo(
+    () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
+    [conversationNodes, selectedConversationId],
+  )
+  const focusedConversation = useMemo(
+    () => conversationNodes.find((node) => node.conversationId === focusedConversationId) ?? null,
+    [conversationNodes, focusedConversationId],
+  )
 
   const runSessionContext = useCallback(
     async (detail: Awaited<ReturnType<typeof selectSession>>) => {
@@ -77,19 +83,24 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     [enterSessionContext, resetTreeUiState],
   )
 
-  const handleCreateConversation = useCallback(async () => {
-    try {
-      resetTreeUiState()
-      await createConversationForCurrentSession()
+  const handleCreateConversation = useCallback(
+    async (parentConversationId: string | null) => {
+      try {
+        const created = await createConversationForCurrentSession(parentConversationId)
 
-      if (selectedSessionId) {
-        const detail = await loadSessionDetail(selectedSessionId)
-        await enterSessionContext(detail)
+        if (selectedSessionId) {
+          const detail = await loadSessionDetail(selectedSessionId)
+          await enterSessionContext(detail)
+        }
+
+        useTreeStore.getState().setFocusedConversationId(null)
+        useTreeStore.getState().setSelectedConversationId(created?.conversationId ?? null)
+      } catch (caughtError) {
+        onRequestError(caughtError)
       }
-    } catch (caughtError) {
-      onRequestError(caughtError)
-    }
-  }, [enterSessionContext, loadSessionDetail, onRequestError, resetTreeUiState, selectedSessionId])
+    },
+    [enterSessionContext, loadSessionDetail, onRequestError, selectedSessionId],
+  )
 
   const handleSelectSession = useCallback(
     async (sessionId: SessionId) => {
@@ -165,12 +176,12 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
       <div className="workspace-shell__canvas-layer">
         <ConversationCanvas
           currentSessionId={selectedSessionId}
-          focusedNodeId={focusedNodeId}
-          selectedNodeId={selectedNodeId}
+          focusedConversationId={focusedConversationId}
+          selectedConversationId={selectedConversationId}
           sessionDetail={sessionDetail}
           conversationDetail={conversationDetail}
           workspaceDetail={workspaceDetail}
-          nodes={nodes}
+          conversationNodes={conversationNodes}
           sending={sending}
           onSendMessage={handleSendMessage}
           onCreateConversation={handleCreateConversation}
@@ -250,15 +261,24 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
             <Space align="start" size={12} wrap>
               <Typography.Title level={3} className="workspace-shell__title">
-                {isSettingsRoute ? '系统设置' : focusedNode ? `节点 ${focusedNode.id}` : sessionDetail ? `会话 ${sessionDetail.title}` : '当前暂无会话'}
+                {isSettingsRoute
+                  ? '系统设置'
+                  : focusedConversation
+                    ? `对话 ${focusedConversation.conversationId}`
+                    : sessionDetail
+                      ? `会话 ${sessionDetail.title}`
+                      : '当前暂无会话'}
               </Typography.Title>
             </Space>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段十一" tone="processing" />
-              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '节点树工作台'} tone="success" />
-              <StatusTag label={focusedNodeId ? '聚焦态' : '概览态'} tone={focusedNodeId ? 'warning' : 'default'} />
-              <StatusTag label={selectedNode ? `目标 ${selectedNode.id}` : '未选目标'} tone={selectedNode ? 'processing' : 'default'} />
+              <StatusTag label="阶段二" tone="processing" />
+              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
+              <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
+              <StatusTag
+                label={selectedConversation ? `目标 ${selectedConversation.conversationId}` : '未选目标'}
+                tone={selectedConversation ? 'processing' : 'default'}
+              />
             </Space>
           </Space>
         </div>

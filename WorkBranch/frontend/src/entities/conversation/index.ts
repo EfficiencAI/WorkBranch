@@ -1,1 +1,1 @@
-export type { ConversationDetail, ConversationId } from './model/types'
+export type { ConversationDetail, ConversationId, ConversationNode } from './model/types'

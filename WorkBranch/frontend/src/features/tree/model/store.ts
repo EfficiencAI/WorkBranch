@@ -2,26 +2,26 @@ import { create } from 'zustand'
 import type { TreeStore } from './types'
 
 export const useTreeStore = create<TreeStore>((set) => ({
-  focusedNodeId: null,
-  selectedNodeId: null,
+  focusedConversationId: null,
+  selectedConversationId: null,
 
-  setFocusedNodeId(nodeId) {
-    set({ focusedNodeId: nodeId })
+  setFocusedConversationId(conversationId) {
+    set({ focusedConversationId: conversationId })
   },
 
-  clearFocusedNodeId() {
-    set({ focusedNodeId: null })
+  clearFocusedConversationId() {
+    set({ focusedConversationId: null })
   },
 
-  setSelectedNodeId(nodeId) {
-    set({ selectedNodeId: nodeId })
+  setSelectedConversationId(conversationId) {
+    set({ selectedConversationId: conversationId })
   },
 
-  clearSelectedNodeId() {
-    set({ selectedNodeId: null })
+  clearSelectedConversationId() {
+    set({ selectedConversationId: null })
   },
 
   resetTreeUiState() {
-    set({ focusedNodeId: null, selectedNodeId: null })
+    set({ focusedConversationId: null, selectedConversationId: null })
   },
 }))

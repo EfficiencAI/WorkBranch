@@ -1,4 +1,4 @@
 import type { TreeStore } from './types'
 
-export const selectFocusedNodeId = (state: TreeStore) => state.focusedNodeId
-export const selectSelectedNodeId = (state: TreeStore) => state.selectedNodeId
+export const selectFocusedConversationId = (state: TreeStore) => state.focusedConversationId
+export const selectSelectedConversationId = (state: TreeStore) => state.selectedConversationId

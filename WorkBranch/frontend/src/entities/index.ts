@@ -1,4 +1,4 @@
-export type { ConversationDetail, ConversationId } from './conversation'
+export type { ConversationDetail, ConversationId, ConversationNode } from './conversation'
 export type { ConversationState, MessageNode, MessageNodeId, MessageNodeRole } from './message-node'
 export type { SettingNode, SettingPrimitive, SettingsResponseData, SettingValue } from './setting'
 export type { SessionConversationSummary, SessionDetail, SessionId, SessionSummary } from './session'
