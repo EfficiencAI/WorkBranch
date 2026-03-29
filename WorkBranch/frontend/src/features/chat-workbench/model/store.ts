@@ -136,6 +136,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
       return 'ready'
     } catch (caughtError) {
+      console.error('[enterSessionContext] error:', caughtError)
       get().resetConversationState()
       set({ error: getErrorMessage(caughtError, '会话对话树加载失败') })
       return 'empty-session'

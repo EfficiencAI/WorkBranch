@@ -296,7 +296,7 @@ function FlowViewport({
         selected: storeSelectedConversationId === conversation.conversationId,
         onClick: setSelectedConversationId,
         onDoubleClick: setFocusedConversationId,
-        onCreateChildConversation: (parentConversationId) => {
+        onCreateChildConversation: (parentConversationId: string) => {
           void onCreateConversation(parentConversationId)
         },
       },
@@ -331,14 +331,16 @@ function FlowViewport({
       return
     }
 
-    requestAnimationFrame(() => {
+    const timeoutId = setTimeout(() => {
       if (focusedConversation) {
         void reactFlow.setCenter(180, 120, { zoom: 1.1, duration: 240 })
         return
       }
 
-      void reactFlow.fitView({ padding: 0.2, duration: 240 })
-    })
+      void reactFlow.fitView({ padding: 0.2, duration: 240, includeHiddenNodes: true })
+    }, 50)
+
+    return () => clearTimeout(timeoutId)
   }, [flowNodes, focusedConversation, reactFlow])
 
   const canvasMenuItems = useMemo<MenuProps['items']>(

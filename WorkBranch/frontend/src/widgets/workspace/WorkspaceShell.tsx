@@ -96,6 +96,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         useTreeStore.getState().setFocusedConversationId(null)
         useTreeStore.getState().setSelectedConversationId(created?.conversationId ?? null)
       } catch (caughtError) {
+        console.error('[handleCreateConversation] error:', caughtError)
         onRequestError(caughtError)
       }
     },

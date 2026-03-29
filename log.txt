@@ -1,0 +1,126 @@
+Download the React DevTools for a better development experience: https://react.dev/link/react-devtools
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(0)
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(0)
+2ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 0 overviewLayoutMap: 0
+antd.js:416  Warning: [antd: Space] `direction` is deprecated. Please use `orientation` instead.
+warning$3 @ antd.js:416
+store.ts:110 [enterSessionContext] called with sessionDetail: Object
+store.ts:118 [enterSessionContext] summaries: Array(10)
+store.ts:130 [enterSessionContext] setting conversationNodes: 10 primaryConversationId: b4cea813-d659-4cc5-94b2-170eb076a1f2
+store.ts:110 [enterSessionContext] called with sessionDetail: Object
+store.ts:118 [enterSessionContext] summaries: Array(10)
+store.ts:130 [enterSessionContext] setting conversationNodes: 10 primaryConversationId: b4cea813-d659-4cc5-94b2-170eb076a1f2
+store.ts:142 [enterSessionContext] successfully loaded, conversationNodes count: 10
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(10)
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(10)
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 10 overviewLayoutMap: 10
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 10 overviewLayoutMap: 10
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+3ConversationCanvas.tsx:350 [fitView] calling fitView for 10 nodes
+store.ts:142 [enterSessionContext] successfully loaded, conversationNodes count: 10
+userscript.html?name=%25E3%2580%2590%25E4%25B8%2587%25E8%2583%25BD%25E3%2580%2591%25E5%2585%25A8%25E5%25B9%25B3%25E5%258F%25B0%25E8%2587%25AA%25E5%258A%25A8%25E7%25AD%2594%25E9%25A2%2598%25E8%2584%259A%25E6%259C%25AC.user.js&id=a62c87d5-ce3c-472b-b767-47c36a315d54:202 {"timestamp":1774774082369,"code":0,"message":"请求成功","result":[{"url":"https://cdn.lyck6.cn/adimg/1.png","hash":"dac9be2922bae22e327937613ec1fa50"},{"click":"https://www.itihey.com","url":"https://cdn.lyck6.cn/adimg/3.png","hash":"2bcca95ab6d2fad2765b5f5ef497172d"}]}
+WorkspaceShell.tsx:88 [handleCreateConversation] called with parentConversationId: null
+WorkspaceShell.tsx:91 [handleCreateConversation] created: Object
+WorkspaceShell.tsx:94 [handleCreateConversation] loading session detail for: 216
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(10)
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(10)
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 10 overviewLayoutMap: 10
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 10 overviewLayoutMap: 10
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+WorkspaceShell.tsx:96 [handleCreateConversation] loaded detail: Object
+store.ts:110 [enterSessionContext] called with sessionDetail: Object
+store.ts:118 [enterSessionContext] summaries: Array(11)
+store.ts:130 [enterSessionContext] setting conversationNodes: 11 primaryConversationId: 6da9ee81-c4ac-4b58-a66f-dd1618ee9824
+3ConversationCanvas.tsx:350 [fitView] calling fitView for 10 nodes
+store.ts:142 [enterSessionContext] successfully loaded, conversationNodes count: 11
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(11)
+ConversationCanvas.tsx:282 [overviewLayoutMap] computed, positions: Array(11)
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 11 overviewLayoutMap: 11
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 6da9ee81 position: Object
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 11 overviewLayoutMap: 11
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 6da9ee81 position: Object
+WorkspaceShell.tsx:98 [handleCreateConversation] enterSessionContext completed
+WorkspaceShell.tsx:103 [handleCreateConversation] done, conversationNodes: 11
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 11 overviewLayoutMap: 11
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 6da9ee81 position: Object
+ConversationCanvas.tsx:291 [flowNodes] computing, displayConversations: 11 overviewLayoutMap: 11
+ConversationCanvas.tsx:296 [flowNodes] node: 6c4e35e5 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: a3ff3f10 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0db64ec4 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 2ec27b9c position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: eb2ef0ed position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 13c7b101 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 9fbb0108 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 0b42b3b6 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 08a7cf72 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: b4cea813 position: Object
+ConversationCanvas.tsx:296 [flowNodes] node: 6da9ee81 position: Objectx: 3420y: 0[[Prototype]]: Object
+4ConversationCanvas.tsx:350 [fitView] calling fitView for 11 nodes
