@@ -134,7 +134,12 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
-        await useChatWorkbenchStore.getState().sendMessage(message, {
+        const targetConversationId = focusedConversationId ?? selectedConversationId
+        if (!targetConversationId) {
+          return
+        }
+
+        await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, {
           onStreamError(event) {
             if (event.content) {
               onSendError(String(event.content))
@@ -276,8 +281,14 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
               <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
               <StatusTag
-                label={selectedConversation ? `目标 ${selectedConversation.conversationId}` : '未选目标'}
-                tone={selectedConversation ? 'processing' : 'default'}
+                label={
+                  focusedConversation
+                    ? `目标 ${focusedConversation.conversationId}`
+                    : selectedConversation
+                      ? `目标 ${selectedConversation.conversationId}`
+                      : '未选目标'
+                }
+                tone={focusedConversation || selectedConversation ? 'processing' : 'default'}
               />
             </Space>
           </Space>

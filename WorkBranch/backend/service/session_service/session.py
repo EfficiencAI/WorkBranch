@@ -118,6 +118,40 @@ class SessionService:
             "task": task
         }
 
+    async def send_message_to_conversation(
+        self,
+        conversation_id: str,
+        message: str,
+        on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+    ) -> Dict[str, Any]:
+        conversation = self._dao.get_conversation_by_id(conversation_id)
+        if not conversation:
+            raise ValueError(f"Conversation {conversation_id} not found")
+
+        session = self.get_session(conversation.session_id)
+        if not session:
+            raise ValueError(f"Session {conversation.session_id} not found")
+
+        async with self._lock:
+            if self._conversation_creator.is_conversation_running(conversation_id):
+                raise RuntimeError(f"Conversation {conversation_id} is already running")
+
+            self._active_conversations[conversation.session_id] = conversation_id
+
+        self._dao.update_session_active_conversation(conversation.session_id, conversation_id)
+
+        task = await self._conversation_creator.send_user_message(
+            conversation_id=conversation_id,
+            message=message,
+            on_complete=on_complete,
+        )
+
+        return {
+            "conversation_id": conversation_id,
+            "session_id": conversation.session_id,
+            "task": task,
+        }
+
     async def end_conversation(self, session_id: int) -> int:
         async with self._lock:
             conversation_id = self._active_conversations.get(session_id)

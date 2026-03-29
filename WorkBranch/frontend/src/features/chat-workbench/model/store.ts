@@ -1,11 +1,12 @@
 import { create } from 'zustand'
-import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   fetchConversationDetail,
+  fetchConversationMessages,
   fetchSessionConversations,
   fetchWorkspaceDetail,
   getErrorMessage,
-  streamSessionMessage,
+  streamConversationMessage,
 } from '../../../shared/api'
 import type { ChatStreamEvent } from '../../../shared/api'
 import { isApiError } from '../../../shared/api'
@@ -47,16 +48,19 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   conversationDetail: null,
   workspaceDetail: null,
   conversationNodes: [],
+  conversationMessages: [],
   loading: false,
+  messagesLoading: false,
   streaming: false,
   error: null,
+  messagesError: null,
 
   clearError() {
     set({ error: null })
   },
 
   resetConversationState() {
-    set({ conversationDetail: null, workspaceDetail: null, conversationNodes: [] })
+    set({ conversationDetail: null, workspaceDetail: null, conversationNodes: [], conversationMessages: [] })
   },
 
   resetAll() {
@@ -64,9 +68,12 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       conversationDetail: null,
       workspaceDetail: null,
       conversationNodes: [],
+      conversationMessages: [],
       loading: false,
+      messagesLoading: false,
       streaming: false,
       error: null,
+      messagesError: null,
     })
   },
 
@@ -83,6 +90,19 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       throw caughtError
     } finally {
       set({ loading: false })
+    }
+  },
+
+  async loadConversationMessages(conversationId: string) {
+    try {
+      set({ messagesLoading: true, messagesError: null })
+      const conversationMessages = await fetchConversationMessages(conversationId)
+      set({ conversationMessages })
+    } catch (caughtError) {
+      set({ messagesError: getErrorMessage(caughtError, '对话消息加载失败') })
+      throw caughtError
+    } finally {
+      set({ messagesLoading: false })
     }
   },
 
@@ -108,9 +128,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
       if (primaryConversationId) {
         const bundle = await loadConversationDetailBundle(primaryConversationId)
-        set({ conversationDetail: bundle.detail, workspaceDetail: bundle.workspace })
+        const conversationMessages = await fetchConversationMessages(primaryConversationId)
+        set({ conversationDetail: bundle.detail, workspaceDetail: bundle.workspace, conversationMessages })
       } else {
-        set({ conversationDetail: null, workspaceDetail: null })
+        set({ conversationDetail: null, workspaceDetail: null, conversationMessages: [] })
       }
 
       return 'ready'
@@ -137,11 +158,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
   },
 
-  async sendMessage(messageText: string, handlers: SendMessageHandlers = {}) {
+  async sendMessageToConversation(conversationId: string, messageText: string, handlers: SendMessageHandlers = {}) {
     const { currentSessionId } = useSessionStore.getState()
-    const { conversationDetail } = get()
 
-    if (!currentSessionId || !conversationDetail) {
+    if (!currentSessionId) {
       return
     }
 
@@ -150,11 +170,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     try {
       set({ streaming: true })
 
-      await streamSessionMessage(
-        currentSessionId,
+      await streamConversationMessage(
+        conversationId,
         {
           message: messageText,
-          workspace_id: conversationDetail.workspaceId,
         },
         {
           signal,
@@ -167,7 +186,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         },
       )
 
-      await get().loadChatWorkbench(currentSessionId)
+      await Promise.all([
+        get().loadConversationBundle(conversationId),
+        get().loadConversationMessages(conversationId),
+      ])
+
+      const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+      const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+      const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+      set({ conversationNodes })
     } finally {
       set({ streaming: false })
     }

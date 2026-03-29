@@ -5,8 +5,16 @@ import { Button, Card, Dropdown, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useEffect, useMemo } from 'react'
 import { useSettings } from '../../app/settings'
-import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
-import { selectFocusedConversationId, selectSelectedConversationId, useTreeStore } from '../../features'
+import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
+import {
+  selectChatWorkbenchConversationMessages,
+  selectChatWorkbenchMessagesError,
+  selectChatWorkbenchMessagesLoading,
+  selectFocusedConversationId,
+  selectSelectedConversationId,
+  useChatWorkbenchStore,
+  useTreeStore,
+} from '../../features'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { MessageComposer } from './MessageComposer'
 
@@ -44,6 +52,45 @@ function summarizeConversation(conversation: ConversationNode) {
   return '空对话'
 }
 
+function renderMessageRole(role: MessageNode['role']) {
+  switch (role) {
+    case 'system':
+      return '系统'
+    case 'user':
+      return '用户'
+    case 'assistant':
+      return '助手'
+    case 'tool':
+      return '工具'
+    default:
+      return role
+  }
+}
+
+function buildFocusContext(conversationNodes: ConversationNode[], focusedConversationId: string | null) {
+  if (!focusedConversationId) {
+    return conversationNodes
+  }
+
+  const focusedConversation = conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId)
+  if (!focusedConversation) {
+    return conversationNodes
+  }
+
+  const relatedIds = new Set<string>([focusedConversationId])
+  if (focusedConversation.parentConversationId) {
+    relatedIds.add(focusedConversation.parentConversationId)
+  }
+
+  conversationNodes
+    .filter((conversation) => conversation.parentConversationId === focusedConversationId)
+    .forEach((conversation) => {
+      relatedIds.add(conversation.conversationId)
+    })
+
+  return conversationNodes.filter((conversation) => relatedIds.has(conversation.conversationId))
+}
+
 function buildTreeLayout(conversationNodes: ConversationNode[]) {
   const childMap = new Map<string | null, ConversationNode[]>()
   for (const conversation of conversationNodes) {
@@ -56,8 +103,7 @@ function buildTreeLayout(conversationNodes: ConversationNode[]) {
   for (const siblings of childMap.values()) {
     siblings.sort(
       (left, right) =>
-        (left.createdAt ?? '').localeCompare(right.createdAt ?? '') ||
-        left.conversationId.localeCompare(right.conversationId),
+        (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
     )
   }
 
@@ -100,6 +146,40 @@ function buildTreeLayout(conversationNodes: ConversationNode[]) {
 
   return positions
 }
+
+function buildFocusLayout(displayConversations: ConversationNode[], focusedConversationId: string) {
+  const focusedConversation = displayConversations.find((conversation) => conversation.conversationId === focusedConversationId)
+  const positions = new Map<string, { x: number; y: number }>()
+
+  positions.set(focusedConversationId, { x: 260, y: 180 })
+
+  if (focusedConversation?.parentConversationId) {
+    const parent = displayConversations.find((conversation) => conversation.conversationId === focusedConversation.parentConversationId)
+    if (parent) {
+      positions.set(parent.conversationId, { x: 260, y: 0 })
+    }
+  }
+
+  const children = displayConversations.filter((conversation) => conversation.parentConversationId === focusedConversationId)
+  children.forEach((conversation, index) => {
+    positions.set(conversation.conversationId, {
+      x: index * 280,
+      y: 360,
+    })
+  })
+
+  displayConversations.forEach((conversation, index) => {
+    if (!positions.has(conversation.conversationId)) {
+      positions.set(conversation.conversationId, {
+        x: index * 280,
+        y: 0,
+      })
+    }
+  })
+
+  return positions
+}
+
 
 function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const { conversation, focused, selected, onClick, onDoubleClick, onCreateChildConversation } = data
@@ -188,38 +268,28 @@ function FlowViewport({
     () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
+  const chatMessages = useChatWorkbenchStore(selectChatWorkbenchConversationMessages)
+  const messagesLoading = useChatWorkbenchStore(selectChatWorkbenchMessagesLoading)
+  const messagesError = useChatWorkbenchStore(selectChatWorkbenchMessagesError)
+
   const displayConversations = useMemo(
-    () => (focusedConversation ? [focusedConversation] : conversationNodes),
-    [focusedConversation, conversationNodes],
+    () => (focusedConversation ? buildFocusContext(conversationNodes, focusedConversationId) : conversationNodes),
+    [conversationNodes, focusedConversation, focusedConversationId],
   )
-  const layoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
+
+  const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
+  const focusLayoutMap = useMemo(
+    () => (focusedConversationId ? buildFocusLayout(displayConversations, focusedConversationId) : new Map<string, { x: number; y: number }>()),
+    [displayConversations, focusedConversationId],
+  )
 
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
-    if (focusedConversation) {
-      return [
-        {
-          id: focusedConversation.conversationId,
-          type: 'conversation',
-          position: { x: 0, y: 0 },
-          data: {
-            conversation: focusedConversation,
-            focused: true,
-            selected: storeSelectedConversationId === focusedConversation.conversationId,
-            onClick: setSelectedConversationId,
-            onDoubleClick: setFocusedConversationId,
-            onCreateChildConversation: (parentConversationId) => {
-              void onCreateConversation(parentConversationId)
-            },
-          },
-          draggable: false,
-        },
-      ]
-    }
-
     return displayConversations.map((conversation) => ({
       id: conversation.conversationId,
       type: 'conversation',
-      position: layoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 },
+      position: focusedConversation
+        ? focusLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 }
+        : overviewLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 },
       data: {
         conversation,
         focused: storeFocusedConversationId === conversation.conversationId,
@@ -234,9 +304,10 @@ function FlowViewport({
     }))
   }, [
     displayConversations,
+    focusLayoutMap,
     focusedConversation,
-    layoutMap,
     onCreateConversation,
+    overviewLayoutMap,
     setFocusedConversationId,
     setSelectedConversationId,
     storeFocusedConversationId,
@@ -244,19 +315,16 @@ function FlowViewport({
   ])
 
   const flowEdges = useMemo<Edge[]>(() => {
-    if (focusedConversation) {
-      return []
-    }
-
     return displayConversations
       .filter((conversation) => conversation.parentConversationId)
+      .filter((conversation) => displayConversations.some((item) => item.conversationId === conversation.parentConversationId))
       .map((conversation) => ({
         id: `${conversation.parentConversationId}-${conversation.conversationId}`,
         source: conversation.parentConversationId as string,
         target: conversation.conversationId,
-        animated: selectedConversationId === conversation.conversationId,
+        animated: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId,
       }))
-  }, [displayConversations, focusedConversation, selectedConversationId])
+  }, [displayConversations, focusedConversationId, selectedConversationId])
 
   useEffect(() => {
     if (!flowNodes.length) {
@@ -306,7 +374,7 @@ function FlowViewport({
               <StatusTag label={focusedConversation ? '聚焦态' : '概览态'} tone={focusedConversation ? 'success' : 'default'} />
             </Space>
             <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-              {focusedConversation ? '当前处于对话聚焦态；仅展示该对话卡片，消息列表将在后续阶段补齐。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
+              {focusedConversation ? '当前处于对话聚焦态；展示当前对话消息，并保留父子节点作为上下文锚点。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
             </Typography.Text>
           </div>
         ) : null}
@@ -381,10 +449,51 @@ function FlowViewport({
                     </Button>
                   </Space>
                 </Space>
+
                 <div className="conversation-canvas__focused-content">
-                  <Typography.Paragraph className="conversation-canvas__focused-text">
-                    当前聚焦的是对话节点。完整消息列表将在阶段三接入，这一阶段仅完成主画布 ConversationNode 迁移。
-                  </Typography.Paragraph>
+                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                    <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                      <Typography.Text strong>消息列表</Typography.Text>
+                      <StatusTag
+                        label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${chatMessages.length} 条`}
+                        tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
+                      />
+                    </Space>
+
+                    {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
+
+                    {!messagesLoading && !messagesError && chatMessages.length === 0 ? (
+                      <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text>
+                    ) : null}
+
+                    {!messagesError && chatMessages.length ? (
+                      <div className="conversation-canvas__focused-messages">
+                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                          {chatMessages.map((message) => (
+                            <Card key={message.id} size="small" className="conversation-canvas__focused-message">
+                              <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                                  <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
+                                  <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
+                                </Space>
+                                <Typography.Paragraph style={{ marginBottom: 0 }}>{message.content}</Typography.Paragraph>
+                              </Space>
+                            </Card>
+                          ))}
+                        </Space>
+                      </div>
+                    ) : null}
+
+                    <div className="conversation-canvas__focused-composer">
+                      <MessageComposer
+                        workspaceId={conversationDetail?.workspaceId ?? null}
+                        selectedConversationId={focusedConversation.conversationId}
+                        selectedConversationLabel={summarizeConversation(focusedConversation)}
+                        sending={sending}
+                        onSend={onSendMessage}
+                      />
+                    </div>
+                  </Space>
                 </div>
               </Space>
             </Card>

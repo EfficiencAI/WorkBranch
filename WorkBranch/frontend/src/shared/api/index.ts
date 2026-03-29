@@ -12,6 +12,7 @@ export {
   fetchSessions,
   fetchWorkspaceDetail,
   patchSessionActiveConversation,
+  streamConversationMessage,
   streamSessionMessage,
 } from './workspace'
 export { fetchUserProfile, updateUserName } from './user'

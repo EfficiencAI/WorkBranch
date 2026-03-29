@@ -1,8 +1,11 @@
 export {
   selectChatWorkbenchConversationDetail,
+  selectChatWorkbenchConversationMessages,
   selectChatWorkbenchConversationNodes,
   selectChatWorkbenchError,
   selectChatWorkbenchLoading,
+  selectChatWorkbenchMessagesError,
+  selectChatWorkbenchMessagesLoading,
   selectChatWorkbenchStreaming,
   selectChatWorkbenchWorkspaceDetail,
 } from './model/selectors'

@@ -211,3 +211,62 @@ export async function streamSessionMessage(
     }
   }
 }
+
+export async function streamConversationMessage(
+  conversationId: string,
+  body: { message: string },
+  handlers: {
+    onEvent?: (event: ChatStreamEvent) => void
+    signal?: AbortSignal
+  } = {},
+) {
+  const response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+    signal: handlers.signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw new ApiError(`请求失败：${response.status}`, { status: response.status })
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() ?? ''
+
+    for (const chunk of chunks) {
+      const line = chunk
+        .split('\n')
+        .map((item) => item.trim())
+        .find((item) => item.startsWith('data:'))
+
+      if (!line) {
+        continue
+      }
+
+      const raw = line.slice(5).trim()
+      if (!raw) {
+        continue
+      }
+
+      try {
+        handlers.onEvent?.(JSON.parse(raw) as ChatStreamEvent)
+      } catch {
+        handlers.onEvent?.({ type: 'message', content: raw })
+      }
+    }
+  }
+}
