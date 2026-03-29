@@ -1,9 +1,8 @@
 import { Background, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Dropdown, Space, Typography } from 'antd'
-import type { MenuProps } from 'antd'
-import { useEffect, useMemo } from 'react'
+import { Button, Card, Space, Typography } from 'antd'
+import { useCallback, useEffect, useMemo } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
 import {
@@ -16,6 +15,7 @@ import {
   useTreeStore,
 } from '../../features'
 import { EmptyState, StatusTag } from '../../shared/ui'
+import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
 
 type ConversationCanvasProps = {
@@ -37,7 +37,6 @@ type FlowNodeData = {
   selected: boolean
   onClick: (conversationId: string) => void
   onDoubleClick: (conversationId: string) => void
-  onCreateChildConversation: (parentConversationId: string) => void
 }
 
 function summarizeConversation(conversation: ConversationNode) {
@@ -182,53 +181,36 @@ function buildFocusLayout(displayConversations: ConversationNode[], focusedConve
 
 
 function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
-  const { conversation, focused, selected, onClick, onDoubleClick, onCreateChildConversation } = data
-  const menuItems: MenuProps['items'] = [
-    {
-      key: 'create-child-conversation',
-      label: '创建子对话',
-    },
-  ]
+  const { conversation, focused, selected, onClick, onDoubleClick } = data
 
   return (
-    <Dropdown
-      menu={{
-        items: menuItems,
-        onClick: ({ key }) => {
-          if (key === 'create-child-conversation') {
-            onCreateChildConversation(conversation.conversationId)
-          }
-        },
-      }}
-      trigger={['contextMenu']}
+    <button
+      type="button"
+      className={focused ? 'conversation-node conversation-node--focused' : selected ? 'conversation-node conversation-node--selected' : 'conversation-node'}
+      onClick={() => onClick(conversation.conversationId)}
+      onDoubleClick={() => onDoubleClick(conversation.conversationId)}
+      data-conversation-id={conversation.conversationId}
+      aria-label={`查看对话 ${conversation.conversationId}`}
     >
-      <button
-        type="button"
-        className={focused ? 'conversation-node conversation-node--focused' : selected ? 'conversation-node conversation-node--selected' : 'conversation-node'}
-        onClick={() => onClick(conversation.conversationId)}
-        onDoubleClick={() => onDoubleClick(conversation.conversationId)}
-        aria-label={`查看对话 ${conversation.conversationId}`}
-      >
-        <Card size="small" className="conversation-node__card conversation-node__card--assistant">
-          <Space direction="vertical" size={10} style={{ width: '100%' }}>
-            <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-              <Space direction="vertical" size={2}>
-                <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
-                <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
-              </Space>
-              <StatusTag
-                label={focused ? 'focused' : selected ? 'selected' : conversation.state}
-                tone={focused ? 'warning' : selected ? 'processing' : 'default'}
-              />
+      <Card size="small" className="conversation-node__card conversation-node__card--assistant">
+        <Space direction="vertical" size={10} style={{ width: '100%' }}>
+          <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+            <Space direction="vertical" size={2}>
+              <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
+              <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
             </Space>
-            <Space wrap>
-              <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
-              {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
-            </Space>
+            <StatusTag
+              label={focused ? 'focused' : selected ? 'selected' : conversation.state}
+              tone={focused ? 'warning' : selected ? 'processing' : 'default'}
+            />
           </Space>
-        </Card>
-      </button>
-    </Dropdown>
+          <Space wrap>
+            <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
+            {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
+          </Space>
+        </Space>
+      </Card>
+    </button>
   )
 }
 
@@ -296,9 +278,6 @@ function FlowViewport({
         selected: storeSelectedConversationId === conversation.conversationId,
         onClick: setSelectedConversationId,
         onDoubleClick: setFocusedConversationId,
-        onCreateChildConversation: (parentConversationId: string) => {
-          void onCreateConversation(parentConversationId)
-        },
       },
       draggable: false,
     }))
@@ -306,7 +285,6 @@ function FlowViewport({
     displayConversations,
     focusLayoutMap,
     focusedConversation,
-    onCreateConversation,
     overviewLayoutMap,
     setFocusedConversationId,
     setSelectedConversationId,
@@ -343,189 +321,193 @@ function FlowViewport({
     return () => clearTimeout(timeoutId)
   }, [flowNodes, focusedConversation, reactFlow])
 
-  const canvasMenuItems = useMemo<MenuProps['items']>(
-    () => [
-      {
-        key: 'create-root-conversation',
-        label: '创建根对话',
-      },
-    ],
-    [],
+  const { setContextMenu } = useContextMenu()
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault()
+
+      const target = event.target as HTMLElement
+      const nodeElement = target.closest('[data-conversation-id]')
+
+      if (nodeElement) {
+        const conversationId = nodeElement.getAttribute('data-conversation-id')
+        setContextMenu({
+          type: 'node',
+          conversationId: conversationId!,
+          position: { x: event.clientX, y: event.clientY },
+        })
+      } else {
+        setContextMenu({
+          type: 'canvas',
+          position: { x: event.clientX, y: event.clientY },
+        })
+      }
+    },
+    [setContextMenu],
   )
 
   return (
-    <Dropdown
-      menu={{
-        items: canvasMenuItems,
-        onClick: ({ key }) => {
-          if (key === 'create-root-conversation') {
-            void onCreateConversation(null)
-          }
-        },
-      }}
-      trigger={['contextMenu']}
-    >
-      <div className="conversation-canvas__viewport">
-        {showDebugOverlay ? (
-          <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
-            <Space wrap>
-              <StatusTag label={`session ${currentSessionId ?? 'N/A'}`} tone="default" />
-              <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
-              <StatusTag label={`对话 ${conversationNodes.length}`} tone="processing" />
-              <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
-              <StatusTag label={focusedConversation ? '聚焦态' : '概览态'} tone={focusedConversation ? 'success' : 'default'} />
-            </Space>
-            <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-              {focusedConversation ? '当前处于对话聚焦态；展示当前对话消息，并保留父子节点作为上下文锚点。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
-            </Typography.Text>
-          </div>
-        ) : null}
-
-        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
-          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomOut({ duration: 180 })} disabled={Boolean(focusedConversation)}>
-            -
-          </Button>
-          <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomIn({ duration: 180 })} disabled={Boolean(focusedConversation)}>
-            +
-          </Button>
-          <Button
-            className="conversation-canvas__control-button"
-            onClick={() => {
-              if (focusedConversation) {
-                setFocusedConversationId(null)
-                return
-              }
-
-              void reactFlow.fitView({ padding: 0.2, duration: 240 })
-            }}
-          >
-            {focusedConversation ? '返回' : '适配'}
-          </Button>
+    <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu}>
+      {showDebugOverlay ? (
+        <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
+          <Space wrap>
+            <StatusTag label={`session ${currentSessionId ?? 'N/A'}`} tone="default" />
+            <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
+            <StatusTag label={`对话 ${conversationNodes.length}`} tone="processing" />
+            <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
+            <StatusTag label={focusedConversation ? '聚焦态' : '概览态'} tone={focusedConversation ? 'success' : 'default'} />
+          </Space>
+          <Typography.Text type="secondary" className="conversation-canvas__meta-text">
+            {focusedConversation ? '当前处于对话聚焦态；展示当前对话消息，并保留父子节点作为上下文锚点。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
+          </Typography.Text>
         </div>
+      ) : null}
 
-        <ReactFlow
-          className="conversation-canvas__flow"
-          nodes={flowNodes}
-          edges={flowEdges}
-          nodeTypes={nodeTypes}
-          fitView
-          nodesDraggable={false}
-          panOnDrag={!focusedConversation}
-          zoomOnScroll={!focusedConversation}
-          zoomOnPinch={!focusedConversation}
-          zoomOnDoubleClick={!focusedConversation}
-          nodesConnectable={false}
-          elementsSelectable
-          onNodeClick={(_, node) => setSelectedConversationId(node.id)}
-          onPaneClick={() => {
-            if (!focusedConversation) {
-              setSelectedConversationId(null)
+      <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
+        <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomOut({ duration: 180 })} disabled={Boolean(focusedConversation)}>
+          -
+        </Button>
+        <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomIn({ duration: 180 })} disabled={Boolean(focusedConversation)}>
+          +
+        </Button>
+        <Button
+          className="conversation-canvas__control-button"
+          onClick={() => {
+            if (focusedConversation) {
+              setFocusedConversationId(null)
+              return
             }
+
+            void reactFlow.fitView({ padding: 0.2, duration: 240 })
           }}
-          proOptions={{ hideAttribution: true }}
         >
-          <Background gap={32} size={1} color="var(--app-grid-color)" />
-        </ReactFlow>
+          {focusedConversation ? '返回' : '适配'}
+        </Button>
+      </div>
 
-        {!conversationNodes.length ? (
-          <div className="conversation-canvas__focused-empty-state">
-            <EmptyState title="当前 session 暂无对话节点" description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'} />
-          </div>
-        ) : null}
+      <ReactFlow
+        className="conversation-canvas__flow"
+        nodes={flowNodes}
+        edges={flowEdges}
+        nodeTypes={nodeTypes}
+        fitView
+        nodesDraggable={false}
+        panOnDrag={!focusedConversation}
+        zoomOnScroll={!focusedConversation}
+        zoomOnPinch={!focusedConversation}
+        zoomOnDoubleClick={!focusedConversation}
+        nodesConnectable={false}
+        elementsSelectable
+        onNodeClick={(_, node) => setSelectedConversationId(node.id)}
+        onPaneClick={() => {
+          if (!focusedConversation) {
+            setSelectedConversationId(null)
+          }
+        }}
+        proOptions={{ hideAttribution: true }}
+      >
+        <Background gap={32} size={1} color="var(--app-grid-color)" />
+      </ReactFlow>
 
-        {focusedConversation ? (
-          <div className="conversation-canvas__focused-panel">
-            <Card size="small" className="conversation-node__card conversation-node__card--assistant">
-              <Space direction="vertical" size={16} style={{ width: '100%' }}>
-                <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Space direction="vertical" size={4}>
-                    <Typography.Text strong>{summarizeConversation(focusedConversation)}</Typography.Text>
-                    <Typography.Text type="secondary">{focusedConversation.conversationId}</Typography.Text>
-                  </Space>
-                  <Space wrap>
-                    <Button size="small" onClick={() => void onCreateConversation(focusedConversation.conversationId)}>
-                      创建子对话
-                    </Button>
-                    <Button size="small" onClick={() => setFocusedConversationId(null)}>
-                      退出聚焦态
-                    </Button>
-                  </Space>
+      {!conversationNodes.length ? (
+        <div className="conversation-canvas__focused-empty-state">
+          <EmptyState title="当前 session 暂无对话节点" description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'} />
+        </div>
+      ) : null}
+
+      {focusedConversation ? (
+        <div className="conversation-canvas__focused-panel">
+          <Card size="small" className="conversation-node__card conversation-node__card--assistant">
+            <Space direction="vertical" size={16} style={{ width: '100%' }}>
+              <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                <Space direction="vertical" size={4}>
+                  <Typography.Text strong>{summarizeConversation(focusedConversation)}</Typography.Text>
+                  <Typography.Text type="secondary">{focusedConversation.conversationId}</Typography.Text>
                 </Space>
+                <Space wrap>
+                  <Button size="small" onClick={() => void onCreateConversation(focusedConversation.conversationId)}>
+                    创建子对话
+                  </Button>
+                  <Button size="small" onClick={() => setFocusedConversationId(null)}>
+                    退出聚焦态
+                  </Button>
+                </Space>
+              </Space>
 
-                <div className="conversation-canvas__focused-content">
-                  <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                      <Typography.Text strong>消息列表</Typography.Text>
-                      <StatusTag
-                        label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${chatMessages.length} 条`}
-                        tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
-                      />
-                    </Space>
+              <div className="conversation-canvas__focused-content">
+                <Space direction="vertical" size={12} style={{ width: '100%' }}>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                    <Typography.Text strong>消息列表</Typography.Text>
+                    <StatusTag
+                      label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${chatMessages.length} 条`}
+                      tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
+                    />
+                  </Space>
 
-                    {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
+                  {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
 
-                    {!messagesLoading && !messagesError && chatMessages.length === 0 ? (
-                      <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text>
-                    ) : null}
+                  {!messagesLoading && !messagesError && chatMessages.length === 0 ? (
+                    <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text>
+                  ) : null}
 
-                    {!messagesError && chatMessages.length ? (
-                      <div className="conversation-canvas__focused-messages">
-                        <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                          {chatMessages.map((message) => (
-                            <Card key={message.id} size="small" className="conversation-canvas__focused-message">
-                              <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                                  <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
-                                  <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
-                                </Space>
-                                <Typography.Paragraph style={{ marginBottom: 0 }}>{message.content}</Typography.Paragraph>
+                  {!messagesError && chatMessages.length ? (
+                    <div className="conversation-canvas__focused-messages">
+                      <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                        {chatMessages.map((message) => (
+                          <Card key={message.id} size="small" className="conversation-canvas__focused-message">
+                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                              <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                                <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
+                                <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
                               </Space>
-                            </Card>
-                          ))}
-                        </Space>
-                      </div>
-                    ) : null}
-
-                    <div className="conversation-canvas__focused-composer">
-                      <MessageComposer
-                        workspaceId={conversationDetail?.workspaceId ?? null}
-                        selectedConversationId={focusedConversation.conversationId}
-                        selectedConversationLabel={summarizeConversation(focusedConversation)}
-                        sending={sending}
-                        onSend={onSendMessage}
-                      />
+                              <Typography.Paragraph style={{ marginBottom: 0 }}>{message.content}</Typography.Paragraph>
+                            </Space>
+                          </Card>
+                        ))}
+                      </Space>
                     </div>
-                  </Space>
-                </div>
-              </Space>
-            </Card>
-          </div>
-        ) : null}
+                  ) : null}
 
-        <div className="conversation-canvas__composer-shell">
-          <div className="conversation-node conversation-node--composer">
-            <Card size="small" className="conversation-node__card conversation-node__card--composer">
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Space wrap>
-                    <Typography.Text strong>全局底部输入区</Typography.Text>
-                    <Typography.Text type="secondary">Selected Conversation</Typography.Text>
-                  </Space>
-                  <StatusTag label={sending ? '发送中' : selectedConversation ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation ? 'success' : 'default'} />
+                  <div className="conversation-canvas__focused-composer">
+                    <MessageComposer
+                      workspaceId={conversationDetail?.workspaceId ?? null}
+                      selectedConversationId={focusedConversation.conversationId}
+                      selectedConversationLabel={summarizeConversation(focusedConversation)}
+                      sending={sending}
+                      onSend={onSendMessage}
+                    />
+                  </div>
                 </Space>
-                <MessageComposer
-                  workspaceId={conversationDetail?.workspaceId ?? null}
-                  selectedConversationId={selectedConversation?.conversationId ?? null}
-                  selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
-                  sending={sending}
-                  onSend={onSendMessage}
-                />
+              </div>
+            </Space>
+          </Card>
+        </div>
+      ) : null}
+
+      <div className="conversation-canvas__composer-shell">
+        <div className="conversation-node conversation-node--composer">
+          <Card size="small" className="conversation-node__card conversation-node__card--composer">
+            <Space direction="vertical" size={12} style={{ width: '100%' }}>
+              <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                <Space wrap>
+                  <Typography.Text strong>全局底部输入区</Typography.Text>
+                  <Typography.Text type="secondary">Selected Conversation</Typography.Text>
+                </Space>
+                <StatusTag label={sending ? '发送中' : selectedConversation ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation ? 'success' : 'default'} />
               </Space>
-            </Card>
-          </div>
+              <MessageComposer
+                workspaceId={conversationDetail?.workspaceId ?? null}
+                selectedConversationId={selectedConversation?.conversationId ?? null}
+                selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
+                sending={sending}
+                onSend={onSendMessage}
+              />
+            </Space>
+          </Card>
         </div>
       </div>
-    </Dropdown>
+    </div>
   )
 }
 
@@ -538,7 +520,10 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
       </div>
 
       <ReactFlowProvider>
-        <FlowViewport {...props} />
+        <ContextMenuProvider>
+          <FlowViewport {...props} />
+          <ContextMenu onCreateConversation={props.onCreateConversation} />
+        </ContextMenuProvider>
       </ReactFlowProvider>
     </section>
   )
