@@ -56,6 +56,21 @@ DEFAULT_SETTINGS = {
         "memory_mode": "accumulate",
         "memory_window_size": 3
     },
+    "logging": {
+        "enabled": True,
+        "level": "INFO",
+        "base_dir": "logs",
+        "max_file_size_mb": 10,
+        "conversation_content": {
+            "enabled": True
+        },
+        "sensitive_fields": ["api_key", "token", "password", "secret", "key"],
+        "retention": {
+            "enabled": False,
+            "max_runs": None,
+            "max_days": None
+        }
+    },
     "tool_permissions": {
         "build_agent": {
             "allowed": ["read_file", "write_file", "list_dir", "create_dir", "explore_code", "thinking", "call_explore_agent", "call_review_agent"],

@@ -103,5 +103,26 @@
             ],
             "forbidden": []
         }
+    },
+    "logging": {
+        "enabled": true,
+        "level": "INFO",
+        "base_dir": "logs",
+        "max_file_size_mb": 10,
+        "conversation_content": {
+            "enabled": true
+        },
+        "sensitive_fields": [
+            "api_key",
+            "token",
+            "password",
+            "secret",
+            "key"
+        ],
+        "retention": {
+            "enabled": false,
+            "max_runs": null,
+            "max_days": null
+        }
     }
 }
