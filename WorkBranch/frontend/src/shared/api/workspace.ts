@@ -81,26 +81,26 @@ function toWorkspaceDetail(payload: Record<string, unknown>): WorkspaceDetail {
 }
 
 export async function createSession(title = '新会话') {
-  const data = await post<Record<string, unknown>>(`/api/chat/sessions?title=${encodeURIComponent(title)}`)
+  const data = await post<Record<string, unknown>>(`/api/session/sessions?title=${encodeURIComponent(title)}`)
   return toSessionDetail(data)
 }
 
 export async function fetchSessions() {
-  const data = await get<Array<Record<string, unknown>>>('/api/chat/sessions')
+  const data = await get<Array<Record<string, unknown>>>('/api/session/sessions')
   return data.map(toSessionSummary)
 }
 
 export async function deleteSession(sessionId: string | number) {
-  await del(`/api/chat/sessions/${sessionId}`)
+  await del(`/api/session/sessions/${sessionId}`)
 }
 
 export async function fetchSessionDetail(sessionId: string | number) {
-  const data = await get<Record<string, unknown>>(`/api/chat/sessions/${sessionId}`)
+  const data = await get<Record<string, unknown>>(`/api/session/sessions/${sessionId}`)
   return toSessionDetail(data)
 }
 
 export async function patchSessionActiveConversation(sessionId: string | number, activeConversationId: string | null) {
-  const data = await patch<Record<string, unknown>>(`/api/chat/sessions/${sessionId}`, {
+  const data = await patch<Record<string, unknown>>(`/api/session/sessions/${sessionId}`, {
     active_conversation_id: activeConversationId,
   })
   return toSessionDetail(data)
@@ -111,7 +111,7 @@ export async function createConversation(
   workspaceId?: string | null,
   parentConversationId?: string | null,
 ) {
-  const data = await post<Record<string, unknown>, { workspace_id?: string | null; parent_conversation_id?: string | null }>(`/api/chat/sessions/${sessionId}/conversations`, {
+  const data = await post<Record<string, unknown>, { workspace_id?: string | null; parent_conversation_id?: string | null }>(`/api/session/sessions/${sessionId}/conversations`, {
     workspace_id: workspaceId,
     parent_conversation_id: parentConversationId,
   })
@@ -127,17 +127,17 @@ export async function createConversation(
 }
 
 export async function fetchSessionConversations(sessionId: string | number) {
-  const data = await get<Array<Record<string, unknown>>>(`/api/chat/sessions/${sessionId}/conversations`)
+  const data = await get<Array<Record<string, unknown>>>(`/api/session/sessions/${sessionId}/conversations`)
   return data.map(toConversationSummary)
 }
 
 export async function fetchConversationDetail(conversationId: string) {
-  const data = await get<Record<string, unknown>>(`/api/chat/conversations/${conversationId}`)
+  const data = await get<Record<string, unknown>>(`/api/session/conversations/${conversationId}`)
   return toConversationDetail(data)
 }
 
 export async function fetchConversationMessages(conversationId: string) {
-  const data = await get<Array<Record<string, unknown>>>(`/api/chat/conversations/${conversationId}/messages`)
+  const data = await get<Array<Record<string, unknown>>>(`/api/session/conversations/${conversationId}/messages`)
   return data.map(toMessageNode)
 }
 
@@ -161,7 +161,7 @@ export async function streamConversationMessage(
     signal?: AbortSignal
   } = {},
 ) {
-  const response = await fetch(`/api/chat/conversations/${conversationId}/messages`, {
+  const response = await fetch(`/api/session/conversations/${conversationId}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

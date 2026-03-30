@@ -6,7 +6,7 @@ from singleton import get_session_service
 from service.session_service.session import SessionService
 from controller.VO.result import Result
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(prefix="/session", tags=["session"])
 
 
 class UpdateSessionBody(BaseModel):

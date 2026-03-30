@@ -11,7 +11,7 @@ from service.session_service.session import SessionService
 from service.session_service.mq import MessageQueue, MessageType
 from controller.VO.result import Result
 
-router = APIRouter(prefix="/chat/conversations", tags=["conversations"])
+router = APIRouter(prefix="/session/conversations", tags=["conversations"])
 
 
 class SendConversationMessageBody(BaseModel):
