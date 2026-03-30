@@ -26,19 +26,17 @@ class SessionService:
         self._conversation_creator: ConversationCreator = get_conversation_creator()
         self._conversation_buffer: ConversationBuffer = get_conversation_buffer()
         self._dao: ConversationDAO = get_conversation_dao()
-        self._active_conversations: Dict[int, str] = {}
         self._lock = asyncio.Lock()
 
     def create_session(self, title: str = "新会话") -> Session:
         return self._session_history.create_session(title)
 
     def delete_session(self, session_id: int) -> bool:
+        conversations = self._dao.list_conversations_by_session(session_id)
+
         async def _async_delete():
-            async with self._lock:
-                if session_id in self._active_conversations:
-                    conv_id = self._active_conversations[session_id]
-                    await self._conversation_creator.cancel_conversation(conv_id)
-                    del self._active_conversations[session_id]
+            for conversation in conversations:
+                await self._conversation_creator.cancel_conversation(conversation.id)
 
         try:
             loop = asyncio.get_event_loop()
@@ -87,37 +85,6 @@ class SessionService:
             "parent_conversation_id": parent_conversation_id,
         }
 
-    async def send_message(
-        self,
-        session_id: int,
-        message: str,
-        workspace_id: Optional[str] = None,
-        on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
-    ) -> Dict[str, Any]:
-        async with self._lock:
-            conversation_id = self._active_conversations.get(session_id)
-
-            if conversation_id is None:
-                conversation_id = await self._conversation_creator.create_conversation(
-                    session_id=session_id,
-                    workspace_id=workspace_id
-                )
-                self._active_conversations[session_id] = conversation_id
-            elif self._conversation_creator.is_conversation_running(conversation_id):
-                raise RuntimeError(f"Session {session_id} has a running conversation")
-
-        task = await self._conversation_creator.send_user_message(
-            conversation_id=conversation_id,
-            message=message,
-            on_complete=on_complete
-        )
-
-        return {
-            "conversation_id": conversation_id,
-            "session_id": session_id,
-            "task": task
-        }
-
     async def send_message_to_conversation(
         self,
         conversation_id: str,
@@ -136,8 +103,6 @@ class SessionService:
             if self._conversation_creator.is_conversation_running(conversation_id):
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-            self._active_conversations[conversation.session_id] = conversation_id
-
         self._dao.update_session_active_conversation(conversation.session_id, conversation_id)
 
         task = await self._conversation_creator.send_user_message(
@@ -152,27 +117,31 @@ class SessionService:
             "task": task,
         }
 
-    async def end_conversation(self, session_id: int) -> int:
-        async with self._lock:
-            conversation_id = self._active_conversations.get(session_id)
-            if conversation_id is None:
-                return 0
+    async def end_conversation(self, conversation_id: str) -> int:
+        conversation = self._dao.get_conversation_by_id(conversation_id)
+        if not conversation:
+            return 0
 
-            flushed_count = await self._conversation_creator.end_conversation(conversation_id)
-            del self._active_conversations[session_id]
+        flushed_count = await self._conversation_creator.end_conversation(conversation_id)
 
-            return flushed_count
+        session = self.get_session(conversation.session_id)
+        if session and session.active_conversation_id == conversation_id:
+            self._dao.update_session_active_conversation(conversation.session_id, None)
 
-    async def cancel_conversation(self, session_id: int) -> bool:
-        async with self._lock:
-            conversation_id = self._active_conversations.get(session_id)
-            if conversation_id is None:
-                return False
+        return flushed_count
 
-            result = await self._conversation_creator.cancel_conversation(conversation_id)
-            del self._active_conversations[session_id]
+    async def cancel_conversation(self, conversation_id: str) -> bool:
+        conversation = self._dao.get_conversation_by_id(conversation_id)
+        if not conversation:
+            return False
 
-            return result
+        result = await self._conversation_creator.cancel_conversation(conversation_id)
+
+        session = self.get_session(conversation.session_id)
+        if session and session.active_conversation_id == conversation_id:
+            self._dao.update_session_active_conversation(conversation.session_id, None)
+
+        return result
 
     def get_active_conversation_id(self, session_id: int) -> Optional[str]:
         session = self.get_session(session_id)

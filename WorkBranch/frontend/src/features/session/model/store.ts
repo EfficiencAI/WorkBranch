@@ -1,12 +1,14 @@
 import { create } from 'zustand'
 import type { SessionId } from '../../../entities'
 import {
+  createConversation,
   createSession as createSessionRequest,
   deleteSession as deleteSessionRequest,
   fetchSessionConversations,
   fetchSessionDetail,
   fetchSessions,
   getErrorMessage,
+  patchSessionActiveConversation,
 } from '../../../shared/api'
 import type { SessionStore } from './types'
 
@@ -172,5 +174,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     } finally {
       set({ deletingSessionId: null })
     }
+  },
+
+  async ensureConversationForCurrentSession(options = {}) {
+    const { currentSessionId, currentSessionDetail } = get()
+    if (!currentSessionId) {
+      return null
+    }
+
+    const activeConversationId = currentSessionDetail?.activeConversationId ?? null
+    if (activeConversationId) {
+      return activeConversationId
+    }
+
+    const created = await createConversation(currentSessionId, undefined, options.parentConversationId ?? null)
+    const nextDetail = await patchSessionActiveConversation(currentSessionId, created.conversationId)
+    const conversations = await fetchSessionConversations(currentSessionId)
+
+    set({
+      currentSessionDetail: {
+        ...nextDetail,
+        conversations,
+      },
+      activeConversationId: nextDetail.activeConversationId ?? created.conversationId,
+    })
+
+    return created.conversationId
   },
 }))

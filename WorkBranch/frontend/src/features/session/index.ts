@@ -8,6 +8,5 @@ export {
   selectSessionList,
   selectSessionLoading,
 } from './model/selectors'
-export { createConversationForCurrentSession } from './model/createConversation'
 export { useSessionStore } from './model/store'
-export type { SessionActions, SessionState, SessionStore } from './model/types'
+export type { EnsureConversationOptions, SessionActions, SessionState, SessionStore } from './model/types'

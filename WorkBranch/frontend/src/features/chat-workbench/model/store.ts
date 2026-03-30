@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   fetchConversationDetail,
   fetchConversationMessages,

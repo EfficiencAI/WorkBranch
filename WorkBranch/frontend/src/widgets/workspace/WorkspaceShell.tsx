@@ -3,7 +3,6 @@ import { useCallback, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { SessionId } from '../../entities'
 import {
-  createConversationForCurrentSession,
   selectChatWorkbenchConversationDetail,
   selectChatWorkbenchConversationNodes,
   selectChatWorkbenchStreaming,
@@ -53,6 +52,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
   const createSession = useSessionStore((state) => state.createSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
+  const ensureConversationForCurrentSession = useSessionStore((state) => state.ensureConversationForCurrentSession)
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
@@ -86,7 +86,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleCreateConversation = useCallback(
     async (parentConversationId: string | null) => {
       try {
-        const created = await createConversationForCurrentSession(parentConversationId)
+        const createdConversationId = await ensureConversationForCurrentSession({ parentConversationId })
 
         if (selectedSessionId) {
           const detail = await loadSessionDetail(selectedSessionId)
@@ -94,13 +94,13 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         }
 
         useTreeStore.getState().setFocusedConversationId(null)
-        useTreeStore.getState().setSelectedConversationId(created?.conversationId ?? null)
+        useTreeStore.getState().setSelectedConversationId(createdConversationId)
       } catch (caughtError) {
         console.error('[handleCreateConversation] error:', caughtError)
         onRequestError(caughtError)
       }
     },
-    [enterSessionContext, loadSessionDetail, onRequestError, selectedSessionId],
+    [ensureConversationForCurrentSession, enterSessionContext, loadSessionDetail, onRequestError, selectedSessionId],
   )
 
   const handleSelectSession = useCallback(
@@ -135,7 +135,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
-        const targetConversationId = focusedConversationId ?? selectedConversationId
+        const targetConversationId = focusedConversationId ?? selectedConversationId ?? await ensureConversationForCurrentSession()
         if (!targetConversationId) {
           return
         }
@@ -151,7 +151,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         onRequestError(caughtError)
       }
     },
-    [onRequestError, onSendError],
+    [ensureConversationForCurrentSession, focusedConversationId, onRequestError, onSendError, selectedConversationId],
   )
 
   function collapseNav() {

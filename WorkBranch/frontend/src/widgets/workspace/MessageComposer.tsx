@@ -21,7 +21,7 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
 
   async function handleSend() {
     const nextMessage = message.trim()
-    if (!nextMessage || !selectedConversationId || sending) {
+    if (!nextMessage || sending) {
       return
     }
 
@@ -49,7 +49,7 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           <Space direction="vertical" size={2}>
             <Typography.Text strong>当前目标对话</Typography.Text>
             <Typography.Text type={selectedConversationId ? undefined : 'secondary'}>
-              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : '请先右键或单击选择一个对话'}
+              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : '发送首条消息时将自动创建对话'}
             </Typography.Text>
           </Space>
           <Button size="small" onClick={() => setCollapsed(true)}>
@@ -61,7 +61,7 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           rows={4}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder={selectedConversationId ? '输入下一步指令...' : '请先选择目标对话'}
+          placeholder={selectedConversationId ? '输入下一步指令...' : '输入首条消息后自动创建对话'}
         />
 
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -73,11 +73,11 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           <Typography.Text type="secondary">
             {selectedConversationId
               ? `消息将发送到当前选中的对话 ${selectedConversationLabel ?? selectedConversationId}。`
-              : '发送前必须先选择一个目标对话。'}
+              : '当前未选中对话；发送时会先创建首个对话。'}
           </Typography.Text>
           <Space>
             <Button disabled={sending}>停止</Button>
-            <Button type="primary" loading={sending} disabled={!message.trim() || !selectedConversationId || sending} onClick={() => void handleSend()}>
+            <Button type="primary" loading={sending} disabled={!message.trim() || sending} onClick={() => void handleSend()}>
               发送
             </Button>
           </Space>

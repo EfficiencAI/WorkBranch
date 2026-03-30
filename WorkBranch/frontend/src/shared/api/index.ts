@@ -13,7 +13,6 @@ export {
   fetchWorkspaceDetail,
   patchSessionActiveConversation,
   streamConversationMessage,
-  streamSessionMessage,
 } from './workspace'
 export { fetchUserProfile, updateUserName } from './user'
 export type { ChatStreamEvent } from './workspace'

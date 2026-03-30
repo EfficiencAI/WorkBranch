@@ -111,12 +111,29 @@ async def send_conversation_message(
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
 
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )
+
+
+@router.post("/{conversation_id}/end")
+async def end_conversation(
+    conversation_id: str,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    conversation = await service.get_conversation_detail(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    flushed_count = await service.end_conversation(conversation_id)
+    return Result.success(data={"flushed_count": flushed_count})
+
+
+@router.post("/{conversation_id}/cancel")
+async def cancel_conversation(
+    conversation_id: str,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    conversation = await service.get_conversation_detail(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    result = await service.cancel_conversation(conversation_id)
+    return Result.success(data={"cancelled": result})

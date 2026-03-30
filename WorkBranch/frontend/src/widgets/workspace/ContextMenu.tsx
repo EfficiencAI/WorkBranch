@@ -24,7 +24,7 @@ export function useContextMenu() {
   return context
 }
 
-function useMenuClose(menuRef: React.RefObject<HTMLDivElement>, onClose: () => void) {
+function useMenuClose(menuRef: React.RefObject<HTMLDivElement | null>, onClose: () => void) {
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {

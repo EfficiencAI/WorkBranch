@@ -2,6 +2,7 @@
 .dev/
 .claude/
 AGENTS.md
+CLAUDE.md
 setting.json
 
 __pycache__/
