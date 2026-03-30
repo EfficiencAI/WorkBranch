@@ -9,7 +9,13 @@ from data.file_storage_system import FileStorageSystem
 from service.settings_service.settings_service import SettingsService
 
 from core.logging.logger import Logger
-from core.logging.types import LOG_LEVEL_PRIORITY, LOG_MODULES, LogLevel, LogModule
+from core.logging.types import (
+    LOG_LEVEL_PRIORITY,
+    LOG_MODULES,
+    ConversationContentRecord,
+    LogLevel,
+    LogModule,
+)
 from core.logging.writer import LogWriter, WriterConfig
 
 
@@ -97,6 +103,8 @@ class LoggingRuntime:
     def get_logger(self, module: LogModule) -> Logger:
         if module not in LOG_MODULES:
             raise ValueError(f"Unsupported log module: {module}")
+        if not self._started:
+            self.start()
         if module not in self._loggers:
             self._loggers[module] = Logger(self, module)
         return self._loggers[module]
@@ -105,6 +113,11 @@ class LoggingRuntime:
         if not self._writer:
             return
         self._writer.enqueue_record(record)
+
+    def write_conversation_content(self, record: ConversationContentRecord) -> None:
+        if not self._writer:
+            return
+        self._writer.enqueue_conversation_content(record)
 
     def is_enabled_for(self, level: LogLevel) -> bool:
         return LOG_LEVEL_PRIORITY[level] >= LOG_LEVEL_PRIORITY[self._level]

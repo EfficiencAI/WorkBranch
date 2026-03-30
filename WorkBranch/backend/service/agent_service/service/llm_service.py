@@ -2,6 +2,8 @@ from typing import List, Dict, Any, Optional, Generator, Callable, Awaitable
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import httpx
+import time
+import traceback
 
 
 class LLMService:
@@ -49,6 +51,83 @@ class LLMService:
         
         return self._llm
     
+    def _log_llm_event(self, level: str, event: str, msg: str, extra: Optional[dict] = None, exception: str | None = None) -> None:
+        from singleton import get_logging_runtime
+
+        logger = get_logging_runtime().get_logger("agent")
+        if level == "ERROR":
+            logger.error(event=event, msg=msg, extra=extra, exception=exception)
+        else:
+            logger.info(event=event, msg=msg, extra=extra)
+
+    def _build_llm_extra(self, operation: str, start_time: float, **kwargs) -> dict:
+        extra = {
+            "operation": operation,
+            "provider": "openai_compatible",
+            "model": None,
+            "latency_ms": round((time.perf_counter() - start_time) * 1000),
+        }
+        try:
+            extra["model"] = self._settings.get("llm:model") if self._settings is not None else None
+        except KeyError:
+            extra["model"] = None
+        extra.update({k: v for k, v in kwargs.items() if v is not None})
+        return extra
+
+    def _invoke_with_logging(self, operation: str, invoke_fn):
+        start_time = time.perf_counter()
+        self._log_llm_event(
+            "INFO",
+            "llm.call.started",
+            "llm call started",
+            extra=self._build_llm_extra(operation, start_time),
+        )
+        try:
+            result = invoke_fn()
+        except Exception as exc:
+            self._log_llm_event(
+                "ERROR",
+                "llm.call.failed",
+                "llm call failed",
+                extra=self._build_llm_extra(operation, start_time, error=str(exc)),
+                exception="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            )
+            raise
+        self._log_llm_event(
+            "INFO",
+            "llm.call.completed",
+            "llm call completed",
+            extra=self._build_llm_extra(operation, start_time),
+        )
+        return result
+
+    def _stream_with_logging(self, operation: str, stream_fn) -> Generator[str, None, None]:
+        start_time = time.perf_counter()
+        self._log_llm_event(
+            "INFO",
+            "llm.call.started",
+            "llm call started",
+            extra=self._build_llm_extra(operation, start_time),
+        )
+        try:
+            for chunk in stream_fn():
+                yield chunk
+        except Exception as exc:
+            self._log_llm_event(
+                "ERROR",
+                "llm.call.failed",
+                "llm call failed",
+                extra=self._build_llm_extra(operation, start_time, error=str(exc)),
+                exception="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+            )
+            raise
+        self._log_llm_event(
+            "INFO",
+            "llm.call.completed",
+            "llm call completed",
+            extra=self._build_llm_extra(operation, start_time),
+        )
+
     def chat(
         self,
         messages: List[Dict[str, str]],
@@ -83,9 +162,9 @@ class LLMService:
                 lc_messages.append(SystemMessage(content=content))
         
         print(f"[LLM] 发送请求: {len(lc_messages)} 条消息")
-        
-        response = llm.invoke(lc_messages)
-        
+
+        response = self._invoke_with_logging("chat", lambda: llm.invoke(lc_messages))
+
         print(f"[LLM] 收到响应: {len(response.content)} 字符")
         
         return response.content
@@ -129,12 +208,15 @@ class LLMService:
         print("[LLM] 流式输出:")
         print("-" * 40)
         
-        for chunk in llm.stream(lc_messages):
-            if chunk.content:
-                print(chunk.content, end="", flush=True)
-                if stream_callback:
-                    stream_callback(chunk.content)
-                yield chunk.content
+        def stream_chunks():
+            for chunk in llm.stream(lc_messages):
+                if chunk.content:
+                    print(chunk.content, end="", flush=True)
+                    if stream_callback:
+                        stream_callback(chunk.content)
+                    yield chunk.content
+
+        yield from self._stream_with_logging("chat_stream", stream_chunks)
         
         print()
         print("-" * 40)
@@ -195,7 +277,10 @@ class LLMService:
         
         print(f"[LLM] 结构化输出请求: {len(lc_messages)} 条消息")
         
-        response = structured_llm.invoke(lc_messages)
+        response = self._invoke_with_logging(
+            "structured_output",
+            lambda: structured_llm.invoke(lc_messages),
+        )
         
         print(f"[LLM] 结构化输出完成")
         

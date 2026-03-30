@@ -8,6 +8,7 @@ import {
   getErrorMessage,
   streamConversationMessage,
 } from '../../../shared/api'
+import { frontendLogger } from '../../../shared/logging/logger'
 import type { ChatStreamEvent } from '../../../shared/api'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
@@ -170,6 +171,12 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
     try {
       set({ streaming: true })
+      frontendLogger.info('send_message', {
+        extra: {
+          conversation_id: conversationId,
+          message_length: messageText.length,
+        },
+      })
 
       await streamConversationMessage(
         conversationId,
@@ -181,6 +188,12 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           onEvent(event: ChatStreamEvent) {
             onEvent?.(event)
             if (event.type === 'error') {
+              frontendLogger.error('stream_failed', {
+                extra: {
+                  conversation_id: conversationId,
+                  reason: typeof event.content === 'string' ? event.content : 'stream_error_event',
+                },
+              })
               onStreamError?.(event)
             }
           },
@@ -196,6 +209,14 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
       const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
       set({ conversationNodes })
+    } catch (caughtError) {
+      frontendLogger.error('stream_failed', {
+        extra: {
+          conversation_id: conversationId,
+          reason: getErrorMessage(caughtError, 'stream_request_failed'),
+        },
+      })
+      throw caughtError
     } finally {
       set({ streaming: false })
     }

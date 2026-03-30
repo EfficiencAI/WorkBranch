@@ -1,4 +1,5 @@
 import type { ConversationDetail, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
+import { getClientId } from '../logging/clientId'
 import { del, get, patch, post } from './http'
 import { ApiError } from './error'
 
@@ -165,6 +166,7 @@ export async function streamConversationMessage(
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
+      'X-Client-Id': getClientId(),
     },
     body: JSON.stringify(body),
     signal: handlers.signal,

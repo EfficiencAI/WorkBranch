@@ -2,7 +2,7 @@ import asyncio
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Callable, Awaitable
 from enum import Enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from singleton import get_conversation_buffer, get_agent_service, get_conversation_dao
 from service.session_service.conversation_buffer import ConversationBuffer
@@ -49,8 +49,23 @@ class ConversationCreator:
         self._buffer: ConversationBuffer = get_conversation_buffer()
         self._agent: AgentService = get_agent_service()
         self._dao: ConversationDAO = get_conversation_dao()
+        self._runtime = None
         self._conversations: Dict[str, ConversationInfo] = {}
         self._lock = asyncio.Lock()
+
+    def _write_content_record(self, conversation_id: str, content_type: str, payload: Dict[str, Any]) -> None:
+        if self._runtime is None:
+            from singleton import get_logging_runtime
+
+            self._runtime = get_logging_runtime()
+        self._runtime.write_conversation_content(
+            {
+                "ts": datetime.now(timezone.utc).isoformat(),
+                "conversation_id": conversation_id,
+                "type": content_type,
+                "payload": payload,
+            }
+        )
 
     async def create_conversation(
         self,
@@ -84,6 +99,17 @@ class ConversationCreator:
                 title=title,
                 state=ConversationState.PENDING
             )
+
+        self._write_content_record(
+            agent_conv_id,
+            "system_event",
+            {
+                "event": "conversation.created",
+                "session_id": session_id,
+                "workspace_id": resolved_workspace_id,
+                "parent_conversation_id": parent_conversation_id,
+            },
+        )
 
         return agent_conv_id
 
@@ -120,6 +146,11 @@ class ConversationCreator:
             role="user",
             content=message
         )
+        self._write_content_record(
+            conversation_id,
+            "user_message",
+            {"content": message},
+        )
 
         async with self._lock:
             conv_info.state = ConversationState.RUNNING
@@ -145,6 +176,8 @@ class ConversationCreator:
         async with self._lock:
             conv_info.task = task
 
+        asyncio.create_task(self._watch_message_task(conversation_id, task))
+
         return task
 
     async def _on_message_complete(
@@ -158,10 +191,12 @@ class ConversationCreator:
                 return
 
             conv_info.state = ConversationState.COMPLETED
+            conv_info.error = None
             self._dao.update_conversation(
                 conversation_id,
                 state=ConversationState.COMPLETED.value,
                 message_count=conv_info.message_count,
+                error="",
                 ended_at=datetime.now().isoformat(),
             )
 
@@ -176,6 +211,60 @@ class ConversationCreator:
                 content=assistant_content,
                 parent_id=parent_id
             )
+            self._write_content_record(
+                conversation_id,
+                "assistant_message",
+                {"content": assistant_content},
+            )
+
+    async def _finalize_message_failure(
+        self,
+        conversation_id: str,
+        state: ConversationState,
+        error: Optional[str] = None,
+    ) -> None:
+        async with self._lock:
+            conv_info = self._conversations.get(conversation_id)
+            if not conv_info:
+                persisted = self._dao.get_conversation_by_id(conversation_id)
+                if not persisted:
+                    return
+                conv_info = ConversationInfo(
+                    conversation_id=persisted.id,
+                    session_id=persisted.session_id,
+                    workspace_id=persisted.workspace_id or conversation_id,
+                    parent_conversation_id=persisted.parent_conversation_id,
+                    title=persisted.title,
+                    state=ConversationState(state.value),
+                    created_at=datetime.fromisoformat(persisted.created_at) if "T" in persisted.created_at else datetime.now(),
+                    error=persisted.error,
+                    message_count=persisted.message_count,
+                )
+                self._conversations[conversation_id] = conv_info
+
+            conv_info.state = state
+            conv_info.error = error
+            self._dao.update_conversation(
+                conversation_id,
+                state=state.value,
+                message_count=conv_info.message_count,
+                error=error if error is not None else "",
+                ended_at=datetime.now().isoformat(),
+            )
+
+        self._write_content_record(
+            conversation_id,
+            "system_event",
+            {"event": f"conversation.{state.value}", "error": error},
+        )
+
+    async def _watch_message_task(self, conversation_id: str, task: asyncio.Task) -> None:
+        try:
+            await task
+        except asyncio.CancelledError:
+            await self._finalize_message_failure(conversation_id, ConversationState.CANCELLED)
+        except Exception as exc:
+            await self._finalize_message_failure(conversation_id, ConversationState.FAILED, str(exc))
 
     async def end_conversation(self, conversation_id: str) -> int:
         async with self._lock:
@@ -252,6 +341,11 @@ class ConversationCreator:
             )
 
         await self._buffer.clear(conversation_id)
+        self._write_content_record(
+            conversation_id,
+            "system_event",
+            {"event": "conversation.cancelled", "error": conv_info.error},
+        )
         return True
 
     def get_state(self, conversation_id: str) -> Optional[Dict[str, Any]]:

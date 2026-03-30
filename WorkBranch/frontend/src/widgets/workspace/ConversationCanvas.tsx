@@ -15,6 +15,7 @@ import {
   useTreeStore,
 } from '../../features'
 import { EmptyState, StatusTag } from '../../shared/ui'
+import { frontendLogger } from '../../shared/logging/logger'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
 
@@ -276,7 +277,15 @@ function FlowViewport({
         conversation,
         focused: storeFocusedConversationId === conversation.conversationId,
         selected: storeSelectedConversationId === conversation.conversationId,
-        onClick: setSelectedConversationId,
+        onClick: (conversationId: string) => {
+          frontendLogger.info('switch_conversation', {
+            extra: {
+              conversation_id: conversationId,
+              previous_conversation_id: storeSelectedConversationId,
+            },
+          })
+          setSelectedConversationId(conversationId)
+        },
         onDoubleClick: setFocusedConversationId,
       },
       draggable: false,

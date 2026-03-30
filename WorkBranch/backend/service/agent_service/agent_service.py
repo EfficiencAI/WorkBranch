@@ -1,10 +1,12 @@
 import uuid
 import asyncio
+import traceback
 from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
 
+from core.logging import bind_ctx
 from .service import WorkspaceService
 from .graph import run_graph
 
@@ -78,6 +80,35 @@ class AgentService:
     def _generate_id(self) -> str:
         return str(uuid.uuid4())
 
+    def _get_logger(self):
+        from singleton import get_logging_runtime
+
+        return get_logging_runtime().get_logger("agent")
+
+    def _log_agent_event(
+        self,
+        level: str,
+        event: str,
+        msg: str,
+        *,
+        conversation_id: str,
+        workspace_id: str,
+        extra: Optional[dict] = None,
+        exception: str | None = None,
+    ) -> None:
+        payload = {
+            "conversation_id": conversation_id,
+            "workspace_id": workspace_id,
+        }
+        if extra:
+            payload.update(extra)
+        with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
+            logger = self._get_logger()
+            if level == "ERROR":
+                logger.error(event=event, msg=msg, extra=payload, exception=exception)
+            else:
+                logger.info(event=event, msg=msg, extra=payload)
+
     async def create_conversation(
         self,
         workspace_id: str = None,
@@ -106,7 +137,16 @@ class AgentService:
                 session_id=session_id,
                 status=ConversationStatus.PENDING
             )
-        
+
+        self._log_agent_event(
+            "INFO",
+            "conversation.created",
+            "conversation created",
+            conversation_id=conv_id,
+            workspace_id=workspace_id,
+            extra={"session_id": session_id},
+        )
+
         print(f"[Agent] 创建对话: {conv_id}, 会话: {session_id}, 工作区: {workspace_id}")
         return conv_id
 
@@ -133,7 +173,15 @@ class AgentService:
                 raise ValueError(f"对话 {conversation_id} 不存在")
         
         conv.messages.append(message)
-        
+        self._log_agent_event(
+            "INFO",
+            "message.sent",
+            "message sent to conversation",
+            conversation_id=conversation_id,
+            workspace_id=conv.workspace_id,
+            extra={"message_length": len(message)},
+        )
+
         task = asyncio.create_task(
             self._run_agent_async(
                 conv.workspace_id,
@@ -173,64 +221,95 @@ class AgentService:
         
         from service.session_service.mq import StreamMessage, MessageType
         
-        def send_message(content: str, message_type: MessageType, metadata: dict = None):
-            msg = StreamMessage(
+        with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
+            self._log_agent_event(
+                "INFO",
+                "agent.run.started",
+                "agent run started",
+                conversation_id=conversation_id,
+                workspace_id=workspace_id,
+                extra={"session_id": session_id},
+            )
+
+            def send_message(content: str, message_type: MessageType, metadata: dict = None):
+                msg = StreamMessage(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
+                    content=content,
+                    message_type=message_type,
+                    metadata=metadata or {}
+                )
+                mq.publish_sync(msg)
+
+            def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
+                msg = StreamMessage(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
+                    content=token,
+                    message_type=message_type,
+                    metadata=metadata or {}
+                )
+                mq.publish_sync(msg)
+
+            message_context = {
+                "send_message": send_message,
+                "token_callback": token_callback,
+                "session_id": session_id,
+                "conversation_id": conversation_id,
+                "workspace_id": workspace_id,
+            }
+
+            def run_with_config():
+                return run_graph(
+                    message,
+                    workspace_id,
+                    llm_service,
+                    token_callback,
+                    memory_mode,
+                    window_size,
+                    settings,
+                    message_context=message_context
+                )
+
+            loop = asyncio.get_event_loop()
+            try:
+                result = await loop.run_in_executor(None, run_with_config)
+            except Exception as exc:
+                self._log_agent_event(
+                    "ERROR",
+                    "agent.run.failed",
+                    "agent run failed",
+                    conversation_id=conversation_id,
+                    workspace_id=workspace_id,
+                    extra={"session_id": session_id, "error": str(exc)},
+                    exception="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
+                )
+                raise
+
+            done_msg = StreamMessage(
                 session_id=session_id,
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                content=content,
-                message_type=message_type,
-                metadata=metadata or {}
+                content="",
+                message_type=MessageType.DONE
             )
-            mq.publish_sync(msg)
-        
-        def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
-            msg = StreamMessage(
-                session_id=session_id,
+            mq.publish_sync(done_msg)
+
+            self._log_agent_event(
+                "INFO",
+                "agent.run.completed",
+                "agent run completed",
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                content=token,
-                message_type=message_type,
-                metadata=metadata or {}
+                extra={"session_id": session_id},
             )
-            mq.publish_sync(msg)
-        
-        message_context = {
-            "send_message": send_message,
-            "token_callback": token_callback,
-            "session_id": session_id,
-            "conversation_id": conversation_id,
-            "workspace_id": workspace_id,
-        }
-        
-        def run_with_config():
-            return run_graph(
-                message,
-                workspace_id,
-                llm_service,
-                token_callback,
-                memory_mode,
-                window_size,
-                settings,
-                message_context=message_context
-            )
-        
-        loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(None, run_with_config)
-        
-        done_msg = StreamMessage(
-            session_id=session_id,
-            conversation_id=conversation_id,
-            workspace_id=workspace_id,
-            content="",
-            message_type=MessageType.DONE
-        )
-        mq.publish_sync(done_msg)
-        
-        if stream_callback:
-            await stream_callback(result)
-        
-        return result
+
+            if stream_callback:
+                await stream_callback(result)
+
+            return result
 
     def _on_task_complete(self, conversation_id: str, task: asyncio.Task):
         """任务完成回调"""

@@ -1,3 +1,4 @@
+import { getClientId } from '../logging/clientId'
 import { ApiError } from './error'
 import type { ApiEnvelope, HttpRequestOptions } from './types'
 
@@ -41,6 +42,7 @@ export async function request<TData = unknown, TBody = unknown>(
   const { method = 'GET', headers, body, signal, parseAs = 'json' } = options
 
   const requestHeaders = new Headers(headers)
+  requestHeaders.set('X-Client-Id', getClientId())
   let requestBody: BodyInit | undefined
 
   if (body !== undefined) {

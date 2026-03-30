@@ -21,6 +21,7 @@ import {
   useUserStore,
 } from '../../features'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
+import { frontendLogger } from '../../shared/logging/logger'
 import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
@@ -92,6 +93,13 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           const detail = await loadSessionDetail(selectedSessionId)
           await enterSessionContext(detail)
         }
+
+        frontendLogger.info('create_conversation', {
+          extra: {
+            conversation_id: createdConversationId,
+            parent_conversation_id: parentConversationId,
+          },
+        })
 
         useTreeStore.getState().setFocusedConversationId(null)
         useTreeStore.getState().setSelectedConversationId(createdConversationId)

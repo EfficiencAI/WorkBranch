@@ -1,17 +1,21 @@
 import asyncio
 import json
+import time
+import traceback
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from singleton import get_message_queue, get_session_service
-from service.session_service.session import SessionService
-from service.session_service.mq import MessageQueue, MessageType
 from controller.VO.result import Result
+from core.logging import bind_ctx, get_ctx
+from singleton import get_logging_runtime, get_message_queue, get_session_service
+from service.session_service.mq import MessageQueue, MessageType
+from service.session_service.session import SessionService
 
 router = APIRouter(prefix="/session/conversations", tags=["conversations"])
+STREAM_MAX_TIMEOUT_TICKS = 300
 
 
 class SendConversationMessageBody(BaseModel):
@@ -64,53 +68,142 @@ async def send_conversation_message(
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    logger = get_logging_runtime().get_logger("api")
+    request_ctx = get_ctx()
+    request_ctx["conversation_id"] = target_conversation_id
+    request_ctx["workspace_id"] = conversation.get("workspace_id") or request_ctx.get("workspace_id")
+
     async def event_generator() -> AsyncGenerator[str, None]:
-        try:
-            await mq.start_consumer()
+        stream_start = time.perf_counter()
+        first_chunk_logged = False
+        done_received = False
+        timeout_counter = 0
+        max_timeout = STREAM_MAX_TIMEOUT_TICKS
 
-            done_received = False
-            timeout_counter = 0
-            max_timeout = 300
+        with bind_ctx(**request_ctx):
+            logger.info(
+                event="stream.started",
+                msg="conversation stream started",
+                extra={"conversation_id": target_conversation_id},
+            )
+            try:
+                await mq.start_consumer()
 
-            while not done_received and timeout_counter < max_timeout:
-                try:
-                    message = await asyncio.wait_for(
-                        mq._queue.get(),
-                        timeout=1.0,
+                while not done_received and timeout_counter < max_timeout:
+                    try:
+                        message = await asyncio.wait_for(
+                            mq._queue.get(),
+                            timeout=1.0,
+                        )
+
+                        if message.conversation_id != target_conversation_id:
+                            continue
+
+                        event_data = {
+                            "type": message.message_type.value,
+                            "content": message.content,
+                            "timestamp": message.timestamp.isoformat(),
+                            "metadata": message.metadata,
+                        }
+
+                        if not first_chunk_logged:
+                            logger.info(
+                                event="stream.first_chunk",
+                                msg="conversation stream first chunk sent",
+                                extra={
+                                    "conversation_id": target_conversation_id,
+                                    "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                },
+                            )
+                            first_chunk_logged = True
+
+                        yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
+
+                        if message.message_type == MessageType.DONE:
+                            done_received = True
+                            logger.info(
+                                event="stream.completed",
+                                msg="conversation stream completed",
+                                extra={
+                                    "conversation_id": target_conversation_id,
+                                    "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                },
+                            )
+
+                        timeout_counter = 0
+
+                    except asyncio.TimeoutError:
+                        timeout_counter += 1
+                        yield ": heartbeat\n\n"
+
+                        current = await service.get_conversation_detail(target_conversation_id)
+                        if not current:
+                            continue
+
+                        request_ctx["workspace_id"] = current.get("workspace_id") or request_ctx.get("workspace_id")
+                        state = current.get("state")
+                        if state == "completed":
+                            done_received = True
+                            logger.info(
+                                event="stream.completed",
+                                msg="conversation stream completed from state",
+                                extra={
+                                    "conversation_id": target_conversation_id,
+                                    "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                },
+                            )
+                            yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
+                        elif state == "failed":
+                            done_received = True
+                            logger.error(
+                                event="stream.failed",
+                                msg="conversation stream failed from state",
+                                extra={
+                                    "conversation_id": target_conversation_id,
+                                    "reason": "conversation_failed",
+                                    "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                },
+                            )
+                            yield f"data: {json.dumps({'type': 'error', 'content': state}, ensure_ascii=False)}\n\n"
+                        elif state == "cancelled":
+                            done_received = True
+                            logger.error(
+                                event="stream.failed",
+                                msg="conversation stream cancelled from state",
+                                extra={
+                                    "conversation_id": target_conversation_id,
+                                    "reason": "conversation_cancelled",
+                                    "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                },
+                            )
+                            yield f"data: {json.dumps({'type': 'error', 'content': state}, ensure_ascii=False)}\n\n"
+
+                if not done_received:
+                    logger.error(
+                        event="stream.failed",
+                        msg="conversation stream timed out",
+                        extra={
+                            "conversation_id": target_conversation_id,
+                            "reason": "timeout",
+                            "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                        },
                     )
+                    yield f"data: {json.dumps({'type': 'error', 'content': 'Timeout'}, ensure_ascii=False)}\n\n"
 
-                    if message.conversation_id != target_conversation_id:
-                        continue
+            except Exception as e:
+                logger.error(
+                    event="stream.failed",
+                    msg="conversation stream raised exception",
+                    extra={
+                        "conversation_id": target_conversation_id,
+                        "reason": "exception",
+                        "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                    },
+                    exception="".join(traceback.format_exception(type(e), e, e.__traceback__)),
+                )
+                yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
 
-                    event_data = {
-                        "type": message.message_type.value,
-                        "content": message.content,
-                        "timestamp": message.timestamp.isoformat(),
-                        "metadata": message.metadata,
-                    }
-
-                    yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
-
-                    if message.message_type == MessageType.DONE:
-                        done_received = True
-
-                    timeout_counter = 0
-
-                except asyncio.TimeoutError:
-                    timeout_counter += 1
-                    yield f": heartbeat\n\n"
-
-                    current = await service.get_conversation_detail(target_conversation_id)
-                    if current and current.get("state") in ["completed", "failed", "cancelled"]:
-                        done_received = True
-                        yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
-
-            if not done_received:
-                yield f"data: {json.dumps({'type': 'error', 'content': 'Timeout'}, ensure_ascii=False)}\n\n"
-
-        except Exception as e:
-            yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
-
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 
 @router.post("/{conversation_id}/end")

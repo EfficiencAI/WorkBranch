@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from service.settings_service.settings_service import SettingsService
+from core.logging import bind_ctx
 
 
 class MessageType(Enum):
@@ -71,6 +72,7 @@ class MessageQueue:
         self._storage_dir = self._get_storage_dir()
         self._conversation_messages: Dict[str, List[dict]] = {}
         self._file_lock = threading.Lock()
+        self._logger = None
 
     def _get_max_size(self) -> int:
         try:
@@ -78,6 +80,45 @@ class MessageQueue:
         except KeyError:
             return 1000
     
+    def _log_message_event(
+        self,
+        level: str,
+        event: str,
+        msg: str,
+        message: StreamMessage,
+        *,
+        source: str,
+        target: str,
+        latency_ms: Optional[int] = None,
+        exception: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        extra = {
+            "conversation_id": message.conversation_id,
+            "workspace_id": message.workspace_id,
+            "message_type": message.message_type.value,
+            "source": source,
+            "target": target,
+            "size": len(message.content or ""),
+        }
+        if latency_ms is not None:
+            extra["latency_ms"] = latency_ms
+        if error is not None:
+            extra["error"] = error
+        with bind_ctx(conversation_id=message.conversation_id, workspace_id=message.workspace_id):
+            logger = self._get_logger()
+            if level == "ERROR":
+                logger.error(event=event, msg=msg, extra=extra, exception=exception)
+            else:
+                logger.info(event=event, msg=msg, extra=extra)
+
+    def _get_logger(self):
+        if self._logger is None:
+            from singleton import get_logging_runtime
+
+            self._logger = get_logging_runtime().get_logger("mq")
+        return self._logger
+
     def _get_storage_dir(self) -> Path:
         try:
             storage_dir = self._settings.get("mq:storage_dir")
@@ -119,17 +160,34 @@ class MessageQueue:
     async def publish(self, message: StreamMessage) -> bool:
         """
         生产者：发布消息到队列
-        
+
         Args:
             message: 流式消息对象
-            
+
         Returns:
             是否成功发布（队列满时返回 False）
         """
         try:
             self._queue.put_nowait(message)
+            self._log_message_event(
+                "INFO",
+                "mq.message.received",
+                "mq message queued",
+                message,
+                source="producer",
+                target="async_queue",
+            )
             return True
         except asyncio.QueueFull:
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq message dropped because queue is full",
+                message,
+                source="producer",
+                target="async_queue",
+                error="queue_full",
+            )
             print(f"[MQ] 队列已满 (max_size={self._max_size})，消息被丢弃: {message.content[:50]}...")
             return False
 
@@ -152,19 +210,36 @@ class MessageQueue:
     def publish_sync(self, message: StreamMessage) -> bool:
         """
         同步发布消息（用于同步上下文，如 LLM 流式回调）
-        
+
         将消息放入同步队列，由异步消费者线程转发到异步队列
-        
+
         Args:
             message: 流式消息对象
-            
+
         Returns:
             是否成功发布
         """
         try:
             self._sync_queue.put_nowait(message)
+            self._log_message_event(
+                "INFO",
+                "mq.message.received",
+                "mq sync message queued",
+                message,
+                source="agent",
+                target="sync_queue",
+            )
             return True
         except queue.Full:
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq sync message dropped because queue is full",
+                message,
+                source="agent",
+                target="sync_queue",
+                error="queue_full",
+            )
             print(f"[MQ] 同步队列已满，消息被丢弃: {message.content[:50]}...")
             return False
 
@@ -209,6 +284,15 @@ class MessageQueue:
         try:
             self._queue.put_nowait(message)
         except asyncio.QueueFull:
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq bridge dropped message because queue is full",
+                message,
+                source="sync_queue",
+                target="async_queue",
+                error="queue_full",
+            )
             print(f"[MQ] 队列已满，消息被丢弃: {message.content[:50]}...")
 
     async def start_consumer(self) -> None:
@@ -263,15 +347,37 @@ class MessageQueue:
     async def _consume(self, message: StreamMessage) -> None:
         """
         消费单条消息
-        
+
         功能：
         - 打印到控制台
         - 保存到 JSON 文件（按对话 ID）
         """
         msg_dict = message.to_dict()
         print(f"[MQ] 消费消息: {msg_dict}")
-        
-        self._save_message_to_file(message)
+        start_time = time.perf_counter()
+        try:
+            self._save_message_to_file(message)
+        except Exception as exc:
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq message consume failed",
+                message,
+                source="async_queue",
+                target="storage",
+                latency_ms=round((time.perf_counter() - start_time) * 1000),
+                error=str(exc),
+            )
+            raise
+        self._log_message_event(
+            "INFO",
+            "mq.message.completed",
+            "mq message consumed",
+            message,
+            source="async_queue",
+            target="storage",
+            latency_ms=round((time.perf_counter() - start_time) * 1000),
+        )
 
     @property
     def size(self) -> int:
