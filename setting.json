@@ -123,6 +123,10 @@
             "enabled": false,
             "max_runs": null,
             "max_days": null
-        }
+        },
+        "frontend": {
+            "enabled": true
+        },
+        "api_log_enabled": true
     }
 }

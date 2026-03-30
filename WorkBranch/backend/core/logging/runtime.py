@@ -45,7 +45,7 @@ class LoggingRuntime:
         self._startup_ts_display = self._run_id
 
         base_dir = logging_cfg.get("base_dir", "logs")
-        root = Path(self._file_storage.get_storage_root())
+        root = Path(self._file_storage.get_setting_file_path()).parent
         log_root = root / base_dir
         self._log_dir = log_root / self._run_id
         self._log_dir.mkdir(parents=True, exist_ok=True)

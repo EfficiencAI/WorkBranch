@@ -61,10 +61,14 @@ DEFAULT_SETTINGS = {
         "level": "INFO",
         "base_dir": "logs",
         "max_file_size_mb": 10,
+        "frontend": {
+            "enabled": True
+        },
         "conversation_content": {
             "enabled": True
         },
         "sensitive_fields": ["api_key", "token", "password", "secret", "key"],
+        "api_log_enabled": True,
         "retention": {
             "enabled": False,
             "max_runs": None,
