@@ -1,0 +1,123 @@
+- main [ref=e5]:
+  - generic [ref=e226]:
+    - generic [ref=e231]:
+      - toolbar "画布控制" [ref=e232]:
+        - button "-" [ref=e233] [cursor=pointer]:
+          - generic [ref=e234]: "-"
+        - button "+" [ref=e235] [cursor=pointer]:
+          - generic [ref=e236]: +
+        - button "适 配" [ref=e237] [cursor=pointer]:
+          - generic [ref=e238]: 适 配
+      - application [ref=e239]:
+        - generic [ref=e241]:
+          - generic:
+            - generic:
+              - group [ref=e242] [cursor=pointer]:
+                - button "查看对话 f1c03603-e82b-49ad-8726-abdf9e814f7b" [ref=e243]:
+                  - generic [ref=e246]:
+                    - generic [ref=e248]:
+                      - generic [ref=e250]:
+                        - strong [ref=e253]: 空对话
+                        - generic [ref=e254]: f1c03603-e82b-49ad-8726-abdf9e814f7b
+                      - generic [ref=e256]: pending
+                    - generic [ref=e258]:
+                      - generic [ref=e260]: 0 条消息
+                      - generic [ref=e262]: 根对话
+              - group [ref=e263] [cursor=pointer]:
+                - button "查看对话 868a148e-81b4-4c51-a6ca-6a60b2016a37" [ref=e264]:
+                  - generic [ref=e267]:
+                    - generic [ref=e269]:
+                      - generic [ref=e271]:
+                        - strong [ref=e274]: 未命名对话 · 1 条消息
+                        - generic [ref=e275]: 868a148e-81b4-4c51-a6ca-6a60b2016a37
+                      - generic [ref=e277]: failed
+                    - generic [ref=e279]:
+                      - generic [ref=e281]: 1 条消息
+                      - generic [ref=e283]: 根对话
+              - group [ref=e284] [cursor=pointer]:
+                - button "查看对话 98e8b9d5-e356-492b-8038-2fea0125ff74" [ref=e285]:
+                  - generic [ref=e288]:
+                    - generic [ref=e290]:
+                      - generic [ref=e292]:
+                        - strong [ref=e295]: 空对话
+                        - generic [ref=e296]: 98e8b9d5-e356-492b-8038-2fea0125ff74
+                      - generic [ref=e298]: pending
+                    - generic [ref=e300]:
+                      - generic [ref=e302]: 0 条消息
+                      - generic [ref=e304]: 根对话
+              - group [ref=e305] [cursor=pointer]:
+                - button "查看对话 cec1726e-a318-4280-a518-0aa4b854d2ee" [ref=e306]:
+                  - generic [ref=e309]:
+                    - generic [ref=e311]:
+                      - generic [ref=e313]:
+                        - strong [ref=e316]: 空对话
+                        - generic [ref=e317]: cec1726e-a318-4280-a518-0aa4b854d2ee
+                      - generic [ref=e319]: pending
+                    - generic [ref=e321]:
+                      - generic [ref=e323]: 0 条消息
+                      - generic [ref=e325]: 父对话 868a148e-81b4-4c51-a6ca-6a60b2016a37
+              - group [ref=e326] [cursor=pointer]:
+                - button "查看对话 8554cddf-8e59-4708-ac2e-7b6cf06d87ef" [ref=e327]:
+                  - generic [ref=e330]:
+                    - generic [ref=e332]:
+                      - generic [ref=e334]:
+                        - strong [ref=e337]: 空对话
+                        - generic [ref=e338]: 8554cddf-8e59-4708-ac2e-7b6cf06d87ef
+                      - generic [ref=e340]: pending
+                    - generic [ref=e342]:
+                      - generic [ref=e344]: 0 条消息
+                      - generic [ref=e346]: 根对话
+              - group [ref=e347] [cursor=pointer]:
+                - button "查看对话 eabe2e9a-dea8-4bc0-9362-9689f92f6cc4" [ref=e348]:
+                  - generic [ref=e351]:
+                    - generic [ref=e353]:
+                      - generic [ref=e355]:
+                        - strong [ref=e358]: 未命名对话 · 2 条消息
+                        - generic [ref=e359]: eabe2e9a-dea8-4bc0-9362-9689f92f6cc4
+                      - generic [ref=e361]: selected
+                    - generic [ref=e363]:
+                      - generic [ref=e365]: 2 条消息
+                      - generic [ref=e367]: 根对话
+        - img
+      - generic [ref=e373]:
+        - generic [ref=e375]:
+          - generic [ref=e377]:
+            - strong [ref=e380]: 全局底部输入区
+            - generic [ref=e381]: Selected Conversation
+          - generic [ref=e383]: 待发送
+        - generic [ref=e386]:
+          - generic [ref=e388]:
+            - generic [ref=e390]:
+              - strong [ref=e393]: 当前目标对话
+              - generic [ref=e394]: 未命名对话 · 2 条消息
+            - button "折 叠" [ref=e396] [cursor=pointer]:
+              - generic [ref=e397]: 折 叠
+          - textbox "输入下一步指令..." [ref=e399]
+          - generic [ref=e401]:
+            - strong [ref=e404]: conversation workspace
+            - textbox [ref=e406]: eabe2e9a-dea8-4bc0-9362-9689f92f6cc4
+          - generic [ref=e408]:
+            - generic [ref=e409]: 消息将发送到当前选中的对话 未命名对话 · 2 条消息。
+            - generic [ref=e411]:
+              - button "停 止" [disabled] [ref=e413]:
+                - generic: 停 止
+              - button "发 送" [disabled] [ref=e415]:
+                - generic: 发 送
+    - generic [ref=e417]:
+      - button "展开或收起工作台侧边栏" [ref=e419] [cursor=pointer]:
+        - generic [ref=e420]: WB
+      - generic:
+        - generic:
+          - button "会话历史":
+            - generic: 会话历史
+          - button "设 置":
+            - generic: 设 置
+    - generic [ref=e422]:
+      - generic [ref=e423]: WorkBranch Workspace
+      - heading "会话 Stage1" [level=3] [ref=e427]
+      - generic [ref=e429]:
+        - generic [ref=e431]: 会话 Stage1
+        - generic [ref=e433]: 阶段十二
+        - generic [ref=e435]: 对话树工作台
+        - generic [ref=e437]: 概览态
+        - generic [ref=e439]: 目标 eabe2e9a-dea8-4bc0-9362-9689f92f6cc4

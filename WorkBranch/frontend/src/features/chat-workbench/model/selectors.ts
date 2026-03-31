@@ -9,3 +9,4 @@ export const selectChatWorkbenchWorkspaceDetail = (state: ChatWorkbenchStore) =>
 export const selectChatWorkbenchConversationNodes = (state: ChatWorkbenchStore) => state.conversationNodes
 export const selectChatWorkbenchConversationMessages = (state: ChatWorkbenchStore) => state.conversationMessages
 export const selectChatWorkbenchStreaming = (state: ChatWorkbenchStore) => state.streaming
+export const selectChatWorkbenchStreamingConversationId = (state: ChatWorkbenchStore) => state.streamingConversationId

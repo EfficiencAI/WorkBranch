@@ -6,10 +6,20 @@ type MessageComposerProps = {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   sending: boolean
+  allowCreateOnSend?: boolean
   onSend: (message: string) => Promise<void>
+  onStop?: () => Promise<void> | void
 }
 
-export function MessageComposer({ workspaceId, selectedConversationId, selectedConversationLabel, sending, onSend }: MessageComposerProps) {
+export function MessageComposer({
+  workspaceId,
+  selectedConversationId,
+  selectedConversationLabel,
+  sending,
+  allowCreateOnSend = false,
+  onSend,
+  onStop,
+}: MessageComposerProps) {
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
 
@@ -49,7 +59,7 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           <Space direction="vertical" size={2}>
             <Typography.Text strong>当前目标对话</Typography.Text>
             <Typography.Text type={selectedConversationId ? undefined : 'secondary'}>
-              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : '发送首条消息时将自动创建对话'}
+              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : allowCreateOnSend ? '发送首条消息时将自动创建对话' : '请先选择一个对话作为发送目标'}
             </Typography.Text>
           </Space>
           <Button size="small" onClick={() => setCollapsed(true)}>
@@ -61,7 +71,7 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           rows={4}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder={selectedConversationId ? '输入下一步指令...' : '输入首条消息后自动创建对话'}
+          placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : '请先选择目标对话后再发送'}
         />
 
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
@@ -73,11 +83,15 @@ export function MessageComposer({ workspaceId, selectedConversationId, selectedC
           <Typography.Text type="secondary">
             {selectedConversationId
               ? `消息将发送到当前选中的对话 ${selectedConversationLabel ?? selectedConversationId}。`
-              : '当前未选中对话；发送时会先创建首个对话。'}
+              : allowCreateOnSend
+                ? '当前 session 还没有对话；发送时会先创建首个对话。'
+                : '当前未选择目标对话，请先在画布中选择一个对话。'}
           </Typography.Text>
           <Space>
-            <Button disabled={sending}>停止</Button>
-            <Button type="primary" loading={sending} disabled={!message.trim() || sending} onClick={() => void handleSend()}>
+            <Button disabled={!sending} onClick={() => void onStop?.()}>
+              停止
+            </Button>
+            <Button type="primary" loading={sending} disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)} onClick={() => void handleSend()}>
               发送
             </Button>
           </Space>

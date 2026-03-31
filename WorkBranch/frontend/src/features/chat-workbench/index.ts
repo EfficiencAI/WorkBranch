@@ -7,6 +7,7 @@ export {
   selectChatWorkbenchMessagesError,
   selectChatWorkbenchMessagesLoading,
   selectChatWorkbenchStreaming,
+  selectChatWorkbenchStreamingConversationId,
   selectChatWorkbenchWorkspaceDetail,
 } from './model/selectors'
 export { useChatWorkbenchStore } from './model/store'

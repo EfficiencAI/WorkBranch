@@ -12,6 +12,7 @@ export type ChatWorkbenchState = {
   loading: boolean
   messagesLoading: boolean
   streaming: boolean
+  streamingConversationId: string | null
   error: string | null
   messagesError: string | null
 }
@@ -26,8 +27,10 @@ export type ChatWorkbenchActions = {
   loadChatWorkbench: (preferredSessionId?: SessionId | null) => Promise<void>
   loadConversationBundle: (conversationId: string) => Promise<void>
   loadConversationMessages: (conversationId: string) => Promise<void>
+  syncConversationContext: (conversationId: string | null) => Promise<void>
   enterSessionContext: (sessionDetail: SessionDetail | null) => Promise<SessionContextResult>
   sendMessageToConversation: (conversationId: string, messageText: string, handlers?: SendMessageHandlers) => Promise<void>
+  cancelStreamingConversation: () => Promise<void>
 
   clearError: () => void
   resetConversationState: () => void

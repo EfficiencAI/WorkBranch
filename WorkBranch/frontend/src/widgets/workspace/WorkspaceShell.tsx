@@ -1,11 +1,14 @@
 import { Button, Space, Typography } from 'antd'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { SessionId } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
+  selectChatWorkbenchConversationMessages,
   selectChatWorkbenchConversationNodes,
-  selectChatWorkbenchStreaming,
+  selectChatWorkbenchMessagesError,
+  selectChatWorkbenchMessagesLoading,
+  selectChatWorkbenchStreamingConversationId,
   selectChatWorkbenchWorkspaceDetail,
   selectCreatingSession,
   selectCurrentSessionDetail,
@@ -45,8 +48,11 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const user = useUserStore(selectUserProfile)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
   const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
+  const conversationMessages = useChatWorkbenchStore(selectChatWorkbenchConversationMessages)
+  const messagesLoading = useChatWorkbenchStore(selectChatWorkbenchMessagesLoading)
+  const messagesError = useChatWorkbenchStore(selectChatWorkbenchMessagesError)
   const conversationNodes = useChatWorkbenchStore(selectChatWorkbenchConversationNodes)
-  const sending = useChatWorkbenchStore(selectChatWorkbenchStreaming)
+  const streamingConversationId = useChatWorkbenchStore(selectChatWorkbenchStreamingConversationId)
   const focusedConversationId = useTreeStore(selectFocusedConversationId)
   const selectedConversationId = useTreeStore(selectSelectedConversationId)
   const selectSession = useSessionStore((state) => state.selectSession)
@@ -55,6 +61,8 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const deleteSession = useSessionStore((state) => state.deleteSession)
   const ensureConversationForCurrentSession = useSessionStore((state) => state.ensureConversationForCurrentSession)
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
+  const syncConversationContext = useChatWorkbenchStore((state) => state.syncConversationContext)
+  const cancelStreamingConversation = useChatWorkbenchStore((state) => state.cancelStreamingConversation)
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
@@ -75,6 +83,14 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     () => conversationNodes.find((node) => node.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
+  const viewedConversationId = focusedConversationId ?? selectedConversationId ?? null
+  const hasConversationNodes = conversationNodes.length > 0
+  const canCreateConversationOnSend = !hasConversationNodes
+  const isStreamingViewedConversation = Boolean(streamingConversationId && streamingConversationId === viewedConversationId)
+
+  useEffect(() => {
+    void syncConversationContext(viewedConversationId)
+  }, [syncConversationContext, viewedConversationId])
 
   const runSessionContext = useCallback(
     async (detail: Awaited<ReturnType<typeof selectSession>>) => {
@@ -147,10 +163,23 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
-        const fallbackConversationId = sessionDetail?.conversations?.[sessionDetail.conversations.length - 1]?.conversationId ?? null
-        const targetConversationId = focusedConversationId ?? selectedConversationId ?? fallbackConversationId ?? await ensureConversationForCurrentSession()
+        let targetConversationId = focusedConversationId ?? selectedConversationId ?? null
+
         if (!targetConversationId) {
-          return
+          if (sessionDetail?.conversations?.length) {
+            return
+          }
+
+          targetConversationId = await ensureConversationForCurrentSession()
+          if (!targetConversationId) {
+            return
+          }
+
+          useTreeStore.getState().setSelectedConversationId(targetConversationId)
+          if (selectedSessionId) {
+            const detail = await loadSessionDetail(selectedSessionId)
+            await enterSessionContext(detail)
+          }
         }
 
         await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, {
@@ -164,8 +193,16 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         onRequestError(caughtError)
       }
     },
-    [ensureConversationForCurrentSession, focusedConversationId, onRequestError, onSendError, selectedConversationId, sessionDetail],
+    [ensureConversationForCurrentSession, enterSessionContext, focusedConversationId, loadSessionDetail, onRequestError, onSendError, selectedConversationId, selectedSessionId, sessionDetail],
   )
+
+  const handleStopMessage = useCallback(async () => {
+    try {
+      await cancelStreamingConversation()
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [cancelStreamingConversation, onRequestError])
 
   function collapseNav() {
     setPeekNav(false)
@@ -201,8 +238,13 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           conversationDetail={conversationDetail}
           workspaceDetail={workspaceDetail}
           conversationNodes={conversationNodes}
-          sending={sending}
+          conversationMessages={conversationMessages}
+          messagesLoading={messagesLoading}
+          messagesError={messagesError}
+          sending={isStreamingViewedConversation}
+          canCreateConversationOnSend={canCreateConversationOnSend}
           onSendMessage={handleSendMessage}
+          onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}
         />
 
@@ -291,7 +333,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             </Space>
             <Space wrap>
               {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段二" tone="processing" />
+              <StatusTag label="阶段十二" tone="processing" />
               <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
               <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
               <StatusTag

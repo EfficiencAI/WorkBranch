@@ -4,7 +4,8 @@
 AGENTS.md
 CLAUDE.md
 setting.json
-cli.config.json
+.playwright/
+.playwright-cli/
 
 __pycache__/
 .agent_states/

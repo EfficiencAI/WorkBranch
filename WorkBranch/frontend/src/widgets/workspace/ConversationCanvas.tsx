@@ -5,15 +5,7 @@ import { Button, Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
-import {
-  selectChatWorkbenchConversationMessages,
-  selectChatWorkbenchMessagesError,
-  selectChatWorkbenchMessagesLoading,
-  selectFocusedConversationId,
-  selectSelectedConversationId,
-  useChatWorkbenchStore,
-  useTreeStore,
-} from '../../features'
+import { selectFocusedConversationId, selectSelectedConversationId, useTreeStore } from '../../features'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { frontendLogger } from '../../shared/logging/logger'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
@@ -27,8 +19,13 @@ type ConversationCanvasProps = {
   conversationDetail: ConversationDetail | null
   workspaceDetail: WorkspaceDetail | null
   conversationNodes: ConversationNode[]
+  conversationMessages: MessageNode[]
+  messagesLoading: boolean
+  messagesError: string | null
   sending: boolean
+  canCreateConversationOnSend: boolean
   onSendMessage: (message: string) => Promise<void>
+  onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
 }
 
@@ -227,8 +224,13 @@ function FlowViewport({
   conversationDetail,
   workspaceDetail,
   conversationNodes,
+  conversationMessages,
+  messagesLoading,
+  messagesError,
   sending,
+  canCreateConversationOnSend,
   onSendMessage,
+  onStopMessage,
   onCreateConversation,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
@@ -251,9 +253,6 @@ function FlowViewport({
     () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
-  const chatMessages = useChatWorkbenchStore(selectChatWorkbenchConversationMessages)
-  const messagesLoading = useChatWorkbenchStore(selectChatWorkbenchMessagesLoading)
-  const messagesError = useChatWorkbenchStore(selectChatWorkbenchMessagesError)
 
   const displayConversations = useMemo(
     () => (focusedConversation ? buildFocusContext(conversationNodes, focusedConversationId) : conversationNodes),
@@ -449,21 +448,21 @@ function FlowViewport({
                   <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                     <Typography.Text strong>消息列表</Typography.Text>
                     <StatusTag
-                      label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${chatMessages.length} 条`}
+                      label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${conversationMessages.length} 条`}
                       tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
                     />
                   </Space>
 
                   {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
 
-                  {!messagesLoading && !messagesError && chatMessages.length === 0 ? (
+                  {!messagesLoading && !messagesError && conversationMessages.length === 0 ? (
                     <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text>
                   ) : null}
 
-                  {!messagesError && chatMessages.length ? (
+                  {!messagesError && conversationMessages.length ? (
                     <div className="conversation-canvas__focused-messages">
                       <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                        {chatMessages.map((message) => (
+                        {conversationMessages.map((message) => (
                           <Card key={message.id} size="small" className="conversation-canvas__focused-message">
                             <Space direction="vertical" size={4} style={{ width: '100%' }}>
                               <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
@@ -485,6 +484,7 @@ function FlowViewport({
                       selectedConversationLabel={summarizeConversation(focusedConversation)}
                       sending={sending}
                       onSend={onSendMessage}
+                      onStop={onStopMessage}
                     />
                   </div>
                 </Space>
@@ -503,14 +503,16 @@ function FlowViewport({
                   <Typography.Text strong>全局底部输入区</Typography.Text>
                   <Typography.Text type="secondary">Selected Conversation</Typography.Text>
                 </Space>
-                <StatusTag label={sending ? '发送中' : selectedConversation ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation ? 'success' : 'default'} />
+                <StatusTag label={sending ? '发送中' : selectedConversation || canCreateConversationOnSend ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation || canCreateConversationOnSend ? 'success' : 'default'} />
               </Space>
               <MessageComposer
                 workspaceId={conversationDetail?.workspaceId ?? null}
                 selectedConversationId={selectedConversation?.conversationId ?? null}
                 selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
                 sending={sending}
+                allowCreateOnSend={canCreateConversationOnSend}
                 onSend={onSendMessage}
+                onStop={onStopMessage}
               />
             </Space>
           </Card>

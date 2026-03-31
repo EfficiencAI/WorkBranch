@@ -145,6 +145,10 @@ export type ChatStreamEvent = {
   metadata?: Record<string, unknown>
 }
 
+export async function cancelConversation(conversationId: string) {
+  await post(`/api/session/conversations/${conversationId}/cancel`)
+}
+
 export async function streamConversationMessage(
   conversationId: string,
   body: { message: string },

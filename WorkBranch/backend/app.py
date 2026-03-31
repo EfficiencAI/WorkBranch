@@ -153,6 +153,7 @@ def _get_logging_flags() -> dict[str, bool]:
 
 
 @app.post("/api/logs", tags=["frontend"])
+@app.post("/logs", tags=["frontend"])
 async def ingest_frontend_log(request: Request, body: FrontendLogBody) -> Result:
     content_type = request.headers.get("content-type", "")
     if not content_type.startswith("application/json"):

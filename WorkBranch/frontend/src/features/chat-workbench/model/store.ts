@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
+  cancelConversation,
   fetchConversationDetail,
   fetchConversationMessages,
   fetchSessionConversations,
@@ -47,6 +48,12 @@ function pickPrimaryConversationId(_sessionDetail: SessionDetail, conversationNo
   return conversationNodes[conversationNodes.length - 1]?.conversationId ?? null
 }
 
+function isAbortError(caughtError: unknown) {
+  return caughtError instanceof DOMException && caughtError.name === 'AbortError'
+}
+
+let activeStreamAbortController: AbortController | null = null
+
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   conversationDetail: null,
   workspaceDetail: null,
@@ -55,6 +62,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   loading: false,
   messagesLoading: false,
   streaming: false,
+  streamingConversationId: null,
   error: null,
   messagesError: null,
 
@@ -75,6 +83,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       loading: false,
       messagesLoading: false,
       streaming: false,
+      streamingConversationId: null,
       error: null,
       messagesError: null,
     })
@@ -82,7 +91,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
   async loadConversationBundle(conversationId: string) {
     try {
-      set({ loading: true, error: null })
+      set({ error: null })
       const bundle = await loadConversationDetailBundle(conversationId)
       set({
         conversationDetail: bundle.detail,
@@ -91,8 +100,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '对话数据加载失败') })
       throw caughtError
-    } finally {
-      set({ loading: false })
     }
   },
 
@@ -109,6 +116,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
   },
 
+  async syncConversationContext(conversationId: string | null) {
+    if (!conversationId) {
+      set({ conversationDetail: null, workspaceDetail: null, conversationMessages: [], messagesError: null })
+      return
+    }
+
+    await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
+  },
+
   async enterSessionContext(sessionDetail: SessionDetail | null): Promise<SessionContextResult> {
     if (!sessionDetail) {
       get().resetConversationState()
@@ -122,7 +138,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
 
     try {
-      set({ loading: true, error: null })
+      set({ error: null })
 
       const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
       const primaryConversationId = pickPrimaryConversationId(sessionDetail, conversationNodes)
@@ -130,9 +146,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       set({ conversationNodes })
 
       if (primaryConversationId) {
-        const bundle = await loadConversationDetailBundle(primaryConversationId)
-        const conversationMessages = await fetchConversationMessages(primaryConversationId)
-        set({ conversationDetail: bundle.detail, workspaceDetail: bundle.workspace, conversationMessages })
+        await get().syncConversationContext(primaryConversationId)
       } else {
         set({ conversationDetail: null, workspaceDetail: null, conversationMessages: [] })
       }
@@ -143,8 +157,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       get().resetConversationState()
       set({ error: getErrorMessage(caughtError, '会话对话树加载失败') })
       return 'empty-session'
-    } finally {
-      set({ loading: false })
     }
   },
 
@@ -169,10 +181,12 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       return
     }
 
-    const { onEvent, onStreamError, signal } = handlers
+    const { onEvent, onStreamError } = handlers
+    const abortController = new AbortController()
+    activeStreamAbortController = abortController
 
     try {
-      set({ streaming: true })
+      set({ streaming: true, streamingConversationId: conversationId })
       frontendLogger.info('send_message', {
         extra: {
           conversation_id: conversationId,
@@ -186,7 +200,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           message: messageText,
         },
         {
-          signal,
+          signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
             onEvent?.(event)
             if (event.type === 'error') {
@@ -202,25 +216,51 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         },
       )
 
-      await Promise.all([
-        get().loadConversationBundle(conversationId),
-        get().loadConversationMessages(conversationId),
-      ])
+      await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
 
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
       const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
       const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
       set({ conversationNodes })
     } catch (caughtError) {
-      frontendLogger.error('stream_failed', {
-        extra: {
-          conversation_id: conversationId,
-          reason: getErrorMessage(caughtError, 'stream_request_failed'),
-        },
-      })
-      throw caughtError
+      if (!isAbortError(caughtError)) {
+        frontendLogger.error('stream_failed', {
+          extra: {
+            conversation_id: conversationId,
+            reason: getErrorMessage(caughtError, 'stream_request_failed'),
+          },
+        })
+        throw caughtError
+      }
     } finally {
-      set({ streaming: false })
+      if (activeStreamAbortController === abortController) {
+        activeStreamAbortController = null
+      }
+      set({ streaming: false, streamingConversationId: null })
+    }
+  },
+
+  async cancelStreamingConversation() {
+    const { streamingConversationId } = get()
+
+    if (!streamingConversationId) {
+      return
+    }
+
+    activeStreamAbortController?.abort()
+
+    try {
+      await cancelConversation(streamingConversationId)
+    } finally {
+      await Promise.all([get().loadConversationBundle(streamingConversationId), get().loadConversationMessages(streamingConversationId)])
+
+      const { currentSessionId } = useSessionStore.getState()
+      if (currentSessionId) {
+        const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+        const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+        const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+        set({ conversationNodes })
+      }
     }
   },
 }))
