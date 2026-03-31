@@ -2,7 +2,6 @@ import { Button, Input, Space, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 
 type MessageComposerProps = {
-  workspaceId: string | null
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   sending: boolean
@@ -12,7 +11,6 @@ type MessageComposerProps = {
 }
 
 export function MessageComposer({
-  workspaceId,
   selectedConversationId,
   selectedConversationLabel,
   sending,
@@ -54,13 +52,11 @@ export function MessageComposer({
 
   return (
     <div className="message-composer">
-      <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
           <Space direction="vertical" size={2}>
             <Typography.Text strong>当前目标对话</Typography.Text>
-            <Typography.Text type={selectedConversationId ? undefined : 'secondary'}>
-              {selectedConversationId ? `${selectedConversationLabel ?? selectedConversationId}` : allowCreateOnSend ? '发送首条消息时将自动创建对话' : '请先选择一个对话作为发送目标'}
-            </Typography.Text>
+            {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
           </Space>
           <Button size="small" onClick={() => setCollapsed(true)}>
             折叠
@@ -68,25 +64,13 @@ export function MessageComposer({
         </Space>
 
         <Input.TextArea
-          rows={4}
+          rows={3}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
-          placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : '请先选择目标对话后再发送'}
+          placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
         />
 
-        <Space direction="vertical" size={4} style={{ width: '100%' }}>
-          <Typography.Text strong>conversation workspace</Typography.Text>
-          <Input value={workspaceId ?? ''} readOnly />
-        </Space>
-
-        <Space className="message-composer__footer" wrap>
-          <Typography.Text type="secondary">
-            {selectedConversationId
-              ? `消息将发送到当前选中的对话 ${selectedConversationLabel ?? selectedConversationId}。`
-              : allowCreateOnSend
-                ? '当前 session 还没有对话；发送时会先创建首个对话。'
-                : '当前未选择目标对话，请先在画布中选择一个对话。'}
-          </Typography.Text>
+        <Space className="message-composer__footer" wrap style={{ justifyContent: 'flex-end' }}>
           <Space>
             <Button disabled={!sending} onClick={() => void onStop?.()}>
               停止

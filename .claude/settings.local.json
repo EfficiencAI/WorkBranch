@@ -11,7 +11,9 @@
       "Bash(playwright-cli console:*)",
       "Bash(playwright-cli close:*)",
       "Bash(python \"e:/PythonProject/WorkBranch/WorkBranch/run_dev.py\")",
-      "Bash(playwright-cli open:*)"
+      "Bash(playwright-cli open:*)",
+      "Skill(playwright-cli)",
+      "Skill(playwright-cli:*)"
     ]
   }
 }

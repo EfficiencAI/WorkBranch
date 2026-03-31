@@ -1,6 +1,7 @@
 import { Button, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useSettings } from '../../app/settings'
 import type { SessionId } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
@@ -40,6 +41,7 @@ type WorkspaceShellProps = {
 export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
+  const { settings } = useSettings()
   const sessions = useSessionStore(selectSessionList)
   const selectedSessionId = useSessionStore(selectCurrentSessionId)
   const sessionDetail = useSessionStore(selectCurrentSessionDetail)
@@ -68,6 +70,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
 
   const isSettingsRoute = location.pathname === '/settings'
+  const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const navExpanded = peekNav || activeSidebar !== null
   const navClassName = activeSidebar
     ? 'workspace-shell__nav workspace-shell__nav--open'
@@ -317,38 +320,41 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           </div>
         </div>
 
-        <div className="workspace-shell__hud">
-          <Space direction="vertical" size={8}>
-            <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
-            <Space align="start" size={12} wrap>
-              <Typography.Title level={3} className="workspace-shell__title">
-                {isSettingsRoute
-                  ? '系统设置'
-                  : focusedConversation
-                    ? `对话 ${focusedConversation.conversationId}`
-                    : sessionDetail
-                      ? `会话 ${sessionDetail.title}`
-                      : '当前暂无会话'}
-              </Typography.Title>
+        {showWorkspaceHud ? (
+          <div className="workspace-shell__hud">
+            <Space direction="vertical" size={8}>
+              <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
+              <Space align="start" size={12} wrap>
+                <Typography.Title level={3} className="workspace-shell__title">
+                  {isSettingsRoute
+                    ? '系统设置'
+                    : focusedConversation
+                      ? `对话 ${focusedConversation.conversationId}`
+                      : sessionDetail
+                        ? `会话 ${sessionDetail.title}`
+                        : '当前暂无会话'}
+                </Typography.Title>
+              </Space>
+              <Space wrap>
+                {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
+                <StatusTag label="阶段十二" tone="processing" />
+                <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
+                <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
+                {(focusedConversation || selectedConversation) ? (
+                  <Space wrap size={6}>
+                    <Typography.Text>当前目标对话</Typography.Text>
+                    <StatusTag
+                      label={focusedConversation ? focusedConversation.conversationId : (selectedConversation as NonNullable<typeof selectedConversation>).conversationId}
+                      tone="processing"
+                    />
+                  </Space>
+                ) : (
+                  <Typography.Text type="secondary">当前目标对话</Typography.Text>
+                )}
+              </Space>
             </Space>
-            <Space wrap>
-              {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-              <StatusTag label="阶段十二" tone="processing" />
-              <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
-              <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
-              <StatusTag
-                label={
-                  focusedConversation
-                    ? `目标 ${focusedConversation.conversationId}`
-                    : selectedConversation
-                      ? `目标 ${selectedConversation.conversationId}`
-                      : '未选目标'
-                }
-                tone={focusedConversation || selectedConversation ? 'processing' : 'default'}
-              />
-            </Space>
-          </Space>
-        </div>
+          </div>
+        ) : null}
       </div>
     </section>
   )

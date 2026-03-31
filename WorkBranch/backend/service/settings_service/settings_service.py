@@ -34,7 +34,8 @@ def _merge_missing_defaults(defaults, current):
 DEFAULT_SETTINGS = {
     "ui": {
         "theme_mode": "system",
-        "show_debug_overlay": False
+        "show_debug_overlay": False,
+        "show_workspace_hud": False
     },
     "database": {
         "path": "workbranch.db"

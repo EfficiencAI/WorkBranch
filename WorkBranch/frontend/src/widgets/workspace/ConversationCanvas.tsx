@@ -1,9 +1,8 @@
 import { Background, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Space, Typography } from 'antd'
+import { Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
 import { selectFocusedConversationId, useTreeStore } from '../../features'
 import { frontendLogger } from '../../shared/logging/logger'
@@ -36,13 +35,9 @@ type FlowNodeData = {
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
-  workspaceId: string | null
   conversationError: string | null
-  sending: boolean
-  onSendMessage: (message: string) => Promise<void>
-  onStopMessage: () => Promise<void>
-  onCreateConversation: (parentConversationId: string | null) => Promise<void>
-  onExitFocus: () => void
+  focusCardWidth?: number
+  focusBodyHeight?: number
 }
 
 function summarizeConversation(conversation: ConversationNode) {
@@ -132,6 +127,98 @@ function stopEvent(event: React.SyntheticEvent) {
   event.stopPropagation()
 }
 
+function OverviewNodePage({ conversation, focused, selected }: { conversation: ConversationNode; focused: boolean; selected: boolean }) {
+  return (
+    <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
+        <Space direction="vertical" size={2}>
+          <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
+          <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
+        </Space>
+        <Space wrap onClick={stopEvent} onDoubleClick={stopEvent}>
+          <StatusTag
+            label={focused ? 'focused' : selected ? 'selected' : conversation.state}
+            tone={focused ? 'warning' : selected ? 'processing' : 'default'}
+          />
+        </Space>
+      </Space>
+
+      <Space wrap>
+        <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
+        {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
+      </Space>
+    </Space>
+  )
+}
+
+function FocusNodePage({
+  conversation,
+  conversationMessages,
+  messagesLoading,
+  messagesError,
+  conversationError,
+}: {
+  conversation: ConversationNode
+  conversationMessages: MessageNode[]
+  messagesLoading: boolean
+  messagesError: string | null
+  conversationError: string | null
+}) {
+  return (
+    <div className="conversation-node__focused-body nodrag nopan" onClick={stopEvent} onDoubleClick={stopEvent}>
+      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+        <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
+          <Space direction="vertical" size={2}>
+            <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
+            <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
+          </Space>
+          <Space wrap>
+            <StatusTag label="focused" tone="warning" />
+          </Space>
+        </Space>
+
+        <Space wrap>
+          <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
+          {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
+        </Space>
+
+        <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+          <Typography.Text strong>消息列表</Typography.Text>
+          <StatusTag
+            label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${conversationMessages.length} 条`}
+            tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
+          />
+        </Space>
+
+        {conversationError ? <Typography.Text type="danger">{conversationError}</Typography.Text> : null}
+        {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
+
+        {!messagesLoading && !messagesError && conversationMessages.length === 0 ? <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text> : null}
+
+        {!messagesError && conversationMessages.length ? (
+          <div className="conversation-node__messages">
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              {conversationMessages.map((message) => (
+                <Card key={message.id} size="small" className="conversation-node__message-card">
+                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                      <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
+                      <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
+                    </Space>
+                    <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
+                      {message.content}
+                    </Typography.Paragraph>
+                  </Space>
+                </Card>
+              ))}
+            </Space>
+          </div>
+        ) : null}
+      </Space>
+    </div>
+  )
+}
+
 function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
@@ -140,13 +227,9 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
     conversationMessages = [],
     messagesLoading = false,
     messagesError = null,
-    workspaceId,
     conversationError,
-    sending = false,
-    onSendMessage,
-    onStopMessage,
-    onCreateConversation,
-    onExitFocus,
+    focusCardWidth,
+    focusBodyHeight,
   } = data
 
   return (
@@ -154,88 +237,29 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       className={focused ? 'conversation-node conversation-node--focused' : selected ? 'conversation-node conversation-node--selected' : 'conversation-node'}
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
+      style={focused && focusCardWidth ? { width: `${focusCardWidth}px` } : undefined}
     >
-      <Card size="small" className={focused ? 'conversation-node__card conversation-node__card--assistant conversation-node__card--focused' : 'conversation-node__card conversation-node__card--assistant'}>
-        <Space direction="vertical" size={focused ? 14 : 10} style={{ width: '100%' }}>
-          <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
-            <Space direction="vertical" size={2}>
-              <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
-              <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
-            </Space>
-            <Space wrap onClick={stopEvent} onDoubleClick={stopEvent}>
-              <StatusTag
-                label={focused ? 'focused' : selected ? 'selected' : conversation.state}
-                tone={focused ? 'warning' : selected ? 'processing' : 'default'}
-              />
-              {focused ? (
-                <>
-                  <Button size="small" className="nodrag nopan" onClick={() => void onCreateConversation(conversation.conversationId)}>
-                    创建子对话
-                  </Button>
-                  <Button size="small" className="nodrag nopan" onClick={onExitFocus}>
-                    退出聚焦
-                  </Button>
-                </>
-              ) : null}
-            </Space>
-          </Space>
-
-          <Space wrap>
-            <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
-            {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
-          </Space>
-
-          {focused ? (
-            <div className="conversation-node__focused-body nodrag nopan" onClick={stopEvent} onDoubleClick={stopEvent}>
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Typography.Text strong>消息列表</Typography.Text>
-                  <StatusTag
-                    label={messagesLoading ? '加载中' : messagesError ? '加载失败' : `${conversationMessages.length} 条`}
-                    tone={messagesError ? 'error' : messagesLoading ? 'processing' : 'default'}
-                  />
-                </Space>
-
-                {conversationError ? <Typography.Text type="danger">{conversationError}</Typography.Text> : null}
-                {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
-
-                {!messagesLoading && !messagesError && conversationMessages.length === 0 ? (
-                  <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text>
-                ) : null}
-
-                {!messagesError && conversationMessages.length ? (
-                  <div className="conversation-node__messages">
-                    <Space direction="vertical" size={8} style={{ width: '100%' }}>
-                      {conversationMessages.map((message) => (
-                        <Card key={message.id} size="small" className="conversation-node__message-card">
-                          <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                            <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                              <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
-                              <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
-                            </Space>
-                            <Typography.Paragraph style={{ marginBottom: 0 }}>{message.content}</Typography.Paragraph>
-                          </Space>
-                        </Card>
-                      ))}
-                    </Space>
-                  </div>
-                ) : null}
-
-                <div className="conversation-node__composer-shell">
-                  <MessageComposer
-                    workspaceId={workspaceId}
-                    selectedConversationId={conversation.conversationId}
-                    selectedConversationLabel={summarizeConversation(conversation)}
-                    sending={sending}
-                    onSend={onSendMessage}
-                    onStop={onStopMessage}
-                  />
-                </div>
-              </Space>
+      <div className={focused ? 'conversation-node__focus-shell conversation-node__focus-shell--focused' : 'conversation-node__focus-shell'}>
+        <div className={focused ? 'conversation-node__focus-content conversation-node__focus-content--focused' : 'conversation-node__focus-content'}>
+          <Card
+            size="small"
+            className={focused ? 'conversation-node__card conversation-node__card--assistant conversation-node__card--focused' : 'conversation-node__card conversation-node__card--assistant'}
+            styles={focused && focusBodyHeight ? { body: { height: `${focusBodyHeight}px` } } : undefined}
+          >
+            <div className="conversation-node__page-shell">
+              {!focused ? <OverviewNodePage conversation={conversation} focused={focused} selected={selected} /> : (
+                <FocusNodePage
+                  conversation={conversation}
+                  conversationMessages={conversationMessages}
+                  messagesLoading={messagesLoading}
+                  messagesError={messagesError}
+                  conversationError={conversationError}
+                />
+              )}
             </div>
-          ) : null}
-        </Space>
-      </Card>
+          </Card>
+        </div>
+      </div>
     </div>
   )
 }
@@ -262,16 +286,12 @@ function FlowViewport({
   onCreateConversation,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
-  const { settings } = useSettings()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setSelectedConversationId = useTreeStore((state) => state.setSelectedConversationId)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const selectionTimeoutRef = useRef<number | null>(null)
-
-  const showDebugOverlay =
-    settings?.ui && typeof settings.ui === 'object' && settings.ui !== null && 'show_debug_overlay' in settings.ui
-      ? settings.ui.show_debug_overlay === true
-      : false
+  const viewportRef = useRef<HTMLDivElement | null>(null)
+  const composerRef = useRef<HTMLDivElement | null>(null)
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === selectedConversationId) ?? null,
@@ -284,13 +304,47 @@ function FlowViewport({
 
   const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
 
+  const focusMetrics = useMemo(() => {
+    if (!focusedConversation) {
+      return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
+    }
+
+    const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
+    const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight
+    const composerHeight = composerRef.current?.clientHeight ?? 0
+    const topInset = 72
+    const sideInset = 28
+    const bottomInset = 20
+    const availableWidth = Math.max(280, viewportWidth - sideInset * 2)
+    const availableHeight = Math.max(220, viewportHeight - composerHeight - topInset - bottomInset)
+    const targetRatio = availableWidth / availableHeight
+    const baseWidth = 320
+    const cardWidth = Math.max(240, Math.min(availableWidth, baseWidth * targetRatio))
+    const bodyHeight = Math.max(220, Math.min(availableHeight, cardWidth * (availableHeight / availableWidth)))
+    const visualHeight = bodyHeight
+    const viewportTop = viewportRef.current?.getBoundingClientRect().top ?? 0
+    const composerTop = composerRef.current?.getBoundingClientRect().top ?? viewportTop + viewportHeight - composerHeight - 24
+    const composerTopInViewport = composerTop - viewportTop
+    const centerYOffset = (composerTopInViewport - viewportHeight) / 2
+
+    return {
+      cardWidth,
+      bodyHeight,
+      centerYOffset,
+      visualWidth: cardWidth,
+      visualHeight,
+    }
+  }, [conversationMessages.length, focusedConversation])
+
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
     return conversationNodes.map((conversation) => {
       const focused = storeFocusedConversationId === conversation.conversationId
+      const faded = storeFocusedConversationId !== null && storeFocusedConversationId !== conversation.conversationId
       return {
         id: conversation.conversationId,
         type: 'conversation',
         position: overviewLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 },
+        origin: [0.5, 0.5],
         data: {
           conversation,
           focused,
@@ -298,29 +352,28 @@ function FlowViewport({
           conversationMessages: focused ? conversationMessages : [],
           messagesLoading: focused ? messagesLoading : false,
           messagesError: focused ? messagesError : null,
-          workspaceId: focused ? conversationDetail?.workspaceId ?? null : null,
           conversationError: focused ? conversationDetail?.error ?? null : null,
-          sending: focused ? sending : false,
-          onSendMessage,
-          onStopMessage,
-          onCreateConversation,
-          onExitFocus: () => setFocusedConversationId(null),
+          focusCardWidth: focused ? focusMetrics.cardWidth : undefined,
+          focusBodyHeight: focused ? focusMetrics.bodyHeight : undefined,
         },
+        className: focused
+          ? 'conversation-flow-node conversation-flow-node--focused'
+          : faded
+            ? 'conversation-flow-node conversation-flow-node--dimmed'
+            : 'conversation-flow-node',
         draggable: false,
       }
     })
   }, [
     conversationNodes,
-    conversationDetail?.workspaceId,
+    conversationDetail?.error,
+    focusMetrics.bodyHeight,
+    focusMetrics.cardWidth,
     conversationMessages,
     messagesError,
     messagesLoading,
-    onCreateConversation,
-    onSendMessage,
-    onStopMessage,
     overviewLayoutMap,
     selectedConversationId,
-    sending,
     setFocusedConversationId,
     storeFocusedConversationId,
   ])
@@ -353,7 +406,20 @@ function FlowViewport({
     const timeoutId = window.setTimeout(() => {
       if (focusedConversation) {
         const position = overviewLayoutMap.get(focusedConversation.conversationId) ?? { x: 0, y: 0 }
-        void reactFlow.setCenter(position.x + 320, position.y + 220, { zoom: 1.15, duration: 260 })
+        const nodeWidth = focusMetrics.visualWidth
+        const nodeHeight = focusMetrics.visualHeight
+        const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
+        const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight
+        const composerHeight = composerRef.current?.clientHeight ?? 0
+        const topInset = 72
+        const sideInset = 28
+        const bottomInset = 20
+        const availableWidth = Math.max(240, viewportWidth - sideInset * 2)
+        const availableHeight = Math.max(220, viewportHeight - composerHeight - topInset - bottomInset)
+        const zoom = Math.max(1, Math.min(2.4, Math.min(availableWidth / nodeWidth, availableHeight / nodeHeight)))
+        const centerX = position.x
+        const centerY = position.y - focusMetrics.centerYOffset / zoom
+        void reactFlow.setCenter(centerX, centerY, { zoom, duration: 260 })
         return
       }
 
@@ -361,7 +427,7 @@ function FlowViewport({
     }, 50)
 
     return () => window.clearTimeout(timeoutId)
-  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow])
+  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow, focusMetrics])
 
   const { setContextMenu } = useContextMenu()
 
@@ -390,46 +456,21 @@ function FlowViewport({
   )
 
   return (
-    <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu}>
-      {showDebugOverlay ? (
-        <div className="conversation-canvas__overlay conversation-canvas__overlay--meta">
-          <Space wrap>
-            <StatusTag label={`session ${currentSessionId ?? 'N/A'}`} tone="default" />
-            <StatusTag label={`workspace ${conversationDetail?.workspaceId ?? 'N/A'}`} tone="default" />
-            <StatusTag label={`对话 ${conversationNodes.length}`} tone="processing" />
-            <StatusTag label={workspaceDetail?.dir ? 'workspace 已定位' : 'workspace 未定位'} tone="warning" />
-            <StatusTag label={focusedConversation ? '聚焦态' : '概览态'} tone={focusedConversation ? 'success' : 'default'} />
-          </Space>
-          <Typography.Text type="secondary" className="conversation-canvas__meta-text">
-            {focusedConversation ? '当前通过摄像机聚焦展示节点完整内容。' : '当前显示该 session 下的对话树，可右键空白创建根对话，右键节点创建子对话。'}
-          </Typography.Text>
+    <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu} ref={viewportRef}>
+      {focusedConversation ? (
+        <div className="conversation-canvas__controls" role="toolbar" aria-label="聚焦控制">
+          <button
+            type="button"
+            className="conversation-canvas__exit-focus-button"
+            onClick={() => setFocusedConversationId(null)}
+          >
+            退出聚焦
+          </button>
         </div>
       ) : null}
 
-      <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
-        <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomOut({ duration: 180 })}>
-          -
-        </Button>
-        <Button className="conversation-canvas__control-button" onClick={() => void reactFlow.zoomIn({ duration: 180 })}>
-          +
-        </Button>
-        <Button
-          className="conversation-canvas__control-button"
-          onClick={() => {
-            if (focusedConversation) {
-              setFocusedConversationId(null)
-              return
-            }
-
-            void reactFlow.fitView({ padding: 0.2, duration: 240 })
-          }}
-        >
-          {focusedConversation ? '返回' : '适配'}
-        </Button>
-      </div>
-
       <ReactFlow
-        className="conversation-canvas__flow"
+        className={focusedConversation ? 'conversation-canvas__flow conversation-canvas__flow--focused' : 'conversation-canvas__flow'}
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
@@ -485,32 +526,20 @@ function FlowViewport({
         </div>
       ) : null}
 
-      {!focusedConversation ? (
-        <div className="conversation-canvas__composer-shell">
-          <div className="conversation-node conversation-node--composer">
-            <Card size="small" className="conversation-node__card conversation-node__card--composer">
-              <Space direction="vertical" size={12} style={{ width: '100%' }}>
-                <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                  <Space wrap>
-                    <Typography.Text strong>全局底部输入区</Typography.Text>
-                    <Typography.Text type="secondary">Selected Conversation</Typography.Text>
-                  </Space>
-                  <StatusTag label={sending ? '发送中' : selectedConversation || canCreateConversationOnSend ? '待发送' : '待选择目标'} tone={sending ? 'processing' : selectedConversation || canCreateConversationOnSend ? 'success' : 'default'} />
-                </Space>
-                <MessageComposer
-                  workspaceId={conversationDetail?.workspaceId ?? null}
-                  selectedConversationId={selectedConversation?.conversationId ?? null}
-                  selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
-                  sending={sending}
-                  allowCreateOnSend={canCreateConversationOnSend}
-                  onSend={onSendMessage}
-                  onStop={onStopMessage}
-                />
-              </Space>
-            </Card>
-          </div>
+      <div className={focusedConversation ? 'conversation-canvas__composer-shell conversation-canvas__composer-shell--focused' : 'conversation-canvas__composer-shell'} ref={composerRef}>
+        <div className={focusedConversation ? 'conversation-node conversation-node--composer conversation-node--composer-focused' : 'conversation-node conversation-node--composer'}>
+          <Card size="small" className="conversation-node__card conversation-node__card--composer">
+            <MessageComposer
+              selectedConversationId={selectedConversation?.conversationId ?? null}
+              selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
+              sending={sending}
+              allowCreateOnSend={canCreateConversationOnSend}
+              onSend={onSendMessage}
+              onStop={onStopMessage}
+            />
+          </Card>
         </div>
-      ) : null}
+      </div>
     </div>
   )
 }
