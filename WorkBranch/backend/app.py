@@ -16,7 +16,7 @@ from controller.session_api import router as session_router
 from controller.conversation_api import router as conversation_router
 from controller.workspace_api import router as workspace_router
 from core.logging import bind_ctx, get_ctx
-from singleton import get_logging_runtime, get_user_service
+from singleton import get_logging_runtime, get_settings_service, get_user_service
 
 
 @asynccontextmanager
@@ -56,6 +56,8 @@ FRONTEND_LOG_ALLOWED_EVENTS = {
     "switch_conversation",
     "send_message",
     "stream_failed",
+    "client.restored",
+    "workspace.loaded",
 }
 FRONTEND_LOG_ALLOWED_LEVELS = {"INFO", "WARNING", "ERROR"}
 FRONTEND_LOG_MAX_PAYLOAD_BYTES = 8 * 1024
@@ -139,6 +141,17 @@ def _build_frontend_log_extra(body: FrontendLogBody) -> dict[str, Any] | None:
     return extra or None
 
 
+
+def _get_logging_flags() -> dict[str, bool]:
+    settings = get_settings_service()
+    settings.reload()
+    return {
+        "logging_enabled": bool(settings.get("logging:enabled")),
+        "frontend_enabled": bool(settings.get("logging:frontend:enabled")),
+        "api_log_enabled": bool(settings.get("logging:api_log_enabled")),
+    }
+
+
 @app.post("/api/logs", tags=["frontend"])
 async def ingest_frontend_log(request: Request, body: FrontendLogBody) -> Result:
     content_type = request.headers.get("content-type", "")
@@ -151,6 +164,10 @@ async def ingest_frontend_log(request: Request, body: FrontendLogBody) -> Result
 
     if not _is_same_origin_request(request):
         raise HTTPException(status_code=403, detail="Forbidden")
+
+    flags = _get_logging_flags()
+    if not flags["logging_enabled"] or not flags["frontend_enabled"]:
+        return Result.success()
 
     if body.level not in FRONTEND_LOG_ALLOWED_LEVELS:
         raise HTTPException(status_code=400, detail="Invalid log level")
@@ -205,6 +222,8 @@ async def logging_middleware(request: Request, call_next):
     start_time = time.perf_counter()
     remote_addr = request.client.host if request.client else None
     query_keys = sorted(request.query_params.keys())
+    flags = _get_logging_flags()
+    api_log_enabled = flags["logging_enabled"] and flags["api_log_enabled"]
 
     with bind_ctx(
         client_id=client_id,
@@ -213,42 +232,45 @@ async def logging_middleware(request: Request, call_next):
         user_id=user_id,
         request_id=request_id,
     ):
-        logger.info(
-            event="request.started",
-            msg="request started",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "query_keys": query_keys,
-                "remote_addr": remote_addr,
-            },
-        )
+        if api_log_enabled:
+            logger.info(
+                event="request.started",
+                msg="request started",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "query_keys": query_keys,
+                    "remote_addr": remote_addr,
+                },
+            )
         try:
             response = await call_next(request)
         except Exception:
+            if api_log_enabled:
+                logger.info(
+                    event="request.completed",
+                    msg="request completed",
+                    extra={
+                        "method": request.method,
+                        "path": request.url.path,
+                        "status_code": 500,
+                        "latency_ms": round((time.perf_counter() - start_time) * 1000),
+                    },
+                )
+            raise
+
+        response.headers["X-Request-Id"] = request_id
+        if api_log_enabled:
             logger.info(
                 event="request.completed",
                 msg="request completed",
                 extra={
                     "method": request.method,
                     "path": request.url.path,
-                    "status_code": 500,
+                    "status_code": response.status_code,
                     "latency_ms": round((time.perf_counter() - start_time) * 1000),
                 },
             )
-            raise
-
-        response.headers["X-Request-Id"] = request_id
-        logger.info(
-            event="request.completed",
-            msg="request completed",
-            extra={
-                "method": request.method,
-                "path": request.url.path,
-                "status_code": response.status_code,
-                "latency_ms": round((time.perf_counter() - start_time) * 1000),
-            },
-        )
         return response
 
 

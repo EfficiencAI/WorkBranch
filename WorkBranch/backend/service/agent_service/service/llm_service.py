@@ -74,6 +74,37 @@ class LLMService:
         extra.update({k: v for k, v in kwargs.items() if v is not None})
         return extra
 
+    def _extract_usage(self, result: Any) -> dict[str, int]:
+        usage = getattr(result, "usage_metadata", None)
+        if not isinstance(usage, dict):
+            response_metadata = getattr(result, "response_metadata", None)
+            if isinstance(response_metadata, dict):
+                token_usage = response_metadata.get("token_usage")
+                if isinstance(token_usage, dict):
+                    usage = token_usage
+
+        if not isinstance(usage, dict):
+            return {}
+
+        prompt_tokens = usage.get("input_tokens")
+        if prompt_tokens is None:
+            prompt_tokens = usage.get("prompt_tokens")
+
+        completion_tokens = usage.get("output_tokens")
+        if completion_tokens is None:
+            completion_tokens = usage.get("completion_tokens")
+
+        total_tokens = usage.get("total_tokens")
+        if total_tokens is None and isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+            total_tokens = prompt_tokens + completion_tokens
+
+        extracted = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": total_tokens,
+        }
+        return {k: v for k, v in extracted.items() if isinstance(v, int)}
+
     def _invoke_with_logging(self, operation: str, invoke_fn):
         start_time = time.perf_counter()
         self._log_llm_event(
@@ -97,12 +128,13 @@ class LLMService:
             "INFO",
             "llm.call.completed",
             "llm call completed",
-            extra=self._build_llm_extra(operation, start_time),
+            extra=self._build_llm_extra(operation, start_time, **self._extract_usage(result)),
         )
         return result
 
     def _stream_with_logging(self, operation: str, stream_fn) -> Generator[str, None, None]:
         start_time = time.perf_counter()
+        usage: dict[str, int] = {}
         self._log_llm_event(
             "INFO",
             "llm.call.started",
@@ -111,7 +143,13 @@ class LLMService:
         )
         try:
             for chunk in stream_fn():
-                yield chunk
+                if isinstance(chunk, tuple):
+                    text, chunk_usage = chunk
+                    if isinstance(chunk_usage, dict) and chunk_usage:
+                        usage = chunk_usage
+                    yield text
+                else:
+                    yield chunk
         except Exception as exc:
             self._log_llm_event(
                 "ERROR",
@@ -125,7 +163,7 @@ class LLMService:
             "INFO",
             "llm.call.completed",
             "llm call completed",
-            extra=self._build_llm_extra(operation, start_time),
+            extra=self._build_llm_extra(operation, start_time, **usage),
         )
 
     def chat(
@@ -210,11 +248,12 @@ class LLMService:
         
         def stream_chunks():
             for chunk in llm.stream(lc_messages):
+                chunk_usage = self._extract_usage(chunk)
                 if chunk.content:
                     print(chunk.content, end="", flush=True)
                     if stream_callback:
                         stream_callback(chunk.content)
-                    yield chunk.content
+                    yield chunk.content, chunk_usage
 
         yield from self._stream_with_logging("chat_stream", stream_chunks)
         

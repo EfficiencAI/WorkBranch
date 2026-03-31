@@ -4,7 +4,7 @@ from typing import Optional, Dict, Any, Callable, Awaitable
 from enum import Enum
 from datetime import datetime, timezone
 
-from singleton import get_conversation_buffer, get_agent_service, get_conversation_dao
+from singleton import get_conversation_buffer, get_agent_service, get_conversation_dao, get_logging_runtime
 from service.session_service.conversation_buffer import ConversationBuffer
 from service.agent_service.agent_service import AgentService
 from data.conversation_dao import ConversationDAO
@@ -54,9 +54,9 @@ class ConversationCreator:
         self._lock = asyncio.Lock()
 
     def _write_content_record(self, conversation_id: str, content_type: str, payload: Dict[str, Any]) -> None:
+        # conversation-content is an audit timeline, not the canonical message-body store.
+        # Full user/assistant content is retrieved from SQLite nodes plus ConversationBuffer.
         if self._runtime is None:
-            from singleton import get_logging_runtime
-
             self._runtime = get_logging_runtime()
         self._runtime.write_conversation_content(
             {
@@ -66,6 +66,11 @@ class ConversationCreator:
                 "payload": payload,
             }
         )
+
+    def _get_logger(self):
+        if self._runtime is None:
+            self._runtime = get_logging_runtime()
+        return self._runtime.get_logger("app")
 
     async def create_conversation(
         self,
@@ -149,7 +154,12 @@ class ConversationCreator:
         self._write_content_record(
             conversation_id,
             "user_message",
-            {"content": message},
+            {
+                "role": "user",
+                "storage": "sqlite_nodes",
+                "content_length": len(message),
+                "state": "buffered",
+            },
         )
 
         async with self._lock:
@@ -214,7 +224,12 @@ class ConversationCreator:
             self._write_content_record(
                 conversation_id,
                 "assistant_message",
-                {"content": assistant_content},
+                {
+                    "role": "assistant",
+                    "storage": "sqlite_nodes",
+                    "content_length": len(assistant_content),
+                    "state": "buffered",
+                },
             )
 
     async def _finalize_message_failure(
@@ -395,6 +410,10 @@ class ConversationCreator:
         return result
 
     async def delete_conversation(self, conversation_id: str) -> bool:
+        persisted = self._dao.get_conversation_by_id(conversation_id)
+        if not persisted and conversation_id not in self._conversations:
+            return False
+
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if conv_info and conv_info.state == ConversationState.RUNNING:
@@ -404,7 +423,34 @@ class ConversationCreator:
                 del self._conversations[conversation_id]
 
         await self._buffer.clear(conversation_id)
-        self._agent.delete_conversation(conversation_id)
+        deleted = self._agent.delete_conversation(conversation_id)
+        if persisted is not None:
+            deleted = True if deleted or persisted is not None else deleted
+
+        if not deleted:
+            return False
+
+        session_id = persisted.session_id if persisted else (conv_info.session_id if conv_info else None)
+        workspace_id = persisted.workspace_id if persisted else (conv_info.workspace_id if conv_info else None)
+        parent_conversation_id = persisted.parent_conversation_id if persisted else (conv_info.parent_conversation_id if conv_info else None)
+
+        with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
+            self._get_logger().info(
+                event="conversation.deleted",
+                msg="conversation deleted",
+                extra={
+                    "session_id": session_id,
+                    "conversation_id": conversation_id,
+                    "workspace_id": workspace_id,
+                    "parent_conversation_id": parent_conversation_id,
+                },
+            )
+
+        self._write_content_record(
+            conversation_id,
+            "system_event",
+            {"event": "conversation.deleted", "session_id": session_id, "workspace_id": workspace_id},
+        )
         return True
 
     def is_conversation_running(self, conversation_id: str) -> bool:

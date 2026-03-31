@@ -45,6 +45,8 @@ class LogWriter:
         self._current_file: dict[LogModule, Path] = {}
 
         self._dropped: dict[LogLevel, int] = {"DEBUG": 0, "INFO": 0, "WARNING": 0, "ERROR": 0}
+        self._last_drop_alert_at = 0.0
+        self._last_drop_alert_total = 0
 
         # conversation-content seq per conversation_id (in-memory for Phase 1)
         self._content_seq: dict[str, int] = {}
@@ -96,6 +98,7 @@ class LogWriter:
                     self._dropped["ERROR"] += 1
             else:
                 self._dropped[level] += 1
+            self._emit_queue_dropped_alert_if_needed()
 
     def enqueue_conversation_content(self, record: ConversationContentRecord) -> None:
         try:
@@ -103,6 +106,45 @@ class LogWriter:
         except queue.Full:
             # content is treated like INFO
             self._dropped["INFO"] += 1
+            self._emit_queue_dropped_alert_if_needed()
+
+    def _emit_queue_dropped_alert_if_needed(self) -> None:
+        dropped_total = sum(self._dropped.values())
+        if dropped_total <= 0:
+            return
+
+        now = time.time()
+        dropped_since_last_alert = dropped_total - self._last_drop_alert_total
+        if dropped_since_last_alert <= 0:
+            return
+        if self._last_drop_alert_at and dropped_since_last_alert < 10 and (now - self._last_drop_alert_at) < 5.0:
+            return
+
+        record: LogRecord = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "level": "WARNING",
+            "module": "app",
+            "event": "app.queue_dropped",
+            "msg": "log writer dropped queued records",
+            "ctx": {
+                "client_id": None,
+                "conversation_id": None,
+                "workspace_id": None,
+                "user_id": None,
+                "request_id": None,
+            },
+            "extra": {
+                "dropped_total": dropped_total,
+                "dropped_since_last_alert": dropped_since_last_alert,
+                "dropped_by_level": dict(self._dropped),
+                "queue_size": self._queue.qsize(),
+                "queue_maxsize": self._cfg.queue_maxsize,
+            },
+            "exception": None,
+        }
+        self._handle_log(record)
+        self._last_drop_alert_at = now
+        self._last_drop_alert_total = dropped_total
 
     def _ensure_module_file(self, module: LogModule) -> Path:
         with self._lock:
@@ -212,6 +254,8 @@ class LogWriter:
         self._write_jsonl(path, out)
 
     def _handle_content(self, record: ConversationContentRecord) -> None:
+        # conversation-content is a semantic audit timeline. It may reference message events,
+        # but the canonical user/assistant bodies live in SQLite nodes instead of this log.
         if not self._cfg.conversation_content_enabled:
             return
         conversation_id = record["conversation_id"]

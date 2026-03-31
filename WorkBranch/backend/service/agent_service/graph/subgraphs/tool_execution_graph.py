@@ -1,4 +1,5 @@
 from typing import TypedDict, List, Optional, Literal, Callable
+from datetime import datetime, timezone
 from langgraph.graph import StateGraph, END
 import os
 import shutil
@@ -10,6 +11,56 @@ from ...tools import ALL_TOOLS, FILE_TOOLS, EXPLORE_TOOLS, SUBAGENT_TOOLS
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
 EXPLORE_TOOLS = {"explore_code", "explore_internet"}
 SUBAGENT_TOOLS = {"call_explore_agent", "call_review_agent"}
+
+
+def _summarize_text(value: str, limit: int = 160) -> str:
+    compact = " ".join((value or "").split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 3] + "..."
+
+
+
+def _write_tool_event(
+    conversation_id: Optional[str],
+    tool_name: str,
+    status: Literal["started", "completed", "failed"],
+    *,
+    task_description: str = "",
+    result: Optional[str] = None,
+    error: Optional[str] = None,
+) -> None:
+    if not conversation_id:
+        return
+
+    payload = {
+        "tool_name": tool_name,
+        "status": status,
+    }
+    summary = ""
+    if status == "started":
+        summary = _summarize_text(task_description or f"started {tool_name}")
+    elif status == "completed":
+        summary = _summarize_text(result or f"completed {tool_name}")
+    elif status == "failed":
+        summary = _summarize_text(error or f"failed {tool_name}")
+
+    if summary:
+        payload["summary"] = summary
+    if error:
+        payload["error"] = _summarize_text(error)
+
+    from singleton import get_logging_runtime
+
+    get_logging_runtime().write_conversation_content(
+        {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "conversation_id": conversation_id,
+            "type": "tool_event",
+            "payload": payload,
+        }
+    )
+
 
 
 def get_allowed_tools(agent_type: str, settings_service=None) -> List[str]:
@@ -178,7 +229,10 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     workspace_id = state["workspace_id"]
     task_description = state.get("task_description", "")
     previous_results = state.get("previous_results", [])
-    
+    conversation_id = None
+    if message_context:
+        conversation_id = message_context.get("conversation_id")
+
     print(f"[ToolExec] 工具: {tool_name}")
     print(f"[ToolExec] 参数: {tool_args}")
     print(f"[ToolExec] 任务描述: {task_description}")
@@ -193,6 +247,13 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 "tool_args": tool_args,
                 "task_description": task_description
             })
+
+    _write_tool_event(
+        conversation_id,
+        tool_name,
+        "started",
+        task_description=task_description,
+    )
 
     if tool_name in FILE_TOOLS and workspace_service:
         path_key = "path" if "path" in tool_args else "file_path"
@@ -256,7 +317,13 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                             "result": result[:500] + "..." if len(result) > 500 else result,
                             "success": True
                         })
-                
+
+                _write_tool_event(
+                    conversation_id,
+                    tool_name,
+                    "completed",
+                    result=result,
+                )
                 return {"result": result, "error": None}
             except Exception as e:
                 print(f"[ToolExec] LLM 调用失败: {e}")
@@ -269,10 +336,22 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                             "error": str(e),
                             "success": False
                         })
+                _write_tool_event(
+                    conversation_id,
+                    tool_name,
+                    "failed",
+                    error=str(e),
+                )
                 return {"result": f"思考失败: {e}", "error": str(e)}
         else:
             result = f"思考任务: {task_description} (LLM 服务未配置)"
             print(f"[ToolExec] 结果: {result}")
+            _write_tool_event(
+                conversation_id,
+                tool_name,
+                "completed",
+                result=result,
+            )
             return {"result": result, "error": None}
     
     if tool_name == "read_file":
@@ -308,7 +387,22 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 "error": tool_result.get("error"),
                 "success": tool_result.get("error") is None
             })
-    
+
+    if tool_result.get("error") is None:
+        _write_tool_event(
+            conversation_id,
+            tool_name,
+            "completed",
+            result=tool_result.get("result") or "",
+        )
+    else:
+        _write_tool_event(
+            conversation_id,
+            tool_name,
+            "failed",
+            error=str(tool_result.get("error")),
+        )
+
     return tool_result
 
 

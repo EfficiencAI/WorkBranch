@@ -31,6 +31,15 @@ async function loadConversationDetailBundle(conversationId: string): Promise<{
     : Promise.resolve(null)
 
   const workspace = await workspacePromise
+  if (workspace) {
+    frontendLogger.info('workspace.loaded', {
+      extra: {
+        workspace_id: workspace.id,
+        conversation_id: conversationId,
+        session_id: detail.sessionId,
+      },
+    })
+  }
   return { detail, workspace }
 }
 

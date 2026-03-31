@@ -38,6 +38,8 @@ async def get_conversation_messages(
     conversation_id: str,
     service: SessionService = Depends(get_session_service),
 ) -> Result:
+    # This endpoint returns business conversation history from session storage,
+    # not transport transcripts under .temp/conversations or conversation-content logs.
     conversation = await service.get_conversation_detail(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -80,6 +82,8 @@ async def send_conversation_message(
         timeout_counter = 0
         max_timeout = STREAM_MAX_TIMEOUT_TICKS
 
+        subscriber = None
+
         with bind_ctx(**request_ctx):
             logger.info(
                 event="stream.started",
@@ -88,16 +92,14 @@ async def send_conversation_message(
             )
             try:
                 await mq.start_consumer()
+                subscriber = mq.subscribe(target_conversation_id)
 
                 while not done_received and timeout_counter < max_timeout:
                     try:
                         message = await asyncio.wait_for(
-                            mq._queue.get(),
+                            subscriber.get(),
                             timeout=1.0,
                         )
-
-                        if message.conversation_id != target_conversation_id:
-                            continue
 
                         event_data = {
                             "type": message.message_type.value,
@@ -202,6 +204,9 @@ async def send_conversation_message(
                     exception="".join(traceback.format_exception(type(e), e, e.__traceback__)),
                 )
                 yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+            finally:
+                if subscriber is not None:
+                    mq.unsubscribe(target_conversation_id, subscriber)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 

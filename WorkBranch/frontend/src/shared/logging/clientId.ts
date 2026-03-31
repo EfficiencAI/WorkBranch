@@ -10,27 +10,31 @@ function generateClientId() {
   return `client-${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export function getClientId() {
+export function readClientId() {
   if (typeof window === 'undefined') {
     if (!memoryClientId) {
       memoryClientId = generateClientId()
     }
-    return memoryClientId
+    return { clientId: memoryClientId, restored: false }
   }
 
   try {
     const existing = window.sessionStorage.getItem(CLIENT_ID_STORAGE_KEY)
     if (existing) {
-      return existing
+      return { clientId: existing, restored: true }
     }
 
     const nextId = generateClientId()
     window.sessionStorage.setItem(CLIENT_ID_STORAGE_KEY, nextId)
-    return nextId
+    return { clientId: nextId, restored: false }
   } catch {
     if (!memoryClientId) {
       memoryClientId = generateClientId()
     }
-    return memoryClientId
+    return { clientId: memoryClientId, restored: false }
   }
+}
+
+export function getClientId() {
+  return readClientId().clientId
 }

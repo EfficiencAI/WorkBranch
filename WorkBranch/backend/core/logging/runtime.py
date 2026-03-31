@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+import shutil
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,88 @@ class LoggingRuntime:
         self._run_meta_path: Path | None = None
         self._level: LogLevel = "INFO"
         self._config_snapshot: dict[str, Any] = {}
+        self._logging_enabled = True
+
+    def _load_run_meta(self, run_dir: Path) -> dict[str, Any]:
+        run_meta_path = run_dir / "run_meta.json"
+        if not run_meta_path.exists():
+            return {}
+        try:
+            return json.loads(run_meta_path.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+
+    def _resolve_run_startup(self, run_dir: Path) -> datetime:
+        run_meta = self._load_run_meta(run_dir)
+        startup_ts = run_meta.get("startup_ts")
+        if isinstance(startup_ts, str):
+            try:
+                return datetime.fromisoformat(startup_ts)
+            except ValueError:
+                pass
+
+        try:
+            return datetime.strptime(run_dir.name, "%Y%m%d_%H%M%S").replace(tzinfo=datetime.now().astimezone().tzinfo)
+        except ValueError:
+            return datetime.fromtimestamp(run_dir.stat().st_mtime, tz=timezone.utc).astimezone()
+
+    def _list_run_dirs(self, log_root: Path) -> list[Path]:
+        if not log_root.exists():
+            return []
+        return [path for path in log_root.iterdir() if path.is_dir()]
+
+    def _cleanup_expired_runs(
+        self,
+        *,
+        log_root: Path,
+        current_run_dir: Path,
+        retention_cfg: dict[str, Any],
+    ) -> None:
+        if not bool(retention_cfg.get("enabled", False)):
+            return
+
+        run_dirs = [path for path in self._list_run_dirs(log_root) if path != current_run_dir]
+        if not run_dirs:
+            return
+
+        max_days = retention_cfg.get("max_days")
+        if isinstance(max_days, (int, float)) and max_days >= 0:
+            cutoff = datetime.now().astimezone() - timedelta(days=float(max_days))
+            retained: list[Path] = []
+            for run_dir in run_dirs:
+                startup_at = self._resolve_run_startup(run_dir)
+                if startup_at < cutoff:
+                    shutil.rmtree(run_dir, ignore_errors=True)
+                else:
+                    retained.append(run_dir)
+            run_dirs = retained
+
+        max_runs = retention_cfg.get("max_runs")
+        if isinstance(max_runs, int) and max_runs >= 0 and len(run_dirs) > max_runs:
+            ordered = sorted(run_dirs, key=self._resolve_run_startup, reverse=True)
+            for run_dir in ordered[max_runs:]:
+                shutil.rmtree(run_dir, ignore_errors=True)
+
+    def _finalize_run_meta(self, *, flushed: bool, writer_started: bool) -> None:
+        if self._run_meta_path is None:
+            return
+
+        run_meta = self._load_run_meta(self._run_meta_path.parent)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        run_meta.update(
+            {
+                "shutdown_ts": now_iso,
+                "flush_succeeded": flushed,
+                "status": "completed" if writer_started and flushed else "flush_timeout" if writer_started else "writer_not_started",
+                "logging_enabled": self._logging_enabled,
+                "writer_started": writer_started,
+                "updated_at": now_iso,
+            }
+        )
+        self._run_meta_path.write_text(
+            json.dumps(run_meta, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     def start(self) -> None:
         if self._started:
@@ -41,6 +124,7 @@ class LoggingRuntime:
         logging_cfg = self._settings_service.get("logging")
         self._config_snapshot = json.loads(json.dumps(logging_cfg))
         enabled = bool(logging_cfg.get("enabled", True))
+        self._logging_enabled = enabled
         self._level = logging_cfg.get("level", "INFO")
         if self._level not in LOG_LEVEL_PRIORITY:
             self._level = "INFO"
@@ -52,7 +136,8 @@ class LoggingRuntime:
 
         base_dir = logging_cfg.get("base_dir", "logs")
         root = Path(self._file_storage.get_setting_file_path()).parent
-        log_root = root / base_dir
+        base_path = Path(base_dir)
+        log_root = base_path if base_path.is_absolute() else root / base_path
         self._log_dir = log_root / self._run_id
         self._log_dir.mkdir(parents=True, exist_ok=True)
         (self._log_dir / "conversation-content").mkdir(parents=True, exist_ok=True)
@@ -75,6 +160,13 @@ class LoggingRuntime:
             encoding="utf-8",
         )
 
+        retention_cfg = logging_cfg.get("retention", {}) if isinstance(logging_cfg.get("retention", {}), dict) else {}
+        self._cleanup_expired_runs(
+            log_root=log_root,
+            current_run_dir=self._log_dir,
+            retention_cfg=retention_cfg,
+        )
+
         if enabled:
             writer_cfg = WriterConfig(
                 log_dir=self._log_dir,
@@ -94,9 +186,12 @@ class LoggingRuntime:
         if not self._started:
             return True
         flushed = True
+        writer_started = self._writer is not None
         if self._writer:
             flushed = self._writer.flush(timeout_seconds=timeout_seconds)
             self._writer.stop(timeout_seconds=timeout_seconds)
+        self._finalize_run_meta(flushed=flushed, writer_started=writer_started)
+        self._writer = None
         self._started = False
         return flushed
 

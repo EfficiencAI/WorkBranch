@@ -1,7 +1,8 @@
 import asyncio
 from typing import List, Optional, Dict, Any, Callable, Awaitable
 
-from singleton import get_session_history, get_conversation_creator, get_conversation_dao, get_conversation_buffer
+from core.logging import bind_ctx
+from singleton import get_logging_runtime, get_session_history, get_conversation_creator, get_conversation_dao, get_conversation_buffer
 from service.user_service.session_history import SessionHistory
 from service.session_service.conversation_creator import ConversationCreator
 from service.session_service.conversation_buffer import ConversationBuffer
@@ -26,7 +27,45 @@ class SessionService:
         self._conversation_creator: ConversationCreator = get_conversation_creator()
         self._conversation_buffer: ConversationBuffer = get_conversation_buffer()
         self._dao: ConversationDAO = get_conversation_dao()
+        self._logger = None
         self._lock = asyncio.Lock()
+
+    def _get_logger(self):
+        if self._logger is None:
+            self._logger = get_logging_runtime().get_logger("app")
+        return self._logger
+
+    def _set_active_conversation(
+        self,
+        session_id: int,
+        active_conversation_id: Optional[str],
+        *,
+        switch_source: str,
+        workspace_id: Optional[str] = None,
+    ) -> Optional[Session]:
+        session = self.get_session(session_id)
+        if not session:
+            return None
+
+        previous_conversation_id = session.active_conversation_id
+        self._dao.update_session_active_conversation(session_id, active_conversation_id)
+        updated_session = self.get_session(session_id)
+
+        if active_conversation_id is not None and previous_conversation_id != active_conversation_id:
+            with bind_ctx(conversation_id=active_conversation_id, workspace_id=workspace_id):
+                self._get_logger().info(
+                    event="conversation.switched",
+                    msg="active conversation switched",
+                    extra={
+                        "session_id": session_id,
+                        "from_conversation_id": previous_conversation_id,
+                        "to_conversation_id": active_conversation_id,
+                        "switch_source": switch_source,
+                        "workspace_id": workspace_id,
+                    },
+                )
+
+        return updated_session
 
     def create_session(self, title: str = "新会话") -> Session:
         return self._session_history.create_session(title)
@@ -36,7 +75,7 @@ class SessionService:
 
         async def _async_delete():
             for conversation in conversations:
-                await self._conversation_creator.cancel_conversation(conversation.id)
+                await self._conversation_creator.delete_conversation(conversation.id)
 
         try:
             loop = asyncio.get_event_loop()
@@ -103,7 +142,12 @@ class SessionService:
             if self._conversation_creator.is_conversation_running(conversation_id):
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-        self._dao.update_session_active_conversation(conversation.session_id, conversation_id)
+        self._set_active_conversation(
+            conversation.session_id,
+            conversation_id,
+            switch_source="send_message",
+            workspace_id=conversation.workspace_id,
+        )
 
         task = await self._conversation_creator.send_user_message(
             conversation_id=conversation_id,
@@ -150,11 +194,17 @@ class SessionService:
         return session.active_conversation_id
 
     def update_session_active_conversation(self, session_id: int, active_conversation_id: Optional[str]) -> Optional[Session]:
-        session = self.get_session(session_id)
-        if not session:
-            return None
-        self._dao.update_session_active_conversation(session_id, active_conversation_id)
-        return self.get_session(session_id)
+        workspace_id = None
+        if active_conversation_id is not None:
+            conversation = self._dao.get_conversation_by_id(active_conversation_id)
+            if conversation:
+                workspace_id = conversation.workspace_id
+        return self._set_active_conversation(
+            session_id,
+            active_conversation_id,
+            switch_source="session.update_active",
+            workspace_id=workspace_id,
+        )
 
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
@@ -236,6 +286,8 @@ class SessionService:
         return detail
 
     async def get_conversation_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
+        # Business message history comes from SQLite nodes plus in-memory ConversationBuffer.
+        # It is intentionally not reconstructed from MQ transcripts or conversation-content logs.
         persisted_nodes = self._dao.get_nodes_by_conversation(conversation_id)
         result = [
             {

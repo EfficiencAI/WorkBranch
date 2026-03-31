@@ -1,7 +1,13 @@
 import { getClientId } from './clientId'
 
 type FrontendLogLevel = 'INFO' | 'WARNING' | 'ERROR'
-type FrontendLogEvent = 'create_conversation' | 'switch_conversation' | 'send_message' | 'stream_failed'
+type FrontendLogEvent =
+  | 'create_conversation'
+  | 'switch_conversation'
+  | 'send_message'
+  | 'stream_failed'
+  | 'client.restored'
+  | 'workspace.loaded'
 
 type FrontendLogPayload = {
   msg?: string
@@ -13,6 +19,8 @@ const ALLOWED_EVENTS = new Set<FrontendLogEvent>([
   'switch_conversation',
   'send_message',
   'stream_failed',
+  'client.restored',
+  'workspace.loaded',
 ])
 
 let warnedOnce = false
@@ -27,7 +35,7 @@ async function emit(level: FrontendLogLevel, event: FrontendLogEvent, payload: F
   }
 
   try {
-    await fetch('/api/logs', {
+    const response = await fetch('/api/logs', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -41,6 +49,11 @@ async function emit(level: FrontendLogLevel, event: FrontendLogEvent, payload: F
         client_ts: new Date().toISOString(),
       }),
     })
+
+    if (!response.ok && shouldWarn() && !warnedOnce) {
+      warnedOnce = true
+      console.warn(`[frontend-logger] failed to send log (status: ${response.status})`)
+    }
   } catch {
     if (shouldWarn() && !warnedOnce) {
       warnedOnce = true

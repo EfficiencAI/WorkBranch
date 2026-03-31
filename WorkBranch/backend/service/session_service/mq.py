@@ -7,6 +7,7 @@ import queue
 import threading
 import json
 import os
+import time
 from pathlib import Path
 
 from service.settings_service.settings_service import SettingsService
@@ -71,6 +72,8 @@ class MessageQueue:
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._storage_dir = self._get_storage_dir()
         self._conversation_messages: Dict[str, List[dict]] = {}
+        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
+        self._subscribers_lock = threading.Lock()
         self._file_lock = threading.Lock()
         self._logger = None
 
@@ -133,6 +136,8 @@ class MessageQueue:
         return self._storage_dir / f"{conversation_id}.json"
     
     def _save_message_to_file(self, message: StreamMessage) -> None:
+        # .temp/conversations stores MQ transport transcripts for stream/debug purposes only.
+        # Business conversation history is read from SQLite nodes plus ConversationBuffer.
         msg_dict = message.to_dict()
         conv_id = message.conversation_id
         
@@ -276,8 +281,6 @@ class MessageQueue:
                 continue
             except Exception as e:
                 print(f"[MQ] 同步桥接异常: {e}")
-        
-        loop.close()
 
     async def _put_to_async_queue(self, message: StreamMessage) -> None:
         """将消息放入异步队列"""
@@ -294,6 +297,31 @@ class MessageQueue:
                 error="queue_full",
             )
             print(f"[MQ] 队列已满，消息被丢弃: {message.content[:50]}...")
+
+    def subscribe(self, conversation_id: str) -> asyncio.Queue:
+        subscriber_queue: asyncio.Queue = asyncio.Queue()
+        with self._subscribers_lock:
+            subscribers = self._subscribers.setdefault(conversation_id, [])
+            subscribers.append(subscriber_queue)
+        return subscriber_queue
+
+    def unsubscribe(self, conversation_id: str, subscriber_queue: asyncio.Queue) -> None:
+        with self._subscribers_lock:
+            subscribers = self._subscribers.get(conversation_id)
+            if not subscribers:
+                return
+            self._subscribers[conversation_id] = [q for q in subscribers if q is not subscriber_queue]
+            if not self._subscribers[conversation_id]:
+                del self._subscribers[conversation_id]
+
+    def _publish_to_subscribers(self, message: StreamMessage) -> None:
+        with self._subscribers_lock:
+            subscribers = list(self._subscribers.get(message.conversation_id, []))
+        for subscriber in subscribers:
+            try:
+                subscriber.put_nowait(message)
+            except Exception:
+                continue
 
     async def start_consumer(self) -> None:
         """启动消费者后台任务"""
@@ -357,6 +385,7 @@ class MessageQueue:
         start_time = time.perf_counter()
         try:
             self._save_message_to_file(message)
+            self._publish_to_subscribers(message)
         except Exception as exc:
             self._log_message_event(
                 "ERROR",
