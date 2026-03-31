@@ -168,13 +168,10 @@ export function SessionSidebar({
                   <Space direction="vertical" size={8} style={{ width: '100%' }}>
                     <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start">
                       <Typography.Text strong>{session.title}</Typography.Text>
-                      <StatusTag
-                        label={session.hasActiveConversation ? '活跃对话' : '历史会话'}
-                        tone={session.hasActiveConversation ? 'processing' : 'default'}
-                      />
+                      <StatusTag label="历史会话" tone="default" />
                     </Space>
                     <Typography.Paragraph type="secondary" className="session-sidebar__preview">
-                      {session.activeConversationId ? `active_conversation_id: ${session.activeConversationId}` : '当前暂无活跃对话'}
+                      当前按会话维度展示历史记录
                     </Typography.Paragraph>
                     <Typography.Text type="secondary">最近更新：{session.updatedAt ?? '未知'}</Typography.Text>
                   </Space>

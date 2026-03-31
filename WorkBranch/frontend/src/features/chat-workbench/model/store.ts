@@ -43,14 +43,7 @@ async function loadConversationDetailBundle(conversationId: string): Promise<{
   return { detail, workspace }
 }
 
-function pickPrimaryConversationId(sessionDetail: SessionDetail, conversationNodes: ConversationNode[]) {
-  if (sessionDetail.activeConversationId) {
-    const hit = conversationNodes.find((node) => node.conversationId === sessionDetail.activeConversationId)
-    if (hit) {
-      return hit.conversationId
-    }
-  }
-
+function pickPrimaryConversationId(_sessionDetail: SessionDetail, conversationNodes: ConversationNode[]) {
   return conversationNodes[conversationNodes.length - 1]?.conversationId ?? null
 }
 

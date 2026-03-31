@@ -1,6 +1,6 @@
 import type { ConversationDetail, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 import { getClientId } from '../logging/clientId'
-import { del, get, patch, post } from './http'
+import { del, get, post } from './http'
 import { ApiError } from './error'
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
@@ -9,8 +9,6 @@ function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
     title: String(payload.title ?? ''),
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
-    hasActiveConversation: Boolean(payload.has_active_conversation),
-    activeConversationId: payload.active_conversation_id ? String(payload.active_conversation_id) : null,
   }
 }
 
@@ -97,13 +95,6 @@ export async function deleteSession(sessionId: string | number) {
 
 export async function fetchSessionDetail(sessionId: string | number) {
   const data = await get<Record<string, unknown>>(`/api/session/sessions/${sessionId}`)
-  return toSessionDetail(data)
-}
-
-export async function patchSessionActiveConversation(sessionId: string | number, activeConversationId: string | null) {
-  const data = await patch<Record<string, unknown>>(`/api/session/sessions/${sessionId}`, {
-    active_conversation_id: activeConversationId,
-  })
   return toSessionDetail(data)
 }
 

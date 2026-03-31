@@ -34,7 +34,7 @@ class UserInfoDAO:
     def list_sessions(self, user_id: int) -> List[Session]:
         """获取用户的所有会话，按更新时间倒序排列。"""
         sql = '''
-            SELECT id, user_id, title, active_conversation_id, created_at, updated_at
+            SELECT id, user_id, title, created_at, updated_at
             FROM sessions
             WHERE user_id = ?
             ORDER BY updated_at DESC

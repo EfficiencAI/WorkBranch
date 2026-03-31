@@ -6,8 +6,6 @@ export interface SessionSummary {
   status?: string
   updatedAt?: string
   createdAt?: string
-  hasActiveConversation?: boolean
-  activeConversationId?: string | null
 }
 
 export interface SessionDetail extends SessionSummary {

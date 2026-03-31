@@ -39,7 +39,6 @@ class Database:
                     id INTEGER PRIMARY KEY,
                     user_id INTEGER,
                     title TEXT,
-                    active_conversation_id TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY(user_id) REFERENCES users(id)
@@ -78,9 +77,6 @@ class Database:
                 )
             ''')
 
-            if not self._column_exists(cursor, "sessions", "active_conversation_id"):
-                cursor.execute('ALTER TABLE sessions ADD COLUMN active_conversation_id TEXT')
-
             if not self._column_exists(cursor, "nodes", "conversation_id"):
                 cursor.execute('ALTER TABLE nodes ADD COLUMN conversation_id TEXT')
 
@@ -109,12 +105,35 @@ class Database:
                 CREATE INDEX IF NOT EXISTS idx_conversations_parent_conversation_id ON conversations(parent_conversation_id)
             ''')
 
+            self._drop_legacy_session_active_conversation(cursor)
             self._backfill_legacy_conversations(cursor)
             conn.commit()
 
     def _column_exists(self, cursor: sqlite3.Cursor, table_name: str, column_name: str) -> bool:
         rows = cursor.execute(f"PRAGMA table_info({table_name})").fetchall()
         return any(row[1] == column_name for row in rows)
+
+    def _drop_legacy_session_active_conversation(self, cursor: sqlite3.Cursor) -> None:
+        if not self._column_exists(cursor, "sessions", "active_conversation_id"):
+            return
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sessions__new (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER,
+                title TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(id)
+            )
+        ''')
+        cursor.execute('''
+            INSERT INTO sessions__new (id, user_id, title, created_at, updated_at)
+            SELECT id, user_id, title, created_at, updated_at
+            FROM sessions
+        ''')
+        cursor.execute('DROP TABLE sessions')
+        cursor.execute('ALTER TABLE sessions__new RENAME TO sessions')
 
     def _backfill_legacy_conversations(self, cursor: sqlite3.Cursor) -> None:
         rows = cursor.execute('''

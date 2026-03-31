@@ -93,7 +93,6 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
                 <Descriptions column={1} size="small" bordered>
                   <Descriptions.Item label="session_id">{sessionDetail.id}</Descriptions.Item>
                   <Descriptions.Item label="会话标题">{sessionDetail.title}</Descriptions.Item>
-                  <Descriptions.Item label="active_conversation_id">{sessionDetail.activeConversationId ?? '无'}</Descriptions.Item>
                 </Descriptions>
               </Space>
             </Card>

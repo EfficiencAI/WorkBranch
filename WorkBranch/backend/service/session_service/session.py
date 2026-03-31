@@ -1,12 +1,11 @@
 import asyncio
 from typing import List, Optional, Dict, Any, Callable, Awaitable
 
-from core.logging import bind_ctx
-from singleton import get_logging_runtime, get_session_history, get_conversation_creator, get_conversation_dao, get_conversation_buffer
+from singleton import get_session_history, get_conversation_creator, get_conversation_dao, get_conversation_buffer
 from service.user_service.session_history import SessionHistory
 from service.session_service.conversation_creator import ConversationCreator
 from service.session_service.conversation_buffer import ConversationBuffer
-from data.conversation_dao import ConversationDAO, Session, Node, Conversation
+from data.conversation_dao import ConversationDAO, Session, Conversation
 
 
 class SessionService:
@@ -27,45 +26,7 @@ class SessionService:
         self._conversation_creator: ConversationCreator = get_conversation_creator()
         self._conversation_buffer: ConversationBuffer = get_conversation_buffer()
         self._dao: ConversationDAO = get_conversation_dao()
-        self._logger = None
         self._lock = asyncio.Lock()
-
-    def _get_logger(self):
-        if self._logger is None:
-            self._logger = get_logging_runtime().get_logger("app")
-        return self._logger
-
-    def _set_active_conversation(
-        self,
-        session_id: int,
-        active_conversation_id: Optional[str],
-        *,
-        switch_source: str,
-        workspace_id: Optional[str] = None,
-    ) -> Optional[Session]:
-        session = self.get_session(session_id)
-        if not session:
-            return None
-
-        previous_conversation_id = session.active_conversation_id
-        self._dao.update_session_active_conversation(session_id, active_conversation_id)
-        updated_session = self.get_session(session_id)
-
-        if active_conversation_id is not None and previous_conversation_id != active_conversation_id:
-            with bind_ctx(conversation_id=active_conversation_id, workspace_id=workspace_id):
-                self._get_logger().info(
-                    event="conversation.switched",
-                    msg="active conversation switched",
-                    extra={
-                        "session_id": session_id,
-                        "from_conversation_id": previous_conversation_id,
-                        "to_conversation_id": active_conversation_id,
-                        "switch_source": switch_source,
-                        "workspace_id": workspace_id,
-                    },
-                )
-
-        return updated_session
 
     def create_session(self, title: str = "新会话") -> Session:
         return self._session_history.create_session(title)
@@ -142,13 +103,6 @@ class SessionService:
             if self._conversation_creator.is_conversation_running(conversation_id):
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-        self._set_active_conversation(
-            conversation.session_id,
-            conversation_id,
-            switch_source="send_message",
-            workspace_id=conversation.workspace_id,
-        )
-
         task = await self._conversation_creator.send_user_message(
             conversation_id=conversation_id,
             message=message,
@@ -167,11 +121,6 @@ class SessionService:
             return 0
 
         flushed_count = await self._conversation_creator.end_conversation(conversation_id)
-
-        session = self.get_session(conversation.session_id)
-        if session and session.active_conversation_id == conversation_id:
-            self._dao.update_session_active_conversation(conversation.session_id, None)
-
         return flushed_count
 
     async def cancel_conversation(self, conversation_id: str) -> bool:
@@ -180,31 +129,7 @@ class SessionService:
             return False
 
         result = await self._conversation_creator.cancel_conversation(conversation_id)
-
-        session = self.get_session(conversation.session_id)
-        if session and session.active_conversation_id == conversation_id:
-            self._dao.update_session_active_conversation(conversation.session_id, None)
-
         return result
-
-    def get_active_conversation_id(self, session_id: int) -> Optional[str]:
-        session = self.get_session(session_id)
-        if not session:
-            return None
-        return session.active_conversation_id
-
-    def update_session_active_conversation(self, session_id: int, active_conversation_id: Optional[str]) -> Optional[Session]:
-        workspace_id = None
-        if active_conversation_id is not None:
-            conversation = self._dao.get_conversation_by_id(active_conversation_id)
-            if conversation:
-                workspace_id = conversation.workspace_id
-        return self._set_active_conversation(
-            session_id,
-            active_conversation_id,
-            switch_source="session.update_active",
-            workspace_id=workspace_id,
-        )
 
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
@@ -224,18 +149,6 @@ class SessionService:
             for conversation in conversations
         ]
 
-    async def list_active_conversations(self) -> List[Dict[str, Any]]:
-        result = []
-        async with self._lock:
-            for session_id, conv_id in self._active_conversations.items():
-                state = self._conversation_creator.get_state(conv_id)
-                if state:
-                    state["session_id"] = session_id
-                    result.append(state)
-        return result
-
-    def has_active_conversation(self, session_id: int) -> bool:
-        return self.get_active_conversation_id(session_id) is not None
 
     async def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         persisted = self._dao.get_conversation_by_id(conversation_id)

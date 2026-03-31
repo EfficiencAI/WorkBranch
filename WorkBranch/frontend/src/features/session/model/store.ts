@@ -8,7 +8,6 @@ import {
   fetchSessionDetail,
   fetchSessions,
   getErrorMessage,
-  patchSessionActiveConversation,
 } from '../../../shared/api'
 import type { SessionStore } from './types'
 
@@ -25,7 +24,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   sessionList: [],
   currentSessionId: null,
   currentSessionDetail: null,
-  activeConversationId: null,
   sessionLoading: false,
   sessionError: null,
   creatingSession: false,
@@ -40,7 +38,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       sessionList: [],
       currentSessionId: null,
       currentSessionDetail: null,
-      activeConversationId: null,
       sessionLoading: false,
       sessionError: null,
       creatingSession: false,
@@ -59,7 +56,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     set({
       currentSessionDetail: nextDetail,
-      activeConversationId: nextDetail?.activeConversationId ?? null,
     })
   },
 
@@ -77,7 +73,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({ sessionList: nextSessions, currentSessionId: nextSessionId })
 
       if (nextSessionId === null || nextSessionId === undefined) {
-        set({ currentSessionDetail: null, activeConversationId: null })
+        set({ currentSessionDetail: null })
         return
       }
 
@@ -104,7 +100,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       set({
         currentSessionId: sessionId,
         currentSessionDetail: nextDetail,
-        activeConversationId: nextDetail.activeConversationId ?? null,
       })
 
       return nextDetail
@@ -162,7 +157,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         : null
 
       if (!resolvedNextId) {
-        set({ currentSessionId: null, currentSessionDetail: null, activeConversationId: null })
+        set({ currentSessionId: null, currentSessionDetail: null })
         return null
       }
 
@@ -177,27 +172,14 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   async ensureConversationForCurrentSession(options = {}) {
-    const { currentSessionId, currentSessionDetail } = get()
+    const { currentSessionId } = get()
     if (!currentSessionId) {
       return null
     }
 
-    const activeConversationId = currentSessionDetail?.activeConversationId ?? null
-    if (activeConversationId) {
-      return activeConversationId
-    }
-
     const created = await createConversation(currentSessionId, undefined, options.parentConversationId ?? null)
-    const nextDetail = await patchSessionActiveConversation(currentSessionId, created.conversationId)
-    const conversations = await fetchSessionConversations(currentSessionId)
-
-    set({
-      currentSessionDetail: {
-        ...nextDetail,
-        conversations,
-      },
-      activeConversationId: nextDetail.activeConversationId ?? created.conversationId,
-    })
+    const detail = await get().loadSessionDetail(currentSessionId)
+    set({ currentSessionDetail: detail })
 
     return created.conversationId
   },

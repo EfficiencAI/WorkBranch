@@ -1,5 +1,4 @@
 export {
-  selectActiveConversationId,
   selectCreatingSession,
   selectCurrentSessionDetail,
   selectCurrentSessionId,

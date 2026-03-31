@@ -8,7 +8,6 @@ export type SessionState = {
   sessionList: SessionSummary[]
   currentSessionId: SessionId | null
   currentSessionDetail: SessionDetail | null
-  activeConversationId: string | null
   sessionLoading: boolean
   sessionError: string | null
 

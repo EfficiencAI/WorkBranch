@@ -10,7 +10,6 @@ class Session:
     id: int
     user_id: int
     title: str
-    active_conversation_id: Optional[str]
     created_at: str
     updated_at: str
 
@@ -57,14 +56,6 @@ class ConversationDAO:
     def delete_session(self, session_id: int) -> None:
         sql = 'DELETE FROM sessions WHERE id = ?'
         self._db.execute(sql, (session_id,))
-
-    def update_session_active_conversation(self, session_id: int, active_conversation_id: Optional[str]) -> None:
-        sql = '''
-            UPDATE sessions
-            SET active_conversation_id = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-        '''
-        self._db.execute(sql, (active_conversation_id, session_id))
 
     def create_conversation(
         self,
@@ -218,7 +209,7 @@ class ConversationDAO:
 
     def get_session_by_id(self, session_id: int) -> Optional[Session]:
         sql = '''
-            SELECT id, user_id, title, active_conversation_id, created_at, updated_at
+            SELECT id, user_id, title, created_at, updated_at
             FROM sessions
             WHERE id = ?
         '''

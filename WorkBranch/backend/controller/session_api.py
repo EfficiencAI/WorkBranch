@@ -1,4 +1,5 @@
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -7,10 +8,6 @@ from service.session_service.session import SessionService
 from controller.VO.result import Result
 
 router = APIRouter(prefix="/session", tags=["session"])
-
-
-class UpdateSessionBody(BaseModel):
-    active_conversation_id: Optional[str] = None
 
 
 class CreateConversationBody(BaseModel):
@@ -29,8 +26,6 @@ def create_session(
         "title": session.title,
         "created_at": session.created_at,
         "updated_at": session.updated_at,
-        "has_active_conversation": False,
-        "active_conversation_id": session.active_conversation_id,
     })
 
 
@@ -45,8 +40,6 @@ def list_sessions(
             "title": s.title,
             "created_at": s.created_at,
             "updated_at": s.updated_at,
-            "has_active_conversation": bool(s.active_conversation_id),
-            "active_conversation_id": s.active_conversation_id,
         }
         for s in sessions
     ])
@@ -66,8 +59,6 @@ def get_session(
         "title": session.title,
         "created_at": session.created_at,
         "updated_at": session.updated_at,
-        "has_active_conversation": bool(session.active_conversation_id),
-        "active_conversation_id": session.active_conversation_id,
     })
 
 
@@ -80,38 +71,6 @@ def list_session_conversations(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return Result.success(data=service.list_conversation_summaries(session_id))
-
-
-@router.patch("/sessions/{session_id}")
-def update_session(
-    session_id: int,
-    body: UpdateSessionBody,
-    service: SessionService = Depends(get_session_service),
-) -> Result:
-    session = service.get_session(session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    if body.active_conversation_id is not None:
-        conversation = service.get_persisted_conversation(body.active_conversation_id)
-        if not conversation:
-            raise HTTPException(status_code=400, detail="Conversation not found")
-        if conversation.session_id != session_id:
-            raise HTTPException(status_code=400, detail="Conversation does not belong to this session")
-
-    updated_session = service.update_session_active_conversation(session_id, body.active_conversation_id)
-    if not updated_session:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    return Result.success(data={
-        "id": updated_session.id,
-        "user_id": updated_session.user_id,
-        "title": updated_session.title,
-        "created_at": updated_session.created_at,
-        "updated_at": updated_session.updated_at,
-        "has_active_conversation": bool(updated_session.active_conversation_id),
-        "active_conversation_id": updated_session.active_conversation_id,
-    })
 
 
 @router.delete("/sessions/{session_id}")

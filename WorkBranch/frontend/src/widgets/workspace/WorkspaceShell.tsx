@@ -89,6 +89,10 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
       try {
         const createdConversationId = await ensureConversationForCurrentSession({ parentConversationId })
 
+        if (!createdConversationId) {
+          return
+        }
+
         if (selectedSessionId) {
           const detail = await loadSessionDetail(selectedSessionId)
           await enterSessionContext(detail)
@@ -143,7 +147,8 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
-        const targetConversationId = focusedConversationId ?? selectedConversationId ?? await ensureConversationForCurrentSession()
+        const fallbackConversationId = sessionDetail?.conversations?.[sessionDetail.conversations.length - 1]?.conversationId ?? null
+        const targetConversationId = focusedConversationId ?? selectedConversationId ?? fallbackConversationId ?? await ensureConversationForCurrentSession()
         if (!targetConversationId) {
           return
         }
@@ -159,7 +164,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         onRequestError(caughtError)
       }
     },
-    [ensureConversationForCurrentSession, focusedConversationId, onRequestError, onSendError, selectedConversationId],
+    [ensureConversationForCurrentSession, focusedConversationId, onRequestError, onSendError, selectedConversationId, sessionDetail],
   )
 
   function collapseNav() {
