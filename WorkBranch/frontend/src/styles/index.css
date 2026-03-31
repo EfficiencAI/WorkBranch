@@ -507,6 +507,7 @@ button {
 }
 
 .conversation-node--focused {
+  width: 640px;
   transform: translateY(-6px) scale(1.02);
 }
 
@@ -519,6 +520,30 @@ button {
   border: 1px solid var(--app-border);
   background: var(--app-card-bg);
   box-shadow: var(--app-shadow-sm);
+}
+
+.conversation-node__card--focused {
+  background: var(--app-card-bg-strong);
+  box-shadow: var(--app-shadow-md);
+}
+
+.conversation-node__focused-body {
+  width: 100%;
+}
+
+.conversation-node__messages {
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.conversation-node__message-card {
+  border-radius: 16px;
+  background: var(--app-panel-bg-soft);
+}
+
+.conversation-node__composer-shell {
+  width: 100%;
 }
 
 .conversation-node__card--system {
@@ -877,6 +902,10 @@ button {
     height: 1500px;
   }
 
+  .conversation-node--focused {
+    width: 560px;
+  }
+
   .conversation-node--composer {
     width: 520px;
   }
@@ -970,6 +999,10 @@ button {
 
   .conversation-node {
     width: 280px;
+  }
+
+  .conversation-node--focused {
+    width: min(420px, calc(100vw - 48px));
   }
 
   .conversation-node--composer {

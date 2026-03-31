@@ -157,6 +157,7 @@ async def send_conversation_message(
                             yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
                         elif state == "failed":
                             done_received = True
+                            error_message = current.get("error") or state
                             logger.error(
                                 event="stream.failed",
                                 msg="conversation stream failed from state",
@@ -164,9 +165,10 @@ async def send_conversation_message(
                                     "conversation_id": target_conversation_id,
                                     "reason": "conversation_failed",
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
+                                    "conversation_error": error_message,
                                 },
                             )
-                            yield f"data: {json.dumps({'type': 'error', 'content': state}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'error', 'content': error_message}, ensure_ascii=False)}\n\n"
                         elif state == "cancelled":
                             done_received = True
                             logger.error(

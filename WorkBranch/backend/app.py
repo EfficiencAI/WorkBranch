@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import json
+import sys
 import time
 import traceback
 from typing import Any
@@ -17,6 +18,13 @@ from controller.conversation_api import router as conversation_router
 from controller.workspace_api import router as workspace_router
 from core.logging import bind_ctx, get_ctx
 from singleton import get_logging_runtime, get_settings_service, get_user_service
+
+
+for stream_name in ('stdout', 'stderr'):
+    stream = getattr(sys, stream_name, None)
+    reconfigure = getattr(stream, 'reconfigure', None)
+    if callable(reconfigure):
+        reconfigure(encoding='utf-8', errors='replace')
 
 
 @asynccontextmanager
@@ -107,11 +115,20 @@ async def _extract_request_business_ids(request: Request) -> tuple[str | None, s
 def _is_same_origin_request(request: Request) -> bool:
     origin = request.headers.get("origin")
     referer = request.headers.get("referer")
-    expected_netloc = urlparse(str(request.base_url)).netloc
+    expected = urlparse(str(request.base_url))
+    expected_netloc = expected.netloc
+    expected_host = (expected.hostname or "").lower()
+    local_hosts = {"127.0.0.1", "localhost"}
 
     def _matches(url: str) -> bool:
         parsed = urlparse(url)
-        return bool(parsed.scheme and parsed.netloc and parsed.netloc == expected_netloc)
+        if not (parsed.scheme and parsed.netloc):
+            return False
+        if parsed.netloc == expected_netloc:
+            return True
+
+        parsed_host = (parsed.hostname or "").lower()
+        return expected_host in local_hosts and parsed_host in local_hosts
 
     if origin:
         return _matches(origin)
