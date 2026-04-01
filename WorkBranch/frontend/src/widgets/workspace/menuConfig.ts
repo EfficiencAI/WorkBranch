@@ -1,6 +1,10 @@
 import type { MenuProps } from 'antd'
 
-export type MenuKey = 'create-root-conversation' | 'create-child-conversation' | 'delete-conversation'
+export type MenuKey =
+  | 'create-root-conversation'
+  | 'create-child-conversation'
+  | 'delete-conversation'
+  | 'auto-arrange-conversations'
 
 export type MenuItem = {
   key: MenuKey
@@ -13,11 +17,19 @@ export const MENU_CONFIG: Record<'canvas' | 'node', MenuItem[]> = {
       key: 'create-root-conversation',
       label: '创建根对话',
     },
+    {
+      key: 'auto-arrange-conversations',
+      label: '一键规整',
+    },
   ],
   node: [
     {
       key: 'create-child-conversation',
       label: '创建子对话',
+    },
+    {
+      key: 'auto-arrange-conversations',
+      label: '一键规整',
     },
     {
       key: 'delete-conversation',

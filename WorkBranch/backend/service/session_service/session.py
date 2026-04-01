@@ -141,6 +141,31 @@ class SessionService:
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
 
+    async def update_conversation_positions(self, session_id: int, positions: List[Dict[str, Any]]) -> None:
+        session = self.get_session(session_id)
+        if not session:
+            raise ValueError(f"Session {session_id} not found")
+
+        normalized_positions: List[Dict[str, Any]] = []
+        for item in positions:
+            conversation_id = str(item.get("conversation_id") or "").strip()
+            if not conversation_id:
+                raise ValueError("conversation_id is required")
+
+            try:
+                x = float(item.get("x"))
+                y = float(item.get("y"))
+            except (TypeError, ValueError):
+                raise ValueError(f"Invalid position for conversation {conversation_id}")
+
+            normalized_positions.append({
+                "conversation_id": conversation_id,
+                "x": x,
+                "y": y,
+            })
+
+        self._dao.update_conversation_positions(session_id, normalized_positions)
+
     async def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
         await self._conversation_service.ensure_conversations_loaded(session_id)
         conversations = self._dao.list_conversations_by_session(session_id)
@@ -153,6 +178,8 @@ class SessionService:
                 "message_count": conversation.message_count,
                 "created_at": conversation.created_at,
                 "updated_at": conversation.updated_at,
+                "position_x": conversation.position_x,
+                "position_y": conversation.position_y,
             }
             for conversation in conversations
         ]
@@ -178,6 +205,8 @@ class SessionService:
                 "ended_at": persisted.ended_at,
                 "message_count": persisted.message_count,
                 "error": persisted.error,
+                "position_x": persisted.position_x,
+                "position_y": persisted.position_y,
             }
         else:
             detail = {
@@ -191,6 +220,8 @@ class SessionService:
                 "ended_at": None,
                 "message_count": runtime["message_count"],
                 "error": runtime["error"],
+                "position_x": None,
+                "position_y": None,
             }
 
         if runtime:

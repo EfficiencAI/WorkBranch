@@ -1,4 +1,4 @@
-import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
+import type { ConversationDetail, ConversationNode, ConversationPosition, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import type { ChatStreamEvent } from '../../../shared/api'
 
 export type SessionContextResult = 'empty-session' | 'ready'
@@ -32,6 +32,9 @@ export type ChatWorkbenchActions = {
   deleteConversationFromSession: (conversationId: string) => Promise<string | null>
   sendMessageToConversation: (conversationId: string, messageText: string, handlers?: SendMessageHandlers) => Promise<void>
   cancelStreamingConversation: () => Promise<void>
+  updateConversationNodePosition: (conversationId: string, position: ConversationPosition) => void
+  updateConversationNodePositions: (positions: Array<{ conversationId: string; position: ConversationPosition }>) => void
+  persistConversationPositions: (sessionId: SessionId, positions: Array<{ conversationId: string; position: ConversationPosition }>) => Promise<void>
 
   clearError: () => void
   resetConversationState: () => void

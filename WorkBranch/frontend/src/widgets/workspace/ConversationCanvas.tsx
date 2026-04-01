@@ -1,10 +1,10 @@
-import { Background, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
+import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
-import { selectFocusedConversationId, useTreeStore } from '../../features'
+import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
 import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
@@ -27,6 +27,7 @@ type ConversationCanvasProps = {
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
+  onAutoArrange: () => Promise<void>
 }
 
 type FlowNodeData = {
@@ -126,6 +127,13 @@ function buildTreeLayout(conversationNodes: ConversationNode[]) {
 
 function stopEvent(event: React.SyntheticEvent) {
   event.stopPropagation()
+}
+
+function resolveConversationPosition(
+  conversation: ConversationNode,
+  overviewLayoutMap: Map<string, { x: number; y: number }>,
+) {
+  return conversation.position ?? overviewLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 }
 }
 
 function OverviewNodePage({ conversation, focused, selected }: { conversation: ConversationNode; focused: boolean; selected: boolean }) {
@@ -239,6 +247,7 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       aria-label={`查看对话 ${conversation.conversationId}`}
       style={focused && focusCardWidth ? { width: `${focusCardWidth}px` } : undefined}
     >
+      <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
       <div className={focused ? 'conversation-node__focus-shell conversation-node__focus-shell--focused' : 'conversation-node__focus-shell'}>
         <div className={focused ? 'conversation-node__focus-content conversation-node__focus-content--focused' : 'conversation-node__focus-content'}>
           <Card
@@ -260,6 +269,7 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
           </Card>
         </div>
       </div>
+      <Handle type="source" position={Position.Bottom} className="conversation-node__handle" isConnectable={false} />
     </div>
   )
 }
@@ -269,6 +279,7 @@ const nodeTypes = {
 } as const
 
 function FlowViewport({
+  currentSessionId,
   focusedConversationId,
   selectedConversationId,
   sessionDetail,
@@ -285,6 +296,8 @@ function FlowViewport({
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setSelectedConversationId = useTreeStore((state) => state.setSelectedConversationId)
+  const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
+  const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const selectionTimeoutRef = useRef<number | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -340,8 +353,10 @@ function FlowViewport({
       return {
         id: conversation.conversationId,
         type: 'conversation',
-        position: overviewLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 },
+        position: resolveConversationPosition(conversation, overviewLayoutMap),
         origin: [0.5, 0.5],
+        sourcePosition: Position.Bottom,
+        targetPosition: Position.Top,
         data: {
           conversation,
           focused,
@@ -358,7 +373,7 @@ function FlowViewport({
           : faded
             ? 'conversation-flow-node conversation-flow-node--dimmed'
             : 'conversation-flow-node',
-        draggable: false,
+        draggable: !focused,
       }
     })
   }, [
@@ -383,7 +398,14 @@ function FlowViewport({
         id: `${conversation.parentConversationId}-${conversation.conversationId}`,
         source: conversation.parentConversationId as string,
         target: conversation.conversationId,
+        type: 'smoothstep',
         animated: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId,
+        style: {
+          strokeWidth: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId ? 2.5 : 2,
+          stroke: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId
+            ? 'rgba(96, 165, 250, 0.95)'
+            : 'rgba(148, 163, 184, 0.72)',
+        },
       }))
   }, [conversationNodes, focusedConversationId, selectedConversationId])
 
@@ -402,7 +424,7 @@ function FlowViewport({
 
     const timeoutId = window.setTimeout(() => {
       if (focusedConversation) {
-        const position = overviewLayoutMap.get(focusedConversation.conversationId) ?? { x: 0, y: 0 }
+        const position = resolveConversationPosition(focusedConversation, overviewLayoutMap)
         const nodeWidth = focusMetrics.visualWidth
         const nodeHeight = focusMetrics.visualHeight
         const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
@@ -472,7 +494,7 @@ function FlowViewport({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
-        nodesDraggable={false}
+        nodesDraggable={!focusedConversation}
         panOnDrag
         zoomOnScroll
         zoomOnPinch
@@ -502,6 +524,23 @@ function FlowViewport({
           }
           setSelectedConversationId(node.id)
           setFocusedConversationId(node.id)
+        }}
+        onNodeDragStop={(_, node) => {
+          if (!currentSessionId || focusedConversation) {
+            return
+          }
+
+          const position = { x: node.position.x, y: node.position.y }
+          updateConversationNodePosition(node.id, position)
+          frontendLogger.info('move_conversation_node', {
+            extra: {
+              conversation_id: node.id,
+              session_id: currentSessionId,
+              x: position.x,
+              y: position.y,
+            },
+          })
+          void persistConversationPositions(currentSessionId, [{ conversationId: node.id, position }])
         }}
         onPaneClick={() => {
           if (selectionTimeoutRef.current !== null) {
@@ -552,7 +591,11 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
       <ReactFlowProvider>
         <ContextMenuProvider>
           <FlowViewport {...props} />
-          <ContextMenu onCreateConversation={props.onCreateConversation} onDeleteConversation={props.onDeleteConversation} />
+          <ContextMenu
+            onCreateConversation={props.onCreateConversation}
+            onDeleteConversation={props.onDeleteConversation}
+            onAutoArrange={props.onAutoArrange}
+          />
         </ContextMenuProvider>
       </ReactFlowProvider>
     </section>

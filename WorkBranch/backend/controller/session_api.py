@@ -15,6 +15,16 @@ class CreateConversationBody(BaseModel):
     parent_conversation_id: Optional[str] = None
 
 
+class ConversationPositionItem(BaseModel):
+    conversation_id: str
+    x: float
+    y: float
+
+
+class UpdateConversationPositionsBody(BaseModel):
+    positions: list[ConversationPositionItem]
+
+
 @router.post("/sessions")
 def create_session(
     title: str = "新会话",
@@ -71,6 +81,27 @@ async def list_session_conversations(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return Result.success(data=await service.list_conversation_summaries(session_id))
+
+
+@router.put("/sessions/{session_id}/conversation-positions")
+async def update_conversation_positions(
+    session_id: int,
+    body: UpdateConversationPositionsBody,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    session = service.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    try:
+        await service.update_conversation_positions(
+            session_id,
+            [item.model_dump() for item in body.positions],
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return Result.success(data={"updated": len(body.positions)})
 
 
 @router.delete("/sessions/{session_id}")

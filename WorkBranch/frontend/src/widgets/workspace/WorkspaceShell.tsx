@@ -65,6 +65,8 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const syncConversationContext = useChatWorkbenchStore((state) => state.syncConversationContext)
   const deleteConversationFromSession = useChatWorkbenchStore((state) => state.deleteConversationFromSession)
+  const updateConversationNodePositions = useChatWorkbenchStore((state) => state.updateConversationNodePositions)
+  const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const cancelStreamingConversation = useChatWorkbenchStore((state) => state.cancelStreamingConversation)
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
@@ -240,6 +242,50 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     }
   }, [cancelStreamingConversation, onRequestError])
 
+  const handleAutoArrange = useCallback(async () => {
+    if (!selectedSessionId || conversationNodes.length === 0) {
+      return
+    }
+
+    const arranged = conversationNodes.map((conversation) => {
+      const siblingsBefore = conversationNodes.filter((item) => item.parentConversationId === conversation.parentConversationId)
+      const depth = (() => {
+        let currentParentId = conversation.parentConversationId
+        let level = 0
+        while (currentParentId) {
+          const parent = conversationNodes.find((item) => item.conversationId === currentParentId)
+          if (!parent) {
+            break
+          }
+          level += 1
+          currentParentId = parent.parentConversationId
+        }
+        return level
+      })()
+      const siblingIndex = siblingsBefore.findIndex((item) => item.conversationId === conversation.conversationId)
+      return {
+        conversationId: conversation.conversationId,
+        position: {
+          x: siblingIndex * 380,
+          y: depth * 240,
+        },
+      }
+    })
+
+    try {
+      updateConversationNodePositions(arranged)
+      await persistConversationPositions(selectedSessionId, arranged)
+      frontendLogger.info('auto_arrange_conversations', {
+        extra: {
+          session_id: selectedSessionId,
+          conversation_count: arranged.length,
+        },
+      })
+    } catch (caughtError) {
+      onRequestError(caughtError)
+    }
+  }, [conversationNodes, onRequestError, persistConversationPositions, selectedSessionId, updateConversationNodePositions])
+
   function collapseNav() {
     setPeekNav(false)
     setActiveSidebar(null)
@@ -283,6 +329,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}
+          onAutoArrange={handleAutoArrange}
         />
 
         <div

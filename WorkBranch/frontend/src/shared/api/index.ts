@@ -14,6 +14,7 @@ export {
   fetchSessions,
   fetchWorkspaceDetail,
   streamConversationMessage,
+  updateConversationPositions,
 } from './workspace'
 export { fetchUserProfile, updateUserName } from './user'
 export type { ChatStreamEvent } from './workspace'

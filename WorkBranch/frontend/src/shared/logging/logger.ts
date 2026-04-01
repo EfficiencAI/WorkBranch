@@ -10,6 +10,8 @@ type FrontendLogEvent =
   | 'stream_failed'
   | 'client.restored'
   | 'workspace.loaded'
+  | 'auto_arrange_conversations'
+  | 'move_conversation_node'
 
 type FrontendLogPayload = {
   msg?: string
@@ -25,6 +27,8 @@ const ALLOWED_EVENTS = new Set<FrontendLogEvent>([
   'stream_failed',
   'client.restored',
   'workspace.loaded',
+  'auto_arrange_conversations',
+  'move_conversation_node',
 ])
 
 let warnedOnce = false

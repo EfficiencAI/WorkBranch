@@ -27,6 +27,8 @@ class Conversation:
     ended_at: Optional[str]
     message_count: int
     error: Optional[str]
+    position_x: Optional[float]
+    position_y: Optional[float]
 
 
 @dataclass
@@ -84,6 +86,8 @@ class ConversationDAO:
         message_count: Optional[int] = None,
         error: Optional[str] = None,
         ended_at: Optional[str] = None,
+        position_x: Optional[float] = None,
+        position_y: Optional[float] = None,
     ) -> None:
         updates = ['updated_at = CURRENT_TIMESTAMP']
         params = []
@@ -109,6 +113,12 @@ class ConversationDAO:
         if ended_at is not None:
             updates.append('ended_at = ?')
             params.append(ended_at)
+        if position_x is not None:
+            updates.append('position_x = ?')
+            params.append(position_x)
+        if position_y is not None:
+            updates.append('position_y = ?')
+            params.append(position_y)
 
         params.append(conversation_id)
         sql = f"UPDATE conversations SET {', '.join(updates)} WHERE id = ?"
@@ -116,7 +126,7 @@ class ConversationDAO:
 
     def get_conversation_by_id(self, conversation_id: str) -> Optional[Conversation]:
         sql = '''
-            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error
+            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error, position_x, position_y
             FROM conversations
             WHERE id = ?
         '''
@@ -127,13 +137,50 @@ class ConversationDAO:
 
     def list_conversations_by_session(self, session_id: int) -> List[Conversation]:
         sql = '''
-            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error
+            SELECT id, session_id, workspace_id, parent_conversation_id, title, state, created_at, updated_at, ended_at, message_count, error, position_x, position_y
             FROM conversations
             WHERE session_id = ?
             ORDER BY created_at ASC, id ASC
         '''
         rows = self._db.fetch_all(sql, (session_id,))
         return [Conversation(**dict(row)) for row in rows]
+
+    def update_conversation_positions(self, session_id: int, positions: List[dict]) -> None:
+        conversation_ids = [item["conversation_id"] for item in positions]
+        if not conversation_ids:
+            return
+
+        placeholders = ','.join('?' for _ in conversation_ids)
+        rows = self._db.fetch_all(
+            f'SELECT id FROM conversations WHERE session_id = ? AND id IN ({placeholders})',
+            (session_id, *conversation_ids),
+        )
+        found_ids = {row['id'] for row in rows}
+        missing_ids = [conversation_id for conversation_id in conversation_ids if conversation_id not in found_ids]
+        if missing_ids:
+            raise ValueError(f"Conversations do not belong to session {session_id}: {', '.join(missing_ids)}")
+
+        with self._db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                '''
+                    UPDATE conversations
+                    SET position_x = ?, position_y = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ? AND session_id = ?
+                ''',
+                [
+                    (
+                        item["x"],
+                        item["y"],
+                        item["conversation_id"],
+                        session_id,
+                    )
+                    for item in positions
+                ],
+            )
+            conn.commit()
+
+        self._update_session_updated_at(session_id)
 
     def delete_conversation(self, conversation_id: str) -> None:
         row = self._db.fetch_one('SELECT session_id FROM conversations WHERE id = ?', (conversation_id,))

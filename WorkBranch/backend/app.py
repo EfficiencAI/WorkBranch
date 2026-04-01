@@ -68,6 +68,8 @@ FRONTEND_LOG_ALLOWED_EVENTS = {
     "stream_failed",
     "client.restored",
     "workspace.loaded",
+    "auto_arrange_conversations",
+    "move_conversation_node",
 }
 FRONTEND_LOG_ALLOWED_LEVELS = {"INFO", "WARNING", "ERROR"}
 FRONTEND_LOG_MAX_PAYLOAD_BYTES = 8 * 1024

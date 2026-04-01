@@ -1,7 +1,29 @@
-import type { ConversationDetail, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
+import type {
+  ConversationDetail,
+  ConversationPosition,
+  MessageNode,
+  SessionConversationSummary,
+  SessionDetail,
+  SessionSummary,
+  WorkspaceDetail,
+} from '../../entities'
 import { getClientId } from '../logging/clientId'
-import { del, get, post } from './http'
+import { del, get, post, put } from './http'
 import { ApiError } from './error'
+
+function toConversationPosition(payload: Record<string, unknown>): ConversationPosition | null {
+  const rawX = payload.position_x
+  const rawY = payload.position_y
+
+  if (typeof rawX !== 'number' || typeof rawY !== 'number') {
+    return null
+  }
+
+  return {
+    x: rawX,
+    y: rawY,
+  }
+}
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
   return {
@@ -29,6 +51,7 @@ function toConversationSummary(payload: Record<string, unknown>): SessionConvers
     title: payload.title === null || payload.title === undefined ? null : String(payload.title),
     state: String(payload.state ?? 'pending'),
     messageCount: Number(payload.message_count ?? 0),
+    position: toConversationPosition(payload),
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
   }
@@ -45,10 +68,11 @@ function toConversationDetail(payload: Record<string, unknown>): ConversationDet
         : String(payload.parent_conversation_id),
     title: payload.title === null || payload.title === undefined ? null : String(payload.title),
     state: String(payload.state ?? 'idle'),
+    messageCount: Number(payload.message_count ?? 0),
+    position: toConversationPosition(payload),
     createdAt: String(payload.created_at ?? ''),
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
     endedAt: payload.ended_at ? String(payload.ended_at) : null,
-    messageCount: Number(payload.message_count ?? 0),
     error: payload.error ? String(payload.error) : null,
   }
 }
@@ -135,6 +159,22 @@ export async function fetchConversationDetail(conversationId: string) {
 export async function fetchConversationMessages(conversationId: string) {
   const data = await get<Array<Record<string, unknown>>>(`/api/session/conversations/${conversationId}/messages`)
   return data.map(toMessageNode)
+}
+
+export async function updateConversationPositions(
+  sessionId: string | number,
+  positions: Array<{ conversationId: string; x: number; y: number }>,
+) {
+  return put<{ updated: number }, { positions: Array<{ conversation_id: string; x: number; y: number }> }>(
+    `/api/session/sessions/${sessionId}/conversation-positions`,
+    {
+      positions: positions.map((item) => ({
+        conversation_id: item.conversationId,
+        x: item.x,
+        y: item.y,
+      })),
+    },
+  )
 }
 
 export async function fetchWorkspaceDetail(workspaceId: string) {

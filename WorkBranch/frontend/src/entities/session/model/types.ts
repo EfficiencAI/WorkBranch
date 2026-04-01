@@ -1,3 +1,5 @@
+import type { ConversationPosition } from '../../conversation'
+
 export type SessionId = string | number
 
 export interface SessionSummary {
@@ -19,6 +21,7 @@ export interface SessionConversationSummary {
   title: string | null
   state: string
   messageCount: number
+  position: ConversationPosition | null
   createdAt?: string
   updatedAt?: string
 }

@@ -58,6 +58,8 @@ class Database:
                     ended_at TIMESTAMP,
                     message_count INTEGER DEFAULT 0,
                     error TEXT,
+                    position_x REAL,
+                    position_y REAL,
                     FOREIGN KEY(session_id) REFERENCES sessions(id) ON DELETE CASCADE,
                     FOREIGN KEY(parent_conversation_id) REFERENCES conversations(id) ON DELETE SET NULL
                 )
@@ -85,6 +87,12 @@ class Database:
 
             if not self._column_exists(cursor, "conversations", "title"):
                 cursor.execute('ALTER TABLE conversations ADD COLUMN title TEXT')
+
+            if not self._column_exists(cursor, "conversations", "position_x"):
+                cursor.execute('ALTER TABLE conversations ADD COLUMN position_x REAL')
+
+            if not self._column_exists(cursor, "conversations", "position_y"):
+                cursor.execute('ALTER TABLE conversations ADD COLUMN position_y REAL')
 
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_nodes_session_id ON nodes(session_id)

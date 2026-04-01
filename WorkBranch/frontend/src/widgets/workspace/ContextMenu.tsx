@@ -65,9 +65,10 @@ export function ContextMenuProvider({ children }: ContextMenuProviderProps) {
 type ContextMenuProps = {
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
+  onAutoArrange: () => Promise<void>
 }
 
-export function ContextMenu({ onCreateConversation, onDeleteConversation }: ContextMenuProps) {
+export function ContextMenu({ onCreateConversation, onDeleteConversation, onAutoArrange }: ContextMenuProps) {
   const { contextMenu, setContextMenu } = useContextMenu()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -88,11 +89,13 @@ export function ContextMenu({ onCreateConversation, onDeleteConversation }: Cont
         await onCreateConversation(null)
       } else if (menuKey === 'create-child-conversation' && contextMenu.conversationId) {
         await onCreateConversation(contextMenu.conversationId)
+      } else if (menuKey === 'auto-arrange-conversations') {
+        await onAutoArrange()
       } else if (menuKey === 'delete-conversation' && contextMenu.conversationId) {
         await onDeleteConversation(contextMenu.conversationId)
       }
     },
-    [contextMenu, onCreateConversation, onDeleteConversation, handleClose],
+    [contextMenu, onCreateConversation, onDeleteConversation, onAutoArrange, handleClose],
   )
 
   if (!contextMenu) return null

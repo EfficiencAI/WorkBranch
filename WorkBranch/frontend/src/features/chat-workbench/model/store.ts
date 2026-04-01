@@ -9,6 +9,7 @@ import {
   fetchWorkspaceDetail,
   getErrorMessage,
   streamConversationMessage,
+  updateConversationPositions,
 } from '../../../shared/api'
 import { frontendLogger } from '../../../shared/logging/logger'
 import type { ChatStreamEvent } from '../../../shared/api'
@@ -66,6 +67,23 @@ function pickFallbackConversationId(
   }
 
   return nextConversationNodes[nextConversationNodes.length - 1]?.conversationId ?? null
+}
+
+function updateConversationNodesWithPositions(
+  conversationNodes: ConversationNode[],
+  positions: Map<string, ConversationNode['position']>,
+) {
+  return conversationNodes.map((conversation) => {
+    const nextPosition = positions.get(conversation.conversationId)
+    if (!nextPosition) {
+      return conversation
+    }
+
+    return {
+      ...conversation,
+      position: nextPosition,
+    }
+  })
 }
 
 function isAbortError(caughtError: unknown) {
@@ -217,6 +235,51 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       return fallbackConversationId
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '删除对话节点失败') })
+      throw caughtError
+    }
+  },
+
+  updateConversationNodePosition(conversationId, position) {
+    const positions = new Map([[conversationId, position]])
+    set((state) => ({
+      conversationNodes: updateConversationNodesWithPositions(state.conversationNodes, positions),
+      conversationDetail:
+        state.conversationDetail?.conversationId === conversationId
+          ? { ...state.conversationDetail, position }
+          : state.conversationDetail,
+    }))
+  },
+
+  updateConversationNodePositions(positions) {
+    const positionMap = new Map(positions.map((item) => [item.conversationId, item.position]))
+    set((state) => ({
+      conversationNodes: updateConversationNodesWithPositions(state.conversationNodes, positionMap),
+      conversationDetail:
+        state.conversationDetail && positionMap.has(state.conversationDetail.conversationId)
+          ? {
+              ...state.conversationDetail,
+              position: positionMap.get(state.conversationDetail.conversationId) ?? state.conversationDetail.position,
+            }
+          : state.conversationDetail,
+    }))
+  },
+
+  async persistConversationPositions(sessionId, positions) {
+    if (!positions.length) {
+      return
+    }
+
+    try {
+      await updateConversationPositions(
+        sessionId,
+        positions.map((item) => ({
+          conversationId: item.conversationId,
+          x: item.position.x,
+          y: item.position.y,
+        })),
+      )
+    } catch (caughtError) {
+      set({ error: getErrorMessage(caughtError, '保存节点位置失败') })
       throw caughtError
     }
   },
