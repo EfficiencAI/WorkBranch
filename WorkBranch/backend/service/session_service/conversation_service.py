@@ -218,6 +218,8 @@ class ConversationService:
         conversation_id: str,
         result: Dict[str, Any]
     ):
+        flushed_count = await self._buffer.flush(conversation_id)
+
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
@@ -225,10 +227,11 @@ class ConversationService:
 
             conv_info.state = ConversationState.COMPLETED
             conv_info.error = None
+            conv_info.message_count = flushed_count
             self._dao.update_conversation(
                 conversation_id,
                 state=ConversationState.COMPLETED.value,
-                message_count=conv_info.message_count,
+                message_count=flushed_count,
                 error="",
                 ended_at=datetime.now().isoformat(),
             )

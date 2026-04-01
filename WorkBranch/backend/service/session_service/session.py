@@ -169,13 +169,18 @@ class SessionService:
     async def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
         await self._conversation_service.ensure_conversations_loaded(session_id)
         conversations = self._dao.list_conversations_by_session(session_id)
+        buffered_conversations = {
+            item["conversation_id"]: item["node_count"]
+            for item in await self._conversation_buffer.get_active_conversations()
+            if item["session_id"] == session_id
+        }
         return [
             {
                 "conversation_id": conversation.id,
                 "parent_conversation_id": conversation.parent_conversation_id,
                 "title": conversation.title,
                 "state": conversation.state,
-                "message_count": conversation.message_count,
+                "message_count": len(self._dao.get_nodes_by_conversation(conversation.id)) + buffered_conversations.get(conversation.id, 0),
                 "created_at": conversation.created_at,
                 "updated_at": conversation.updated_at,
                 "position_x": conversation.position_x,
@@ -192,6 +197,10 @@ class SessionService:
         if not persisted and not runtime:
             return None
 
+        buffered_nodes = await self._conversation_buffer.get_buffered_nodes(conversation_id)
+        persisted_message_count = len(self._dao.get_nodes_by_conversation(conversation_id)) if persisted else 0
+        actual_message_count = persisted_message_count + len(buffered_nodes)
+
         if persisted:
             detail = {
                 "conversation_id": persisted.id,
@@ -203,7 +212,7 @@ class SessionService:
                 "created_at": persisted.created_at,
                 "updated_at": persisted.updated_at,
                 "ended_at": persisted.ended_at,
-                "message_count": persisted.message_count,
+                "message_count": actual_message_count,
                 "error": persisted.error,
                 "position_x": persisted.position_x,
                 "position_y": persisted.position_y,
@@ -218,7 +227,7 @@ class SessionService:
                 "created_at": runtime["created_at"],
                 "updated_at": runtime["created_at"],
                 "ended_at": None,
-                "message_count": runtime["message_count"],
+                "message_count": actual_message_count,
                 "error": runtime["error"],
                 "position_x": None,
                 "position_y": None,
@@ -231,7 +240,7 @@ class SessionService:
                 "title": runtime.get("title"),
                 "state": runtime.get("state"),
                 "created_at": runtime.get("created_at"),
-                "message_count": runtime.get("message_count"),
+                "message_count": actual_message_count,
                 "error": runtime.get("error"),
             })
 
