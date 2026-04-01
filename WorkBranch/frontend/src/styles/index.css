@@ -1138,3 +1138,20 @@ button {
     bottom: 16px;
   }
 }
+
+.streaming-indicator {
+  display: inline-block;
+  margin-left: 2px;
+  animation: streaming-blink 1s infinite;
+  font-weight: bold;
+  color: var(--app-text);
+}
+
+@keyframes streaming-blink {
+  0%, 50% { 
+    opacity: 1; 
+  }
+  51%, 100% { 
+    opacity: 0; 
+  }
+}

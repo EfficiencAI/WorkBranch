@@ -135,6 +135,13 @@ class ConversationDAO:
         rows = self._db.fetch_all(sql, (session_id,))
         return [Conversation(**dict(row)) for row in rows]
 
+    def delete_conversation(self, conversation_id: str) -> None:
+        row = self._db.fetch_one('SELECT session_id FROM conversations WHERE id = ?', (conversation_id,))
+        self._db.execute('DELETE FROM conversations WHERE id = ?', (conversation_id,))
+
+        if row:
+            self._update_session_updated_at(row['session_id'])
+
     def add_node(
         self,
         session_id: int,

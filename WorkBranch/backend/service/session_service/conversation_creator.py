@@ -210,28 +210,6 @@ class ConversationCreator:
                 ended_at=datetime.now().isoformat(),
             )
 
-        assistant_content = result.get("response", "") if result else ""
-        if assistant_content:
-            nodes = await self._buffer.get_buffered_nodes(conversation_id)
-            parent_id = len(nodes) - 1 if nodes else None
-
-            await self._buffer.add_node(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=assistant_content,
-                parent_id=parent_id
-            )
-            self._write_content_record(
-                conversation_id,
-                "assistant_message",
-                {
-                    "role": "assistant",
-                    "storage": "sqlite_nodes",
-                    "content_length": len(assistant_content),
-                    "state": "buffered",
-                },
-            )
-
     async def _finalize_message_failure(
         self,
         conversation_id: str,

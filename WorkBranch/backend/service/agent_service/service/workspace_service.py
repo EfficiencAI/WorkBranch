@@ -51,9 +51,13 @@ class WorkspaceService:
         }
 
         workspace_path = self.get_workspace_path(session_id, workspace_id)
+        is_new = not os.path.exists(workspace_path)
         os.makedirs(workspace_path, exist_ok=True)
         
-        print(f"[Workspace] 工作区已注册: {workspace_id}")
+        if is_new:
+            print(f"[Workspace] 工作区已创建: {workspace_id}")
+        else:
+            print(f"[Workspace] 工作区信息已载入: {workspace_id}")
         print(f"[Workspace] 会话ID: {session_id}")
         print(f"[Workspace] 路径: {workspace_path}")
         return workspace_id

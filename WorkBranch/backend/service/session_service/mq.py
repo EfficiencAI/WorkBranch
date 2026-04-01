@@ -76,6 +76,7 @@ class MessageQueue:
         self._subscribers_lock = threading.Lock()
         self._file_lock = threading.Lock()
         self._logger = None
+        self._text_accumulator: Dict[str, str] = {}
 
     def _get_max_size(self) -> int:
         try:
@@ -379,6 +380,7 @@ class MessageQueue:
         功能：
         - 打印到控制台
         - 保存到 JSON 文件（按对话 ID）
+        - 聚合 TEXT 消息，DONE 时写入 buffer
         """
         msg_dict = message.to_dict()
         print(f"[MQ] 消费消息: {msg_dict}")
@@ -386,6 +388,19 @@ class MessageQueue:
         try:
             self._save_message_to_file(message)
             self._publish_to_subscribers(message)
+            
+            if message.message_type == MessageType.TEXT:
+                conv_id = message.conversation_id
+                if conv_id not in self._text_accumulator:
+                    self._text_accumulator[conv_id] = ""
+                self._text_accumulator[conv_id] += message.content
+            
+            elif message.message_type == MessageType.DONE:
+                conv_id = message.conversation_id
+                accumulated_text = self._text_accumulator.pop(conv_id, "")
+                if accumulated_text:
+                    await self._write_to_buffer(conv_id, accumulated_text)
+            
         except Exception as exc:
             self._log_message_event(
                 "ERROR",
@@ -407,6 +422,27 @@ class MessageQueue:
             target="storage",
             latency_ms=round((time.perf_counter() - start_time) * 1000),
         )
+
+    async def _write_to_buffer(self, conversation_id: str, content: str) -> None:
+        """将聚合的 AI 回复写入 buffer"""
+        from singleton import get_conversation_buffer
+        from service.session_service.conversation_buffer import ConversationBuffer
+        
+        buffer: ConversationBuffer = get_conversation_buffer()
+        
+        if not buffer.has_buffer(conversation_id):
+            return
+        
+        nodes = await buffer.get_buffered_nodes(conversation_id)
+        parent_id = len(nodes) - 1 if nodes else None
+        
+        await buffer.add_node(
+            conversation_id=conversation_id,
+            role="assistant",
+            content=content,
+            parent_id=parent_id
+        )
+        print(f"[MQ] AI 回复已写入 buffer: {conversation_id}, 长度: {len(content)}")
 
     @property
     def size(self) -> int:

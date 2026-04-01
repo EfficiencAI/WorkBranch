@@ -207,6 +207,8 @@ function FocusNodePage({
                     </Space>
                     <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
                       {message.content}
+                      {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
+                      {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
                     </Typography.Paragraph>
                   </Space>
                 </Card>
