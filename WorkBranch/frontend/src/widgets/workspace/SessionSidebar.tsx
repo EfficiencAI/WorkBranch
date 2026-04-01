@@ -66,13 +66,6 @@ export function SessionSidebar({
   return (
     <div className="session-sidebar" aria-label="工作台内嵌侧边栏内容">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
-        <Space direction="vertical" size={2}>
-          <Typography.Text strong>会话历史</Typography.Text>
-          <Typography.Text type="secondary">
-            侧边栏继续按 session 展示历史；workspace 归属在当前 conversation 视图中体现。
-          </Typography.Text>
-        </Space>
-
         <Card size="small" className="session-sidebar__profile">
           <Space align="start" size="middle">
             <Avatar size={48}>{user.name?.slice(0, 1) ?? 'U'}</Avatar>
@@ -125,10 +118,7 @@ export function SessionSidebar({
           </Space>
         </Card>
 
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
-          <Typography.Text strong>搜索会话</Typography.Text>
-          <Input.Search placeholder="按标题、关键字或状态筛选" allowClear />
-        </Space>
+        <Input.Search placeholder="按标题、关键字或状态筛选" allowClear />
 
         <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
           <Button type="primary" loading={creatingSession} onClick={() => void onCreateSession()}>

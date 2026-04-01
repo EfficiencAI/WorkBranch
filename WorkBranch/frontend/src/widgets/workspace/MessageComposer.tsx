@@ -53,16 +53,6 @@ export function MessageComposer({
   return (
     <div className="message-composer">
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
-        <Space align="start" style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-          <Space direction="vertical" size={2}>
-            <Typography.Text strong>当前目标对话</Typography.Text>
-            {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
-          </Space>
-          <Button size="small" onClick={() => setCollapsed(true)}>
-            折叠
-          </Button>
-        </Space>
-
         <Input.TextArea
           rows={3}
           value={message}
@@ -70,8 +60,16 @@ export function MessageComposer({
           placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
         />
 
-        <Space className="message-composer__footer" wrap style={{ justifyContent: 'flex-end' }}>
-          <Space>
+        <div className="message-composer__bottom-row">
+          <Space className="message-composer__target" align="center" size={8}>
+            <Typography.Text strong>当前目标对话</Typography.Text>
+            {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
+          </Space>
+
+          <Space className="message-composer__footer" wrap>
+            <Button size="small" onClick={() => setCollapsed(true)}>
+              折叠
+            </Button>
             <Button disabled={!sending} onClick={() => void onStop?.()}>
               停止
             </Button>
@@ -79,7 +77,7 @@ export function MessageComposer({
               发送
             </Button>
           </Space>
-        </Space>
+        </div>
       </Space>
     </div>
   )
