@@ -43,9 +43,9 @@ def get_session_service():
     return SessionService()
 
 @lru_cache(maxsize=1)
-def get_conversation_creator():
-    from service.session_service.conversation_creator import ConversationCreator
-    return ConversationCreator()
+def get_conversation_service():
+    from service.session_service.conversation_service import ConversationService
+    return ConversationService()
 
 @lru_cache(maxsize=1)
 def get_agent_service():
@@ -105,7 +105,7 @@ def clear_all_singletons():
     get_user_service.cache_clear()
     get_session_history.cache_clear()
     get_session_service.cache_clear()
-    get_conversation_creator.cache_clear()
+    get_conversation_service.cache_clear()
     get_agent_service.cache_clear()
     get_workspace_service.cache_clear()
     get_llm_service.cache_clear()

@@ -63,14 +63,14 @@ def get_session(
 
 
 @router.get("/sessions/{session_id}/conversations")
-def list_session_conversations(
+async def list_session_conversations(
     session_id: int,
     service: SessionService = Depends(get_session_service),
 ) -> Result:
     session = service.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    return Result.success(data=service.list_conversation_summaries(session_id))
+    return Result.success(data=await service.list_conversation_summaries(session_id))
 
 
 @router.delete("/sessions/{session_id}")

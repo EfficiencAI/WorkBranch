@@ -1,6 +1,6 @@
 import asyncio
 from dataclasses import dataclass, field
-from typing import Optional, Dict, Any, Callable, Awaitable
+from typing import Optional, Dict, Any, Callable, Awaitable, List
 from enum import Enum
 from datetime import datetime, timezone
 
@@ -33,7 +33,7 @@ class ConversationInfo:
     message_count: int = 0
 
 
-class ConversationCreator:
+class ConversationService:
     _instance = None
     _initialized = False
 
@@ -43,9 +43,9 @@ class ConversationCreator:
         return cls._instance
 
     def __init__(self):
-        if ConversationCreator._initialized:
+        if ConversationService._initialized:
             return
-        ConversationCreator._initialized = True
+        ConversationService._initialized = True
 
         self._buffer: ConversationBuffer = get_conversation_buffer()
         self._agent: AgentService = get_agent_service()
@@ -55,8 +55,6 @@ class ConversationCreator:
         self._lock = asyncio.Lock()
 
     def _write_content_record(self, conversation_id: str, content_type: str, payload: Dict[str, Any]) -> None:
-        # conversation-content is an audit timeline, not the canonical message-body store.
-        # Full user/assistant content is retrieved from SQLite nodes plus ConversationBuffer.
         if self._runtime is None:
             self._runtime = get_logging_runtime()
         self._runtime.write_conversation_content(
@@ -72,6 +70,29 @@ class ConversationCreator:
         if self._runtime is None:
             self._runtime = get_logging_runtime()
         return self._runtime.get_logger("app")
+
+    async def ensure_conversations_loaded(self, session_id: int) -> None:
+        conversations = self._dao.list_conversations_by_session(session_id)
+        async with self._lock:
+            for conv in conversations:
+                if conv.id not in self._conversations:
+                    self._conversations[conv.id] = ConversationInfo(
+                        conversation_id=conv.id,
+                        session_id=conv.session_id,
+                        workspace_id=conv.workspace_id or conv.id,
+                        parent_conversation_id=conv.parent_conversation_id,
+                        title=conv.title,
+                        state=ConversationState(conv.state or ConversationState.PENDING.value),
+                        created_at=datetime.fromisoformat(conv.created_at) if 'T' in conv.created_at else datetime.now(),
+                        error=conv.error,
+                        message_count=conv.message_count,
+                    )
+
+    async def _ensure_buffer_initialized(self, conversation_id: str) -> None:
+        if not self._buffer.has_buffer(conversation_id):
+            persisted = self._dao.get_conversation_by_id(conversation_id)
+            if persisted:
+                await self._buffer.start_buffer(conversation_id, persisted.session_id)
 
     async def create_conversation(
         self,
@@ -147,6 +168,7 @@ class ConversationCreator:
             if conv_info.state == ConversationState.RUNNING:
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
+        await self._ensure_buffer_initialized(conversation_id)
         await self._buffer.add_node(
             conversation_id=conversation_id,
             role="user",
@@ -375,7 +397,7 @@ class ConversationCreator:
     async def list_conversations(
         self,
         state: Optional[ConversationState] = None
-    ) -> list:
+    ) -> List[Dict[str, Any]]:
         result = []
         async with self._lock:
             for conv_info in self._conversations.values():

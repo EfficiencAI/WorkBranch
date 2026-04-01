@@ -1,9 +1,9 @@
 import asyncio
 from typing import List, Optional, Dict, Any, Callable, Awaitable
 
-from singleton import get_session_history, get_conversation_creator, get_conversation_dao, get_conversation_buffer
+from singleton import get_session_history, get_conversation_service, get_conversation_dao, get_conversation_buffer
 from service.user_service.session_history import SessionHistory
-from service.session_service.conversation_creator import ConversationCreator
+from service.session_service.conversation_service import ConversationService
 from service.session_service.conversation_buffer import ConversationBuffer
 from data.conversation_dao import ConversationDAO, Session, Conversation
 
@@ -23,7 +23,7 @@ class SessionService:
         SessionService._initialized = True
 
         self._session_history: SessionHistory = get_session_history()
-        self._conversation_creator: ConversationCreator = get_conversation_creator()
+        self._conversation_service: ConversationService = get_conversation_service()
         self._conversation_buffer: ConversationBuffer = get_conversation_buffer()
         self._dao: ConversationDAO = get_conversation_dao()
         self._lock = asyncio.Lock()
@@ -36,7 +36,7 @@ class SessionService:
 
         async def _async_delete():
             for conversation in conversations:
-                await self._conversation_creator.delete_conversation(conversation.id)
+                await self._conversation_service.delete_conversation(conversation.id)
 
         try:
             loop = asyncio.get_event_loop()
@@ -73,7 +73,7 @@ class SessionService:
             if parent_conversation.session_id != session_id:
                 raise ValueError("Parent conversation does not belong to this session")
 
-        conversation_id = await self._conversation_creator.create_conversation(
+        conversation_id = await self._conversation_service.create_conversation(
             session_id=session_id,
             workspace_id=workspace_id,
             parent_conversation_id=parent_conversation_id,
@@ -100,10 +100,10 @@ class SessionService:
             raise ValueError(f"Session {conversation.session_id} not found")
 
         async with self._lock:
-            if self._conversation_creator.is_conversation_running(conversation_id):
+            if self._conversation_service.is_conversation_running(conversation_id):
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-        task = await self._conversation_creator.send_user_message(
+        task = await self._conversation_service.send_user_message(
             conversation_id=conversation_id,
             message=message,
             on_complete=on_complete,
@@ -120,7 +120,7 @@ class SessionService:
         if not conversation:
             return 0
 
-        flushed_count = await self._conversation_creator.end_conversation(conversation_id)
+        flushed_count = await self._conversation_service.end_conversation(conversation_id)
         return flushed_count
 
     async def cancel_conversation(self, conversation_id: str) -> bool:
@@ -128,7 +128,7 @@ class SessionService:
         if not conversation:
             return False
 
-        result = await self._conversation_creator.cancel_conversation(conversation_id)
+        result = await self._conversation_service.cancel_conversation(conversation_id)
         return result
 
     async def delete_conversation(self, conversation_id: str) -> bool:
@@ -136,12 +136,13 @@ class SessionService:
         if not conversation:
             return False
 
-        return await self._conversation_creator.delete_conversation(conversation_id)
+        return await self._conversation_service.delete_conversation(conversation_id)
 
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
 
-    def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
+    async def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
+        await self._conversation_service.ensure_conversations_loaded(session_id)
         conversations = self._dao.list_conversations_by_session(session_id)
         return [
             {
@@ -159,7 +160,7 @@ class SessionService:
 
     async def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         persisted = self._dao.get_conversation_by_id(conversation_id)
-        runtime = self._conversation_creator.get_state(conversation_id)
+        runtime = self._conversation_service.get_state(conversation_id)
 
         if not persisted and not runtime:
             return None
