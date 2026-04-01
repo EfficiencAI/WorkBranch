@@ -175,12 +175,9 @@ function FocusNodePage({
           </Space>
           <Space wrap>
             <StatusTag label="focused" tone="warning" />
+            <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
+            {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
           </Space>
-        </Space>
-
-        <Space wrap>
-          <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
-          {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
         </Space>
 
         <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>

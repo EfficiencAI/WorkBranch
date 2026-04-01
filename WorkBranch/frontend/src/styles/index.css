@@ -596,6 +596,7 @@ button {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  max-height: 100%;
 }
 
 .conversation-node__focused-body .ant-space {
@@ -608,7 +609,7 @@ button {
 
 .conversation-node__messages {
   flex: 1 1 auto;
-  max-height: none;
+  max-height: 180px;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
