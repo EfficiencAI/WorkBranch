@@ -4,6 +4,7 @@ from typing import Optional, Dict, Any, Callable, Awaitable
 from enum import Enum
 from datetime import datetime, timezone
 
+from core.logging import bind_ctx
 from singleton import get_conversation_buffer, get_agent_service, get_conversation_dao, get_logging_runtime
 from service.session_service.conversation_buffer import ConversationBuffer
 from service.agent_service.agent_service import AgentService
@@ -401,6 +402,7 @@ class ConversationCreator:
                 del self._conversations[conversation_id]
 
         await self._buffer.clear(conversation_id)
+        self._dao.delete_conversation(conversation_id)
         deleted = self._agent.delete_conversation(conversation_id)
         if persisted is not None:
             deleted = True if deleted or persisted is not None else deleted

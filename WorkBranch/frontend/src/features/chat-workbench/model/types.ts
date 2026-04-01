@@ -29,6 +29,7 @@ export type ChatWorkbenchActions = {
   loadConversationMessages: (conversationId: string) => Promise<void>
   syncConversationContext: (conversationId: string | null) => Promise<void>
   enterSessionContext: (sessionDetail: SessionDetail | null) => Promise<SessionContextResult>
+  deleteConversationFromSession: (conversationId: string) => Promise<string | null>
   sendMessageToConversation: (conversationId: string, messageText: string, handlers?: SendMessageHandlers) => Promise<void>
   cancelStreamingConversation: () => Promise<void>
 

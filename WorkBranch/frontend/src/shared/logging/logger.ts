@@ -3,8 +3,10 @@ import { getClientId } from './clientId'
 type FrontendLogLevel = 'INFO' | 'WARNING' | 'ERROR'
 type FrontendLogEvent =
   | 'create_conversation'
+  | 'delete_conversation'
   | 'switch_conversation'
   | 'send_message'
+  | 'stream_completed'
   | 'stream_failed'
   | 'client.restored'
   | 'workspace.loaded'
@@ -16,8 +18,10 @@ type FrontendLogPayload = {
 
 const ALLOWED_EVENTS = new Set<FrontendLogEvent>([
   'create_conversation',
+  'delete_conversation',
   'switch_conversation',
   'send_message',
+  'stream_completed',
   'stream_failed',
   'client.restored',
   'workspace.loaded',

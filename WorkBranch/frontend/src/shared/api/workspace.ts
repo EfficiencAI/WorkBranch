@@ -93,6 +93,10 @@ export async function deleteSession(sessionId: string | number) {
   await del(`/api/session/sessions/${sessionId}`)
 }
 
+export async function deleteConversation(conversationId: string) {
+  await del(`/api/session/conversations/${conversationId}`)
+}
+
 export async function fetchSessionDetail(sessionId: string | number) {
   const data = await get<Record<string, unknown>>(`/api/session/sessions/${sessionId}`)
   return toSessionDetail(data)

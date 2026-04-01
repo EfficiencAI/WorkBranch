@@ -26,6 +26,7 @@ type ConversationCanvasProps = {
   onSendMessage: (message: string) => Promise<void>
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
+  onDeleteConversation: (conversationId: string) => Promise<void>
 }
 
 type FlowNodeData = {
@@ -271,12 +272,10 @@ const nodeTypes = {
 } as const
 
 function FlowViewport({
-  currentSessionId,
   focusedConversationId,
   selectedConversationId,
   sessionDetail,
   conversationDetail,
-  workspaceDetail,
   conversationNodes,
   conversationMessages,
   messagesLoading,
@@ -285,7 +284,6 @@ function FlowViewport({
   canCreateConversationOnSend,
   onSendMessage,
   onStopMessage,
-  onCreateConversation,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
@@ -557,7 +555,7 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
       <ReactFlowProvider>
         <ContextMenuProvider>
           <FlowViewport {...props} />
-          <ContextMenu onCreateConversation={props.onCreateConversation} />
+          <ContextMenu onCreateConversation={props.onCreateConversation} onDeleteConversation={props.onDeleteConversation} />
         </ContextMenuProvider>
       </ReactFlowProvider>
     </section>

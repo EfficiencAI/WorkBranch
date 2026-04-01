@@ -61,8 +61,10 @@ app = FastAPI(lifespan=lifespan)
 
 FRONTEND_LOG_ALLOWED_EVENTS = {
     "create_conversation",
+    "delete_conversation",
     "switch_conversation",
     "send_message",
+    "stream_completed",
     "stream_failed",
     "client.restored",
     "workspace.loaded",

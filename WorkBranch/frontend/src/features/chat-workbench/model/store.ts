@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   cancelConversation,
+  deleteConversation,
   fetchConversationDetail,
   fetchConversationMessages,
   fetchSessionConversations,
@@ -46,6 +47,25 @@ async function loadConversationDetailBundle(conversationId: string): Promise<{
 
 function pickPrimaryConversationId(_sessionDetail: SessionDetail, conversationNodes: ConversationNode[]) {
   return conversationNodes[conversationNodes.length - 1]?.conversationId ?? null
+}
+
+function pickFallbackConversationId(
+  deletedConversationId: string,
+  conversationNodes: ConversationNode[],
+  nextConversationNodes: ConversationNode[],
+) {
+  const deletedConversation = conversationNodes.find((item) => item.conversationId === deletedConversationId) ?? null
+
+  if (!nextConversationNodes.length) {
+    return null
+  }
+
+  const parentConversationId = deletedConversation?.parentConversationId ?? null
+  if (parentConversationId && nextConversationNodes.some((item) => item.conversationId === parentConversationId)) {
+    return parentConversationId
+  }
+
+  return nextConversationNodes[nextConversationNodes.length - 1]?.conversationId ?? null
 }
 
 function isAbortError(caughtError: unknown) {
@@ -171,6 +191,33 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       set({ error: getErrorMessage(caughtError, '工作台数据加载失败') })
     } finally {
       set({ loading: false })
+    }
+  },
+
+  async deleteConversationFromSession(conversationId: string) {
+    const { currentSessionId } = useSessionStore.getState()
+    const currentNodes = get().conversationNodes
+
+    if (!currentSessionId) {
+      return null
+    }
+
+    try {
+      set({ error: null })
+      await deleteConversation(conversationId)
+
+      const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+      const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+      const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+      const fallbackConversationId = pickFallbackConversationId(conversationId, currentNodes, conversationNodes)
+
+      set({ conversationNodes })
+      await get().syncConversationContext(fallbackConversationId)
+
+      return fallbackConversationId
+    } catch (caughtError) {
+      set({ error: getErrorMessage(caughtError, '删除对话节点失败') })
+      throw caughtError
     }
   },
 

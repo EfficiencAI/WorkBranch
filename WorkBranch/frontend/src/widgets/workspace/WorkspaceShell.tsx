@@ -1,4 +1,4 @@
-import { Button, Space, Typography } from 'antd'
+import { Button, Modal, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -64,6 +64,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const ensureConversationForCurrentSession = useSessionStore((state) => state.ensureConversationForCurrentSession)
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const syncConversationContext = useChatWorkbenchStore((state) => state.syncConversationContext)
+  const deleteConversationFromSession = useChatWorkbenchStore((state) => state.deleteConversationFromSession)
   const cancelStreamingConversation = useChatWorkbenchStore((state) => state.cancelStreamingConversation)
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
@@ -163,6 +164,38 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     [deleteSession, onRequestError, runSessionContext],
   )
 
+  const handleDeleteConversation = useCallback(
+    async (conversationId: string) => {
+      const conversation = conversationNodes.find((node) => node.conversationId === conversationId) ?? null
+      const hasChildren = conversationNodes.some((node) => node.parentConversationId === conversationId)
+
+      Modal.confirm({
+        title: '确认删除该节点？',
+        content: hasChildren
+          ? '删除后无法恢复。该节点的子对话会保留，并在当前结构下作为根节点显示。'
+          : '删除后无法恢复。若当前正在查看该节点，将自动切换到其他可用节点。',
+        okText: '删除',
+        okButtonProps: { danger: true },
+        cancelText: '取消',
+        onOk: async () => {
+          const fallbackConversationId = await deleteConversationFromSession(conversationId)
+
+          frontendLogger.info('delete_conversation', {
+            extra: {
+              conversation_id: conversationId,
+              parent_conversation_id: conversation?.parentConversationId ?? null,
+              fallback_conversation_id: fallbackConversationId,
+            },
+          })
+
+          useTreeStore.getState().setFocusedConversationId(fallbackConversationId)
+          useTreeStore.getState().setSelectedConversationId(fallbackConversationId)
+        },
+      })
+    },
+    [conversationNodes, deleteConversationFromSession],
+  )
+
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
@@ -249,6 +282,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           onSendMessage={handleSendMessage}
           onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}
+          onDeleteConversation={handleDeleteConversation}
         />
 
         <div

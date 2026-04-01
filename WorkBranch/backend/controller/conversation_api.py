@@ -237,3 +237,16 @@ async def cancel_conversation(
 
     result = await service.cancel_conversation(conversation_id)
     return Result.success(data={"cancelled": result})
+
+
+@router.delete("/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    conversation = await service.get_conversation_detail(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    deleted = await service.delete_conversation(conversation_id)
+    return Result.success(data={"deleted": deleted, "conversation_id": conversation_id})

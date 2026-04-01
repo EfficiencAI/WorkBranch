@@ -131,6 +131,13 @@ class SessionService:
         result = await self._conversation_creator.cancel_conversation(conversation_id)
         return result
 
+    async def delete_conversation(self, conversation_id: str) -> bool:
+        conversation = self._dao.get_conversation_by_id(conversation_id)
+        if not conversation:
+            return False
+
+        return await self._conversation_creator.delete_conversation(conversation_id)
+
     def get_persisted_conversation(self, conversation_id: str) -> Optional[Conversation]:
         return self._dao.get_conversation_by_id(conversation_id)
 

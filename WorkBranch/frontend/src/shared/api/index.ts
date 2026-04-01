@@ -5,6 +5,7 @@ export {
   cancelConversation,
   createConversation,
   createSession,
+  deleteConversation,
   deleteSession,
   fetchConversationDetail,
   fetchConversationMessages,
