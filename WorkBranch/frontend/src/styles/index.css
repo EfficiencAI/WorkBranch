@@ -31,7 +31,7 @@
     radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 30%),
     radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
     linear-gradient(180deg, #020617 0%, #0f172a 100%);
-  --workspace-bg:
+  --diagram-bg:
     radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.12), transparent 26%),
     radial-gradient(circle at 80% 15%, rgba(59, 130, 246, 0.16), transparent 24%),
     linear-gradient(180deg, rgba(2, 6, 23, 0.96), rgba(15, 23, 42, 0.98));
@@ -69,7 +69,7 @@
     radial-gradient(circle at top left, rgba(34, 197, 94, 0.08), transparent 32%),
     radial-gradient(circle at top right, rgba(59, 130, 246, 0.12), transparent 30%),
     linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%);
-  --workspace-bg:
+  --diagram-bg:
     radial-gradient(circle at 20% 20%, rgba(34, 197, 94, 0.08), transparent 28%),
     radial-gradient(circle at 80% 15%, rgba(59, 130, 246, 0.1), transparent 26%),
     linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(226, 232, 240, 0.96));
@@ -146,23 +146,23 @@ button {
   padding: 24px;
 }
 
-.app-content--workspace {
+.app-content--diagram {
   padding: 0;
 }
 
-.workspace-shell {
+.diagram-shell {
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--workspace-bg);
+  background: var(--diagram-bg);
 }
 
-.workspace-shell__canvas-layer {
+.diagram-shell__canvas-layer {
   position: relative;
   min-height: 100vh;
 }
 
-.workspace-shell__nav {
+.diagram-shell__nav {
   position: fixed;
   top: 18px;
   left: 18px;
@@ -191,13 +191,13 @@ button {
     left 240ms ease;
 }
 
-.workspace-shell__nav--peek {
+.diagram-shell__nav--peek {
   width: 332px;
   border-radius: calc(18px * var(--app-ui-scale));
   padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
 }
 
-.workspace-shell__nav--open {
+.diagram-shell__nav--open {
   width: 372px;
   min-height: min(78vh, 760px);
   border-radius: var(--app-radius-lg);
@@ -206,14 +206,14 @@ button {
   box-shadow: var(--app-shadow-lg);
 }
 
-.workspace-shell__nav-head {
+.diagram-shell__nav-head {
   display: flex;
   align-items: center;
   gap: 6px;
   min-height: var(--app-control-height-lg);
 }
 
-.workspace-shell__nav-trigger-slot {
+.diagram-shell__nav-trigger-slot {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -222,7 +222,7 @@ button {
   flex: 0 0 var(--app-control-height-lg);
 }
 
-.workspace-shell__nav-trigger {
+.diagram-shell__nav-trigger {
   width: var(--app-control-height-lg);
   height: var(--app-control-height-lg);
   padding-inline: 0 !important;
@@ -233,7 +233,7 @@ button {
   box-shadow: none !important;
 }
 
-.workspace-shell__nav-actions-slot {
+.diagram-shell__nav-actions-slot {
   display: flex;
   align-items: center;
   min-height: var(--app-control-height-lg);
@@ -241,13 +241,13 @@ button {
   min-width: 0;
 }
 
-.workspace-shell__nav-trigger:hover,
-.workspace-shell__nav-trigger:focus-visible {
+.diagram-shell__nav-trigger:hover,
+.diagram-shell__nav-trigger:focus-visible {
   color: var(--app-text) !important;
   background: var(--app-hover-bg) !important;
 }
 
-.workspace-shell__nav-actions {
+.diagram-shell__nav-actions {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -261,13 +261,13 @@ button {
   transition: opacity 220ms ease, transform 220ms ease;
 }
 
-.workspace-shell__nav-actions--visible {
+.diagram-shell__nav-actions--visible {
   opacity: 1;
   transform: translateX(0);
   pointer-events: auto;
 }
 
-.workspace-shell__nav-button {
+.diagram-shell__nav-button {
   min-width: 0;
   min-height: var(--app-control-height);
   padding-inline: var(--app-space-5) !important;
@@ -278,21 +278,21 @@ button {
   box-shadow: none;
 }
 
-.workspace-shell__nav-button:hover,
-.workspace-shell__nav-button:focus-visible {
+.diagram-shell__nav-button:hover,
+.diagram-shell__nav-button:focus-visible {
   color: var(--app-text) !important;
   border-color: var(--app-border-strong) !important;
   background: var(--app-panel-bg) !important;
 }
 
-.workspace-shell__nav-button--active {
+.diagram-shell__nav-button--active {
   color: var(--app-text) !important;
   border-color: rgba(34, 197, 94, 0.32) !important;
   background: rgba(22, 163, 74, 0.14) !important;
   box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.08);
 }
 
-.workspace-shell__nav-body {
+.diagram-shell__nav-body {
   max-height: 0;
   margin-top: 0;
   opacity: 0;
@@ -301,14 +301,14 @@ button {
   transition: max-height 240ms ease, opacity 220ms ease, margin-top 220ms ease;
 }
 
-.workspace-shell__nav-body--visible {
+.diagram-shell__nav-body--visible {
   max-height: 1000px;
   margin-top: var(--app-space-2);
   opacity: 1;
   pointer-events: auto;
 }
 
-.workspace-shell__nav-panel {
+.diagram-shell__nav-panel {
   border: 1px solid rgba(148, 163, 184, 0.12);
   border-radius: calc(14px * var(--app-ui-scale));
   background: var(--app-panel-muted);
@@ -317,7 +317,7 @@ button {
   padding: var(--app-space-4);
 }
 
-.workspace-shell__hud {
+.diagram-shell__hud {
   position: fixed;
   top: 96px;
   left: 24px;
@@ -331,7 +331,7 @@ button {
   box-shadow: 0 22px 50px rgba(2, 6, 23, 0.32);
 }
 
-.workspace-shell__eyebrow {
+.diagram-shell__eyebrow {
   color: #22c55e !important;
   font-size: var(--app-font-size-md);
   font-weight: 600;
@@ -339,12 +339,12 @@ button {
   text-transform: uppercase;
 }
 
-.workspace-shell__title.ant-typography {
+.diagram-shell__title.ant-typography {
   margin: 0;
   color: var(--app-text);
 }
 
-.workspace-shell__scrim {
+.diagram-shell__scrim {
   position: fixed;
   inset: 0;
   z-index: 30;
@@ -352,7 +352,7 @@ button {
   background: var(--app-scrim-bg);
 }
 
-.workspace-shell__scrim--detail {
+.diagram-shell__scrim--detail {
   z-index: 44;
   background: var(--app-scrim-detail-bg);
 }
@@ -788,7 +788,7 @@ button {
   width: 100%;
 }
 
-.workspace-shell__settings {
+.diagram-shell__settings {
   width: 100%;
   max-height: min(62vh, 720px);
   overflow: auto;
@@ -1059,12 +1059,12 @@ button {
     padding: 16px;
   }
 
-  .workspace-shell__nav--peek,
-  .workspace-shell__nav--open {
+  .diagram-shell__nav--peek,
+  .diagram-shell__nav--open {
     width: min(420px, calc(100vw - 32px));
   }
 
-  .workspace-shell__hud {
+  .diagram-shell__hud {
     top: 96px;
     left: 16px;
     right: 16px;
@@ -1121,7 +1121,7 @@ button {
 }
 
 @media (max-width: 640px) {
-  .workspace-shell__nav {
+  .diagram-shell__nav {
     top: 14px;
     left: 14px;
     right: 14px;
@@ -1130,22 +1130,22 @@ button {
     padding: 5px;
   }
 
-  .workspace-shell__nav--peek,
-  .workspace-shell__nav--open {
+  .diagram-shell__nav--peek,
+  .diagram-shell__nav--open {
     width: calc(100vw - 28px);
   }
 
-  .workspace-shell__nav-head {
+  .diagram-shell__nav-head {
     flex-wrap: wrap;
     gap: 6px;
   }
 
-  .workspace-shell__nav-actions-slot {
+  .diagram-shell__nav-actions-slot {
     width: 100%;
   }
 
-  .workspace-shell__nav-actions,
-  .workspace-shell__nav-actions--visible {
+  .diagram-shell__nav-actions,
+  .diagram-shell__nav-actions--visible {
     width: 100%;
     flex-wrap: nowrap;
     gap: 6px;
@@ -1153,16 +1153,16 @@ button {
     scrollbar-width: none;
   }
 
-  .workspace-shell__nav-actions::-webkit-scrollbar,
-  .workspace-shell__nav-actions--visible::-webkit-scrollbar {
+  .diagram-shell__nav-actions::-webkit-scrollbar,
+  .diagram-shell__nav-actions--visible::-webkit-scrollbar {
     display: none;
   }
 
-  .workspace-shell__nav-button {
+  .diagram-shell__nav-button {
     flex: 0 0 auto;
   }
 
-  .workspace-shell__hud {
+  .diagram-shell__hud {
     top: 144px;
     left: 16px;
     right: 16px;

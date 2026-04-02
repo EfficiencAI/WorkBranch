@@ -64,7 +64,7 @@ export function SessionSidebar({
   const disableSaveName = updateNamePending || !trimmedDraftName || trimmedDraftName === currentName
 
   return (
-    <div className="session-sidebar" aria-label="工作台内嵌侧边栏内容">
+    <div className="session-sidebar" aria-label="图界面内嵌侧边栏内容">
       <Space direction="vertical" size="large" style={{ width: '100%' }}>
         <Card size="small" className="session-sidebar__profile">
           <Space align="start" size="middle">
@@ -110,7 +110,7 @@ export function SessionSidebar({
                       编辑
                     </Button>
                   </Space>
-                  <Typography.Text type="secondary">AI Coding Workspace</Typography.Text>
+                  <Typography.Text type="secondary">AI Coding Diagram</Typography.Text>
                   <StatusTag label="同层展开" tone="success" />
                 </>
               )}

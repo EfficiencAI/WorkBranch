@@ -33,13 +33,13 @@ import { SessionSidebar } from './SessionSidebar'
 
 type SidebarMode = 'history' | 'settings'
 
-type WorkspaceShellProps = {
+type DiagramShellProps = {
   onSendError: (content: string) => void
   onRequestError: (error: unknown) => void
   view: 'chat' | 'settings'
 }
 
-export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceShellProps) {
+export function DiagramShell({ onSendError, onRequestError, view }: DiagramShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
@@ -78,10 +78,10 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const navExpanded = peekNav || activeSidebar !== null
   const navClassName = activeSidebar
-    ? 'workspace-shell__nav workspace-shell__nav--open'
+    ? 'diagram-shell__nav diagram-shell__nav--open'
     : navExpanded
-      ? 'workspace-shell__nav workspace-shell__nav--peek'
-      : 'workspace-shell__nav'
+      ? 'diagram-shell__nav diagram-shell__nav--peek'
+      : 'diagram-shell__nav'
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
@@ -327,8 +327,8 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   }
 
   return (
-    <section className="workspace-shell">
-      <div className="workspace-shell__canvas-layer">
+    <section className="diagram-shell">
+      <div className="diagram-shell__canvas-layer">
         <ConversationCanvas
           currentSessionId={selectedSessionId}
           focusedConversationId={focusedConversationId}
@@ -363,13 +363,13 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             }
           }}
         >
-          <div className="workspace-shell__nav-head">
-            <div className="workspace-shell__nav-trigger-slot">
+          <div className="diagram-shell__nav-head">
+            <div className="diagram-shell__nav-trigger-slot">
               <Button
                 type="text"
                 shape="round"
-                className="workspace-shell__nav-trigger"
-                aria-label="展开或收起工作台侧边栏"
+                className="diagram-shell__nav-trigger"
+                aria-label="展开或收起图侧边栏"
                 aria-expanded={navExpanded}
                 onClick={collapseNav}
               >
@@ -377,16 +377,16 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
               </Button>
             </div>
 
-            <div className="workspace-shell__nav-actions-slot">
-              <div className={navExpanded ? 'workspace-shell__nav-actions workspace-shell__nav-actions--visible' : 'workspace-shell__nav-actions'}>
+            <div className="diagram-shell__nav-actions-slot">
+              <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
                 <Button
-                  className={activeSidebar === 'history' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
+                  className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
                   onClick={() => openSidebar('history')}
                 >
                   会话历史
                 </Button>
                 <Button
-                  className={activeSidebar === 'settings' ? 'workspace-shell__nav-button workspace-shell__nav-button--active' : 'workspace-shell__nav-button'}
+                  className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
                   onClick={() => openSidebar('settings')}
                 >
                   设置
@@ -395,8 +395,8 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             </div>
           </div>
 
-          <div className={activeSidebar ? 'workspace-shell__nav-body workspace-shell__nav-body--visible' : 'workspace-shell__nav-body'}>
-            <div className="workspace-shell__nav-panel">
+          <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
+            <div className="diagram-shell__nav-panel">
               {activeSidebar === 'history' && user ? (
                 <SessionSidebar
                   user={user}
@@ -411,7 +411,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
               ) : null}
 
               {activeSidebar === 'settings' ? (
-                <div className="workspace-shell__settings">
+                <div className="diagram-shell__settings">
                   <SettingsPage embedded />
                 </div>
               ) : null}
@@ -420,11 +420,11 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         </div>
 
         {showWorkspaceHud ? (
-          <div className="workspace-shell__hud">
+          <div className="diagram-shell__hud">
             <Space direction="vertical" size={8}>
-              <Typography.Text className="workspace-shell__eyebrow">WorkBranch Workspace</Typography.Text>
+              <Typography.Text className="diagram-shell__eyebrow">WorkBranch Diagram</Typography.Text>
               <Space align="start" size={12} wrap>
-                <Typography.Title level={3} className="workspace-shell__title">
+                <Typography.Title level={3} className="diagram-shell__title">
                   {isSettingsRoute
                     ? '系统设置'
                     : focusedConversation
@@ -437,7 +437,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
               <Space wrap>
                 {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
                 <StatusTag label="阶段十二" tone="processing" />
-                <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
+                <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话图'} tone="success" />
                 <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
                 {(lockedSendConversation || selectedConversation) ? (
                   <Space wrap size={6}>

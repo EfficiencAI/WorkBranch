@@ -6,7 +6,7 @@ import { StatusTag } from '../../shared/ui'
 const navItems: MenuProps['items'] = [
   {
     key: '/chat',
-    label: '工作台',
+    label: '图',
   },
   {
     key: '/settings',
@@ -17,7 +17,7 @@ const navItems: MenuProps['items'] = [
 export function AppHeader() {
   const location = useLocation()
   const navigate = useNavigate()
-  const workspaceTitle = location.pathname === '/chat' ? '工作台' : '系统设置'
+  const diagramTitle = location.pathname === '/chat' ? '图' : '系统设置'
 
   return (
     <Layout.Header className="app-header">
@@ -26,7 +26,7 @@ export function AppHeader() {
           <Typography.Text className="app-header__eyebrow">WorkBranch Frontend</Typography.Text>
           <Space size="middle" wrap>
             <Typography.Title level={4} className="app-header__title">
-              {workspaceTitle}
+              {diagramTitle}
             </Typography.Title>
             <StatusTag label="阶段四" tone="processing" />
             <StatusTag label="静态 UI" tone="success" />

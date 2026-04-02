@@ -1,2 +1,2 @@
 export { SettingsPage } from './settings/SettingsPage'
-export { WorkspacePage } from './workspace/WorkspacePage'
+export { DiagramPage } from './diagram/DiagramPage'

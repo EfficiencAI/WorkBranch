@@ -5,7 +5,7 @@ import { StatusTag } from '../../shared/ui'
 
 const systemStatus: Array<{ label: string; status: AsyncStatus; value: string }> = [
   {
-    label: '工作台结构',
+    label: '图界面结构',
     status: 'success',
     value: '全屏画布与浮层交互已切换完成',
   },

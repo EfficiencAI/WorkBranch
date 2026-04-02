@@ -14,9 +14,9 @@ import {
 } from '../../features'
 import { getErrorMessage } from '../../shared/api'
 import { LoadingState } from '../../shared/ui'
-import { WorkspaceShell } from '../../widgets'
+import { DiagramShell } from '../../widgets'
 
-export function WorkspacePage() {
+export function DiagramPage() {
   const location = useLocation()
   const { message } = AntdApp.useApp()
   const chatLoading = useChatWorkbenchStore(selectChatWorkbenchLoading)
@@ -41,14 +41,14 @@ export function WorkspacePage() {
   }, [message])
 
   if (chatLoading || sessionLoading || userLoading) {
-    return <LoadingState tip="正在加载工作台数据..." />
+    return <LoadingState tip="正在加载图数据..." />
   }
 
   if (chatError || sessionError || userError) {
-    return <Alert type="error" showIcon message={chatError ?? sessionError ?? userError ?? '工作台数据加载失败'} />
+    return <Alert type="error" showIcon message={chatError ?? sessionError ?? userError ?? '图数据加载失败'} />
   }
 
   const isSettingsView = location.pathname === '/settings'
 
-  return <WorkspaceShell onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
+  return <DiagramShell onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
 }

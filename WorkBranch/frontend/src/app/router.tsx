@@ -1,6 +1,6 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { WorkspacePage } from '../pages'
+import { DiagramPage } from '../pages'
 
 export const router = createBrowserRouter([
   {
@@ -13,11 +13,11 @@ export const router = createBrowserRouter([
       },
       {
         path: 'chat',
-        element: <WorkspacePage />,
+        element: <DiagramPage />,
       },
       {
         path: 'settings',
-        element: <WorkspacePage />,
+        element: <DiagramPage />,
       },
       {
         path: '*',
