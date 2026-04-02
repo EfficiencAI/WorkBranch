@@ -36,7 +36,8 @@ DEFAULT_SETTINGS = {
         "theme_mode": "system",
         "scale": 1.0,
         "show_debug_overlay": False,
-        "show_workspace_hud": False
+        "show_workspace_hud": False,
+        "diagram_double_click_delay_ms": 300
     },
     "database": {
         "path": "workbranch.db"
@@ -108,6 +109,13 @@ DEFAULT_SETTINGS_METADATA = {
             "min": 0.7,
             "max": 1.3,
             "step": 0.1,
+        },
+        "diagram_double_click_delay_ms": {
+            "type": "number",
+            "control": "slider",
+            "min": 150,
+            "max": 600,
+            "step": 10,
         }
     }
 }

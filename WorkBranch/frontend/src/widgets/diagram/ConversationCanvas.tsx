@@ -2,9 +2,10 @@ import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useReactFlo
 import type { Edge, Node, NodeProps } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Card, Space, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
-import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../entities'
-import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSettings } from '../../app/settings'
+import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
+import { selectFocusedConversationId, selectHalfPreviewConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
 import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
@@ -13,11 +14,11 @@ import { MessageComposer } from './MessageComposer'
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
   focusedConversationId: string | null
+  halfPreviewConversationId: string | null
   selectedConversationId: string | null
   lockedSendConversationId: string | null
   sessionDetail: SessionDetail | null
   conversationDetail: ConversationDetail | null
-  workspaceDetail: WorkspaceDetail | null
   conversationNodes: ConversationNode[]
   conversationMessages: MessageNode[]
   messagesLoading: boolean
@@ -34,14 +35,20 @@ type ConversationCanvasProps = {
 type FlowNodeData = {
   conversation: ConversationNode
   focused: boolean
+  halfPreview: boolean
   selected: boolean
+  interactionGateActive: boolean
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
   conversationError: string | null
   focusCardWidth?: number
   focusBodyHeight?: number
+  previewCardWidth?: number
+  previewBodyHeight?: number
 }
+
+const DEFAULT_HALF_PREVIEW_INTERACTION_DELAY = 300
 
 function summarizeConversation(conversation: ConversationNode) {
   if (conversation.title?.trim()) {
@@ -137,6 +144,45 @@ function resolveConversationPosition(
   return conversation.position ?? overviewLayoutMap.get(conversation.conversationId) ?? { x: 0, y: 0 }
 }
 
+function renderMessageList(
+  conversationMessages: MessageNode[],
+  messagesLoading: boolean,
+  messagesError: string | null,
+  conversationError: string | null,
+  messagesClassName = 'conversation-node__messages',
+) {
+  return (
+    <>
+      {conversationError ? <Typography.Text type="danger">{conversationError}</Typography.Text> : null}
+      {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
+
+      {!messagesLoading && !messagesError && conversationMessages.length === 0 ? <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text> : null}
+
+      {!messagesError && conversationMessages.length ? (
+        <div className={messagesClassName}>
+          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            {conversationMessages.map((message) => (
+              <Card key={message.id} size="small" className="conversation-node__message-card">
+                <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                  <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                    <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
+                    <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
+                  </Space>
+                  <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
+                    {message.content}
+                    {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
+                    {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
+                  </Typography.Paragraph>
+                </Space>
+              </Card>
+            ))}
+          </Space>
+        </div>
+      ) : null}
+    </>
+  )
+}
+
 function OverviewNodePage({ conversation, focused, selected }: { conversation: ConversationNode; focused: boolean; selected: boolean }) {
   return (
     <Space direction="vertical" size={10} style={{ width: '100%' }}>
@@ -161,21 +207,50 @@ function OverviewNodePage({ conversation, focused, selected }: { conversation: C
   )
 }
 
-function FocusNodePage({
+function HalfPreviewNodePage({
   conversation,
+  interactionGateActive,
   conversationMessages,
   messagesLoading,
   messagesError,
   conversationError,
 }: {
   conversation: ConversationNode
+  interactionGateActive: boolean
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
   conversationError: string | null
 }) {
   return (
-    <div className="conversation-node__focused-body nodrag nopan" onClick={stopEvent} onDoubleClick={stopEvent}>
+    <FocusNodePage
+      conversation={conversation}
+      conversationMessages={conversationMessages}
+      messagesLoading={messagesLoading}
+      messagesError={messagesError}
+      conversationError={conversationError}
+      interactive={!interactionGateActive}
+    />
+  )
+}
+
+function FocusNodePage({
+  conversation,
+  conversationMessages,
+  messagesLoading,
+  messagesError,
+  conversationError,
+  interactive = true,
+}: {
+  conversation: ConversationNode
+  conversationMessages: MessageNode[]
+  messagesLoading: boolean
+  messagesError: string | null
+  conversationError: string | null
+  interactive?: boolean
+}) {
+  return (
+    <div className="conversation-node__focused-body nodrag nopan" onClick={interactive ? stopEvent : undefined} onDoubleClick={interactive ? stopEvent : undefined}>
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
           <Space direction="vertical" size={2}>
@@ -197,32 +272,7 @@ function FocusNodePage({
           />
         </Space>
 
-        {conversationError ? <Typography.Text type="danger">{conversationError}</Typography.Text> : null}
-        {messagesError ? <Typography.Text type="danger">{messagesError}</Typography.Text> : null}
-
-        {!messagesLoading && !messagesError && conversationMessages.length === 0 ? <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text> : null}
-
-        {!messagesError && conversationMessages.length ? (
-          <div className="conversation-node__messages">
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
-              {conversationMessages.map((message) => (
-                <Card key={message.id} size="small" className="conversation-node__message-card">
-                  <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                    <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                      <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
-                      <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
-                    </Space>
-                    <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
-                      {message.content}
-                      {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
-                      {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
-                    </Typography.Paragraph>
-                  </Space>
-                </Card>
-              ))}
-            </Space>
-          </div>
-        ) : null}
+        {renderMessageList(conversationMessages, messagesLoading, messagesError, conversationError)}
       </Space>
     </div>
   )
@@ -232,33 +282,68 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
     focused,
+    halfPreview,
     selected,
+    interactionGateActive,
     conversationMessages = [],
     messagesLoading = false,
     messagesError = null,
     conversationError,
     focusCardWidth,
     focusBodyHeight,
+    previewCardWidth,
+    previewBodyHeight,
   } = data
+
+  const width = focused ? focusCardWidth : halfPreview ? previewCardWidth : undefined
+  const bodyHeight = focused ? focusBodyHeight : halfPreview ? previewBodyHeight : undefined
+  const nodeClassName = [
+    'conversation-node',
+    focused ? 'conversation-node--focused' : null,
+    halfPreview ? 'conversation-node--half-preview' : null,
+    selected && !focused && !halfPreview ? 'conversation-node--selected' : null,
+    interactionGateActive ? 'conversation-node--interaction-gated' : null,
+  ].filter(Boolean).join(' ')
+  const focusShellClassName = [
+    'conversation-node__focus-shell',
+    focused ? 'conversation-node__focus-shell--focused' : null,
+    halfPreview ? 'conversation-node__focus-shell--half-preview' : null,
+  ].filter(Boolean).join(' ')
+  const focusContentClassName = [
+    'conversation-node__focus-content',
+    focused ? 'conversation-node__focus-content--focused' : null,
+    halfPreview ? 'conversation-node__focus-content--half-preview' : null,
+  ].filter(Boolean).join(' ')
+  const cardClassName = [
+    'conversation-node__card',
+    'conversation-node__card--assistant',
+    focused ? 'conversation-node__card--focused' : null,
+    halfPreview ? 'conversation-node__card--half-preview' : null,
+  ].filter(Boolean).join(' ')
+  const bodyFrameClassName = [
+    'conversation-node__body-frame',
+    focused ? 'conversation-node__body-frame--focused' : null,
+    halfPreview ? 'conversation-node__body-frame--half-preview' : null,
+  ].filter(Boolean).join(' ')
 
   return (
     <div
-      className={focused ? 'conversation-node conversation-node--focused' : selected ? 'conversation-node conversation-node--selected' : 'conversation-node'}
+      className={nodeClassName}
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
-      style={focused && focusCardWidth ? { width: `${focusCardWidth}px` } : undefined}
+      style={width ? { width: `${width}px` } : undefined}
     >
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
-      <div className={focused ? 'conversation-node__focus-shell conversation-node__focus-shell--focused' : 'conversation-node__focus-shell'}>
-        <div className={focused ? 'conversation-node__focus-content conversation-node__focus-content--focused' : 'conversation-node__focus-content'}>
+      <div className={focusShellClassName}>
+        <div className={focusContentClassName}>
           <Card
             size="small"
-            className={focused ? 'conversation-node__card conversation-node__card--assistant conversation-node__card--focused' : 'conversation-node__card conversation-node__card--assistant'}
-            styles={focused && focusBodyHeight ? { body: { height: `${focusBodyHeight}px` } } : undefined}
+            className={cardClassName}
+            styles={bodyHeight ? { body: { height: `${bodyHeight}px` } } : undefined}
           >
-            <div className={focused ? 'conversation-node__body-frame conversation-node__body-frame--focused' : 'conversation-node__body-frame'}>
+            <div className={bodyFrameClassName}>
               <div className="conversation-node__page-shell">
-                {!focused ? <OverviewNodePage conversation={conversation} focused={focused} selected={selected} /> : (
+                {focused ? (
                   <FocusNodePage
                     conversation={conversation}
                     conversationMessages={conversationMessages}
@@ -266,6 +351,19 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
                     messagesError={messagesError}
                     conversationError={conversationError}
                   />
+                ) : halfPreview ? (
+                  <div className={interactionGateActive ? 'conversation-node__half-preview-shell conversation-node__half-preview-shell--gated' : 'conversation-node__half-preview-shell'}>
+                    <HalfPreviewNodePage
+                      conversation={conversation}
+                      interactionGateActive={interactionGateActive}
+                      conversationMessages={conversationMessages}
+                      messagesLoading={messagesLoading}
+                      messagesError={messagesError}
+                      conversationError={conversationError}
+                    />
+                  </div>
+                ) : (
+                  <OverviewNodePage conversation={conversation} focused={focused} selected={selected} />
                 )}
               </div>
             </div>
@@ -284,6 +382,7 @@ const nodeTypes = {
 function FlowViewport({
   currentSessionId,
   focusedConversationId,
+  halfPreviewConversationId,
   lockedSendConversationId,
   sessionDetail,
   conversationDetail,
@@ -296,13 +395,27 @@ function FlowViewport({
   onSendMessage,
   onStopMessage,
 }: ConversationCanvasProps) {
+  const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
+  const halfPreviewInteractionDelay =
+    settings?.ui &&
+    typeof settings.ui === 'object' &&
+    'diagram_double_click_delay_ms' in settings.ui &&
+    typeof settings.ui.diagram_double_click_delay_ms === 'number'
+      ? settings.ui.diagram_double_click_delay_ms
+      : DEFAULT_HALF_PREVIEW_INTERACTION_DELAY
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
+  const setHalfPreviewConversationId = useTreeStore((state) => state.setHalfPreviewConversationId)
+  const clearHalfPreviewConversationId = useTreeStore((state) => state.clearHalfPreviewConversationId)
   const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
+  const storeHalfPreviewConversationId = useTreeStore(selectHalfPreviewConversationId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
+  const interactionGateTimerRef = useRef<number | null>(null)
+  const [interactionGateConversationId, setInteractionGateConversationId] = useState<string | null>(null)
+  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
@@ -312,44 +425,89 @@ function FlowViewport({
     () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
+  const halfPreviewConversation = useMemo(
+    () => conversationNodes.find((conversation) => conversation.conversationId === halfPreviewConversationId) ?? null,
+    [conversationNodes, halfPreviewConversationId],
+  )
 
   const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
+
+  const clearInteractionGate = useCallback(() => {
+    if (interactionGateTimerRef.current !== null) {
+      window.clearTimeout(interactionGateTimerRef.current)
+      interactionGateTimerRef.current = null
+    }
+    setInteractionGateConversationId(null)
+  }, [])
+
+  const startInteractionGate = useCallback((conversationId: string) => {
+    if (interactionGateTimerRef.current !== null) {
+      window.clearTimeout(interactionGateTimerRef.current)
+    }
+
+    setInteractionGateConversationId(conversationId)
+    interactionGateTimerRef.current = window.setTimeout(() => {
+      setHalfPreviewConversationId(conversationId)
+      setInteractionGateConversationId(null)
+      interactionGateTimerRef.current = null
+    }, halfPreviewInteractionDelay)
+  }, [halfPreviewInteractionDelay, setHalfPreviewConversationId])
+
+  useEffect(() => {
+    return () => {
+      if (interactionGateTimerRef.current !== null) {
+        window.clearTimeout(interactionGateTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleResize = () => {
+      setViewportWidth(window.innerWidth)
+    }
+
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
 
   const focusMetrics = useMemo(() => {
     if (!focusedConversation) {
       return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
     }
 
-    const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
-    const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight
+    const focusZoom = 0.82
+    const viewportPixelWidth = viewportRef.current?.clientWidth ?? window.innerWidth
+    const viewportPixelHeight = viewportRef.current?.clientHeight ?? window.innerHeight
     const composerHeight = composerRef.current?.clientHeight ?? 0
-    const topInset = 72
-    const sideInset = 28
-    const bottomInset = 20
-    const availableWidth = Math.max(280, viewportWidth - sideInset * 2)
-    const availableHeight = Math.max(220, viewportHeight - composerHeight - topInset - bottomInset)
-    const targetRatio = availableWidth / availableHeight
-    const baseWidth = 320
-    const cardWidth = Math.max(240, Math.min(availableWidth, baseWidth * targetRatio))
-    const bodyHeight = Math.max(220, Math.min(availableHeight, cardWidth * (availableHeight / availableWidth)))
-    const visualHeight = bodyHeight
-    const viewportTop = viewportRef.current?.getBoundingClientRect().top ?? 0
-    const composerTop = composerRef.current?.getBoundingClientRect().top ?? viewportTop + viewportHeight - composerHeight - 24
-    const composerTopInViewport = composerTop - viewportTop
-    const centerYOffset = (composerTopInViewport - viewportHeight) / 2
+    const graphViewportWidth = viewportPixelWidth / focusZoom
+    const graphViewportHeight = Math.max(220, (viewportPixelHeight - composerHeight) / focusZoom)
+    const cardWidth = graphViewportWidth * 0.95
+    const bodyHeight = cardWidth * (graphViewportHeight / graphViewportWidth) * 0.9
 
     return {
       cardWidth,
       bodyHeight,
-      centerYOffset,
+      centerYOffset: 0,
       visualWidth: cardWidth,
-      visualHeight,
+      visualHeight: bodyHeight,
     }
-  }, [conversationMessages.length, focusedConversation])
+  }, [focusedConversation, viewportWidth])
+
+  const previewMetrics = useMemo(() => {
+    const baseWidth = viewportWidth <= 640 ? 280 : 320
+    const cardWidth = baseWidth
+    const bodyHeight = cardWidth * 2
+
+    return {
+      cardWidth,
+      bodyHeight,
+    }
+  }, [viewportWidth])
 
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
     return conversationNodes.map((conversation) => {
       const focused = storeFocusedConversationId === conversation.conversationId
+      const halfPreview = storeHalfPreviewConversationId === conversation.conversationId
       const faded = storeFocusedConversationId !== null && storeFocusedConversationId !== conversation.conversationId
       return {
         id: conversation.conversationId,
@@ -361,20 +519,25 @@ function FlowViewport({
         data: {
           conversation,
           focused,
+          halfPreview,
           selected: lockedSendConversationId === conversation.conversationId,
-          conversationMessages: focused ? conversationMessages : [],
-          messagesLoading: focused ? messagesLoading : false,
-          messagesError: focused ? messagesError : null,
-          conversationError: focused ? conversationDetail?.error ?? null : null,
+          interactionGateActive: interactionGateConversationId === conversation.conversationId,
+          conversationMessages: focused || halfPreview ? conversationMessages : [],
+          messagesLoading: focused || halfPreview ? messagesLoading : false,
+          messagesError: focused || halfPreview ? messagesError : null,
+          conversationError: focused || halfPreview ? conversationDetail?.error ?? null : null,
           focusCardWidth: focused ? focusMetrics.cardWidth : undefined,
           focusBodyHeight: focused ? focusMetrics.bodyHeight : undefined,
+          previewCardWidth: halfPreview ? previewMetrics.cardWidth : undefined,
+          previewBodyHeight: halfPreview ? previewMetrics.bodyHeight : undefined,
         },
         className: [
           'conversation-flow-node',
           focused ? 'conversation-flow-node--focused' : null,
+          halfPreview ? 'conversation-flow-node--half-preview' : null,
           faded ? 'conversation-flow-node--dimmed' : null,
         ].filter(Boolean).join(' '),
-        draggable: !focused,
+        draggable: !focused && !halfPreview,
       }
     })
   }, [
@@ -383,11 +546,15 @@ function FlowViewport({
     focusMetrics.bodyHeight,
     focusMetrics.cardWidth,
     conversationMessages,
+    interactionGateConversationId,
+    lockedSendConversationId,
     messagesError,
     messagesLoading,
     overviewLayoutMap,
-    lockedSendConversationId,
+    previewMetrics.bodyHeight,
+    previewMetrics.cardWidth,
     storeFocusedConversationId,
+    storeHalfPreviewConversationId,
   ])
 
   const flowEdges = useMemo<Edge[]>(() => {
@@ -399,50 +566,42 @@ function FlowViewport({
         source: conversation.parentConversationId as string,
         target: conversation.conversationId,
         type: 'smoothstep',
-        animated: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId,
+        animated:
+          lockedSendConversationId === conversation.conversationId ||
+          focusedConversationId === conversation.conversationId ||
+          halfPreviewConversationId === conversation.conversationId,
         style: {
-          strokeWidth: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId ? 2.5 : 2,
-          stroke: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId
-            ? 'rgba(96, 165, 250, 0.95)'
-            : 'rgba(148, 163, 184, 0.72)',
+          strokeWidth:
+            lockedSendConversationId === conversation.conversationId ||
+            focusedConversationId === conversation.conversationId ||
+            halfPreviewConversationId === conversation.conversationId
+              ? 2.5
+              : 2,
+          stroke:
+            lockedSendConversationId === conversation.conversationId ||
+            focusedConversationId === conversation.conversationId ||
+            halfPreviewConversationId === conversation.conversationId
+              ? 'rgba(96, 165, 250, 0.95)'
+              : 'rgba(148, 163, 184, 0.72)',
         },
       }))
-  }, [conversationNodes, focusedConversationId, lockedSendConversationId])
+  }, [conversationNodes, focusedConversationId, halfPreviewConversationId, lockedSendConversationId])
 
   useEffect(() => {
-    if (!flowNodes.length) {
+    if (!flowNodes.length || !focusedConversation) {
       return
     }
 
     const timeoutId = window.setTimeout(() => {
-      if (focusedConversation) {
-        const position = resolveConversationPosition(focusedConversation, overviewLayoutMap)
-        const nodeWidth = focusMetrics.visualWidth
-        const nodeHeight = focusMetrics.visualHeight
-        const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
-        const viewportHeight = viewportRef.current?.clientHeight ?? window.innerHeight
-        const composerHeight = composerRef.current?.clientHeight ?? 0
-        const topInset = 72
-        const sideInset = 28
-        const bottomInset = 20
-        const availableWidth = Math.max(240, viewportWidth - sideInset * 2)
-        const availableHeight = Math.max(220, viewportHeight - composerHeight - topInset - bottomInset)
-        const zoom = Math.max(1.18, Math.min(2.8, Math.min(availableWidth / nodeWidth, availableHeight / nodeHeight) * 1.08))
-        const centerX = position.x
-        const centerY = position.y - focusMetrics.centerYOffset / zoom
-        void reactFlow.setCenter(centerX, centerY, {
-          zoom,
-          duration: 420,
-          ease: (value) => 1 - Math.pow(1 - value, 3),
-        })
-        return
-      }
-
-      void reactFlow.fitView({
-        padding: 0.2,
-        duration: 360,
+      const position = resolveConversationPosition(focusedConversation, overviewLayoutMap)
+      const focusZoom = 0.82
+      const composerHeight = composerRef.current?.clientHeight ?? 0
+      const centerX = position.x
+      const centerY = position.y + (composerHeight / focusZoom) / 4
+      void reactFlow.setCenter(centerX, centerY, {
+        zoom: focusZoom,
+        duration: 420,
         ease: (value) => 1 - Math.pow(1 - value, 3),
-        includeHiddenNodes: true,
       })
     }, 50)
 
@@ -450,7 +609,7 @@ function FlowViewport({
   }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow, focusMetrics])
 
   useEffect(() => {
-    if (!focusedConversation) {
+    if (!focusedConversation && !halfPreviewConversation) {
       return
     }
 
@@ -460,12 +619,17 @@ function FlowViewport({
       }
 
       event.preventDefault()
-      setFocusedConversationId(null)
+      if (focusedConversation) {
+        setFocusedConversationId(null)
+        return
+      }
+
+      clearHalfPreviewConversationId()
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [focusedConversation, setFocusedConversationId])
+  }, [clearHalfPreviewConversationId, focusedConversation, halfPreviewConversation, setFocusedConversationId])
 
   const { setContextMenu } = useContextMenu()
 
@@ -497,7 +661,6 @@ function FlowViewport({
     [setContextMenu],
   )
 
-
   return (
     <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu} ref={viewportRef}>
       {focusedConversation ? (
@@ -518,25 +681,45 @@ function FlowViewport({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
-        nodesDraggable={!focusedConversation}
-        panOnDrag
-        zoomOnScroll
-        zoomOnPinch
+        nodesDraggable={!focusedConversation && !halfPreviewConversation}
+        panOnDrag={!focusedConversation}
+        zoomOnScroll={!focusedConversation}
+        zoomOnPinch={!focusedConversation}
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
+        onNodeClick={(_, node) => {
+          if (focusedConversationId === node.id) {
+            return
+          }
+
+          if (interactionGateConversationId === node.id) {
+            clearInteractionGate()
+            setFocusedConversationId(node.id)
+            return
+          }
+
+          if (halfPreviewConversationId === node.id) {
+            return
+          }
+
+          clearHalfPreviewConversationId()
+          startInteractionGate(node.id)
+        }}
         onNodeDoubleClick={(_, node) => {
+          clearInteractionGate()
+          setHalfPreviewConversationId(null)
           setFocusedConversationId(node.id)
         }}
         onNodeDrag={(_, node) => {
-          if (focusedConversation) {
+          if (focusedConversation || halfPreviewConversation) {
             return
           }
 
           updateConversationNodePosition(node.id, { x: node.position.x, y: node.position.y })
         }}
         onNodeDragStop={(_, node) => {
-          if (!currentSessionId || focusedConversation) {
+          if (!currentSessionId || focusedConversation || halfPreviewConversation) {
             return
           }
 
@@ -553,6 +736,10 @@ function FlowViewport({
           void persistConversationPositions(currentSessionId, [{ conversationId: node.id, position }])
         }}
         onPaneClick={() => {
+          clearInteractionGate()
+          if (halfPreviewConversation) {
+            clearHalfPreviewConversationId()
+          }
         }}
         proOptions={{ hideAttribution: true }}
       >
