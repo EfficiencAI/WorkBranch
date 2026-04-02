@@ -368,11 +368,11 @@ function FlowViewport({
           focusCardWidth: focused ? focusMetrics.cardWidth : undefined,
           focusBodyHeight: focused ? focusMetrics.bodyHeight : undefined,
         },
-        className: focused
-          ? 'conversation-flow-node conversation-flow-node--focused'
-          : faded
-            ? 'conversation-flow-node conversation-flow-node--dimmed'
-            : 'conversation-flow-node',
+        className: [
+          'conversation-flow-node',
+          focused ? 'conversation-flow-node--focused' : null,
+          faded ? 'conversation-flow-node--dimmed' : null,
+        ].filter(Boolean).join(' '),
         draggable: !focused,
       }
     })
@@ -524,6 +524,13 @@ function FlowViewport({
           }
           setSelectedConversationId(node.id)
           setFocusedConversationId(node.id)
+        }}
+        onNodeDrag={(_, node) => {
+          if (focusedConversation) {
+            return
+          }
+
+          updateConversationNodePosition(node.id, { x: node.position.x, y: node.position.y })
         }}
         onNodeDragStop={(_, node) => {
           if (!currentSessionId || focusedConversation) {

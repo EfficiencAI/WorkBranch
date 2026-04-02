@@ -385,10 +385,29 @@ button {
   width: auto;
   background: transparent;
   border: none;
+  transition: filter 180ms ease, opacity 180ms ease;
+  will-change: transform;
 }
 
 .conversation-canvas__flow .react-flow__node.selected .conversation-node {
   transform: translateY(-4px);
+}
+
+.conversation-canvas__flow .react-flow__node.dragging {
+  z-index: 14 !important;
+  filter: drop-shadow(0 18px 36px rgba(59, 130, 246, 0.22));
+}
+
+.conversation-canvas__flow .react-flow__node.dragging .conversation-node {
+  transform: scale(1.02);
+}
+
+.conversation-canvas__flow .react-flow__node.dragging .conversation-node__card {
+  border-color: rgba(96, 165, 250, 0.78);
+  box-shadow:
+    0 0 0 4px rgba(59, 130, 246, 0.16),
+    0 20px 44px rgba(15, 23, 42, 0.28),
+    var(--app-shadow-md);
 }
 
 .conversation-canvas__flow .react-flow__node.conversation-flow-node--focused {
@@ -409,9 +428,21 @@ button {
   opacity: 0.18;
 }
 
+.conversation-canvas__flow .react-flow__edge {
+  transition: opacity 180ms ease, filter 180ms ease;
+}
+
 .conversation-canvas__flow .react-flow__edge-path {
   stroke: rgba(148, 163, 184, 0.42);
   stroke-width: 2;
+  transition: stroke 180ms ease, stroke-width 180ms ease;
+}
+
+.conversation-canvas__flow .react-flow__node.dragging ~ .react-flow__edges .react-flow__edge-path,
+.conversation-canvas__flow .react-flow__edge.selected .react-flow__edge-path,
+.conversation-canvas__flow .react-flow__edge:focus-visible .react-flow__edge-path {
+  stroke: rgba(96, 165, 250, 0.82);
+  stroke-width: 2.4;
 }
 
 .conversation-canvas__flow .react-flow__minimap {
