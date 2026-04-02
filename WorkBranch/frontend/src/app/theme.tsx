@@ -10,11 +10,13 @@ type ThemeContextValue = {
   loading: boolean
   themeMode: ThemeMode
   resolvedTheme: ResolvedTheme
+  uiScale: number
   setThemeMode: (mode: ThemeMode) => Promise<void>
 }
 
 type UiSettingsNode = {
   theme_mode?: string
+  scale?: number
   [key: string]: unknown
 }
 
@@ -24,10 +26,19 @@ type SettingsNodeLike = {
 }
 
 const DEFAULT_THEME_MODE: ThemeMode = 'system'
+const DEFAULT_UI_SCALE = 1
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
 function isThemeMode(value: unknown): value is ThemeMode {
   return value === 'light' || value === 'dark' || value === 'system'
+}
+
+function normalizeUiScale(value: unknown) {
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    return DEFAULT_UI_SCALE
+  }
+
+  return Math.min(1.3, Math.max(0.7, value))
 }
 
 function resolveSystemTheme(): ResolvedTheme {
@@ -56,6 +67,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   const { settings, loading: settingsLoading, patchSettings } = useSettings()
   const [themeMode, setThemeModeState] = useState<ThemeMode>(DEFAULT_THEME_MODE)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>(() => resolveTheme(DEFAULT_THEME_MODE))
+  const [uiScale, setUiScale] = useState(DEFAULT_UI_SCALE)
 
   useEffect(() => {
     setResolvedTheme(resolveTheme(themeMode))
@@ -64,6 +76,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     document.documentElement.dataset.theme = resolvedTheme
   }, [resolvedTheme])
+
+  useEffect(() => {
+    document.documentElement.style.setProperty('--app-ui-scale', String(uiScale))
+  }, [uiScale])
 
   useEffect(() => {
     if (themeMode !== 'system' || typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
@@ -86,6 +102,7 @@ export function ThemeProvider({ children }: PropsWithChildren) {
     const ui = isPlainObject(settings?.ui) ? (settings.ui as UiSettingsNode) : null
     const nextThemeMode = isThemeMode(ui?.theme_mode) ? (ui.theme_mode as ThemeMode) : DEFAULT_THEME_MODE
     setThemeModeState(nextThemeMode)
+    setUiScale(normalizeUiScale(ui?.scale))
   }, [settings, settingsLoading])
 
   const setThemeMode = useCallback(
@@ -109,9 +126,10 @@ export function ThemeProvider({ children }: PropsWithChildren) {
       loading: settingsLoading,
       themeMode,
       resolvedTheme,
+      uiScale,
       setThemeMode,
     }),
-    [resolvedTheme, setThemeMode, settingsLoading, themeMode],
+    [resolvedTheme, setThemeMode, settingsLoading, themeMode, uiScale],
   )
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>

@@ -27,6 +27,14 @@ def get_settings(
     return Result.success(data=service.get_all())
 
 
+@router.get("/metadata")
+def get_settings_metadata(
+    service: SettingsService = Depends(get_settings_service),
+) -> Result:
+    """返回设置元数据。"""
+    return Result.success(data=service.get_metadata())
+
+
 @router.put("")
 def update_setting(
     body: UpdateSettingBody,

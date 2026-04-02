@@ -1,6 +1,7 @@
 export type TreeState = {
   focusedConversationId: string | null
   selectedConversationId: string | null
+  lockedSendConversationId: string | null
 }
 
 export type TreeActions = {
@@ -8,6 +9,8 @@ export type TreeActions = {
   clearFocusedConversationId: () => void
   setSelectedConversationId: (conversationId: string | null) => void
   clearSelectedConversationId: () => void
+  setLockedSendConversationId: (conversationId: string | null) => void
+  clearLockedSendConversationId: () => void
   resetTreeUiState: () => void
 }
 

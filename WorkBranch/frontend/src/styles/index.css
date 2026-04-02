@@ -6,6 +6,23 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --app-ui-scale: 1;
+  --app-font-size-xs: calc(10px * var(--app-ui-scale));
+  --app-font-size-sm: calc(11px * var(--app-ui-scale));
+  --app-font-size-md: calc(12px * var(--app-ui-scale));
+  --app-font-size-lg: calc(14px * var(--app-ui-scale));
+  --app-space-1: calc(4px * var(--app-ui-scale));
+  --app-space-2: calc(8px * var(--app-ui-scale));
+  --app-space-3: calc(10px * var(--app-ui-scale));
+  --app-space-4: calc(12px * var(--app-ui-scale));
+  --app-space-5: calc(14px * var(--app-ui-scale));
+  --app-space-6: calc(20px * var(--app-ui-scale));
+  --app-radius-sm: calc(10px * var(--app-ui-scale));
+  --app-radius-md: calc(12px * var(--app-ui-scale));
+  --app-radius-lg: calc(20px * var(--app-ui-scale));
+  --app-radius-xl: calc(24px * var(--app-ui-scale));
+  --app-control-height: calc(40px * var(--app-ui-scale));
+  --app-control-height-lg: calc(48px * var(--app-ui-scale));
   --app-text: #f8fafc;
   --app-text-muted: rgba(226, 232, 240, 0.8);
   --app-text-soft: rgba(226, 232, 240, 0.72);
@@ -102,6 +119,19 @@ select {
   font: inherit;
 }
 
+.ant-typography,
+.ant-btn,
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-number,
+.ant-slider,
+.ant-radio-button-wrapper,
+.ant-switch,
+.ant-card,
+.ant-tag {
+  font-size: var(--app-font-size-md);
+}
+
 button {
   cursor: pointer;
 }
@@ -142,9 +172,9 @@ button {
   gap: 0;
   width: 58px;
   min-height: 58px;
-  padding: 5px;
+  padding: var(--app-space-1);
   border: 1px solid var(--app-border-strong);
-  border-radius: 16px;
+  border-radius: var(--app-radius-lg);
   background: var(--app-panel-bg);
   backdrop-filter: blur(18px);
   box-shadow: var(--app-shadow-md);
@@ -163,15 +193,15 @@ button {
 
 .workspace-shell__nav--peek {
   width: 332px;
-  border-radius: 18px;
-  padding: 8px 10px 10px;
+  border-radius: calc(18px * var(--app-ui-scale));
+  padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
 }
 
 .workspace-shell__nav--open {
   width: 372px;
   min-height: min(78vh, 760px);
-  border-radius: 20px;
-  padding: 8px 10px 10px;
+  border-radius: var(--app-radius-lg);
+  padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
   background: var(--app-panel-bg-strong);
   box-shadow: var(--app-shadow-lg);
 }
@@ -180,24 +210,24 @@ button {
   display: flex;
   align-items: center;
   gap: 6px;
-  min-height: 48px;
+  min-height: var(--app-control-height-lg);
 }
 
 .workspace-shell__nav-trigger-slot {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  flex: 0 0 48px;
+  width: var(--app-control-height-lg);
+  height: var(--app-control-height-lg);
+  flex: 0 0 var(--app-control-height-lg);
 }
 
 .workspace-shell__nav-trigger {
-  width: 48px;
-  height: 48px;
+  width: var(--app-control-height-lg);
+  height: var(--app-control-height-lg);
   padding-inline: 0 !important;
   border: none !important;
-  border-radius: 12px !important;
+  border-radius: calc(12px * var(--app-ui-scale)) !important;
   background: transparent !important;
   color: var(--app-text-muted) !important;
   box-shadow: none !important;
@@ -206,7 +236,7 @@ button {
 .workspace-shell__nav-actions-slot {
   display: flex;
   align-items: center;
-  min-height: 48px;
+  min-height: var(--app-control-height-lg);
   flex: 1 1 auto;
   min-width: 0;
 }
@@ -221,10 +251,10 @@ button {
   display: flex;
   align-items: center;
   justify-content: flex-start;
-  gap: 6px;
+  gap: var(--app-space-2);
   flex: 1 1 auto;
   min-width: 0;
-  min-height: 48px;
+  min-height: var(--app-control-height-lg);
   opacity: 0;
   transform: translateX(-12px);
   pointer-events: none;
@@ -239,10 +269,10 @@ button {
 
 .workspace-shell__nav-button {
   min-width: 0;
-  min-height: 40px;
-  padding-inline: 14px !important;
+  min-height: var(--app-control-height);
+  padding-inline: var(--app-space-5) !important;
   border: 1px solid var(--app-border);
-  border-radius: 10px;
+  border-radius: var(--app-radius-sm);
   background: var(--app-panel-bg-soft);
   color: var(--app-text-muted);
   box-shadow: none;
@@ -273,18 +303,18 @@ button {
 
 .workspace-shell__nav-body--visible {
   max-height: 1000px;
-  margin-top: 8px;
+  margin-top: var(--app-space-2);
   opacity: 1;
   pointer-events: auto;
 }
 
 .workspace-shell__nav-panel {
   border: 1px solid rgba(148, 163, 184, 0.12);
-  border-radius: 14px;
+  border-radius: calc(14px * var(--app-ui-scale));
   background: var(--app-panel-muted);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   overflow: hidden;
-  padding: 12px;
+  padding: var(--app-space-4);
 }
 
 .workspace-shell__hud {
@@ -293,9 +323,9 @@ button {
   left: 24px;
   z-index: 20;
   max-width: min(420px, calc(100vw - 48px));
-  padding: 20px 22px;
+  padding: var(--app-space-6) calc(22px * var(--app-ui-scale));
   border: 1px solid var(--app-border);
-  border-radius: 24px;
+  border-radius: var(--app-radius-xl);
   background: var(--app-floating-bg);
   backdrop-filter: blur(18px);
   box-shadow: 0 22px 50px rgba(2, 6, 23, 0.32);
@@ -303,7 +333,7 @@ button {
 
 .workspace-shell__eyebrow {
   color: #22c55e !important;
-  font-size: 12px;
+  font-size: var(--app-font-size-md);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -606,20 +636,20 @@ button {
 }
 
 .conversation-node__card {
-  border-radius: 20px;
+  border-radius: var(--app-radius-lg);
   border: 1px solid var(--app-border);
   background: var(--app-card-bg);
   box-shadow: var(--app-shadow-sm);
 }
 
 .conversation-node__card--focused {
-  border-radius: 5px;
+  border-radius: calc(5px * var(--app-ui-scale));
   background: rgba(15, 23, 42, 0.82);
   box-shadow: var(--app-shadow-md);
 }
 
 .conversation-node__card--focused .ant-card-body {
-  padding: 10px 12px;
+  padding: var(--app-space-3) var(--app-space-4);
 }
 
 .conversation-node__focused-body {
@@ -631,11 +661,11 @@ button {
 }
 
 .conversation-node__focused-body .ant-space {
-  gap: 8px !important;
+  gap: var(--app-space-2) !important;
 }
 
 .conversation-node__focused-body .ant-typography {
-  font-size: 11px;
+  font-size: var(--app-font-size-sm);
 }
 
 .conversation-node__messages {
@@ -648,12 +678,12 @@ button {
 }
 
 .conversation-node__message-card {
-  border-radius: 12px;
+  border-radius: var(--app-radius-md);
   background: rgba(15, 23, 42, 0.48);
 }
 
 .conversation-node__message-text.ant-typography {
-  font-size: 10px;
+  font-size: var(--app-font-size-xs);
   line-height: 1.4;
 }
 
@@ -695,18 +725,18 @@ button {
 }
 
 .message-composer .ant-space {
-  gap: 10px !important;
+  gap: var(--app-space-3) !important;
 }
 
 .message-composer .ant-input-textarea textarea {
-  min-height: 76px !important;
+  min-height: calc(76px * var(--app-ui-scale)) !important;
 }
 
 .message-composer__bottom-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--app-space-4);
   width: 100%;
 }
 
@@ -795,13 +825,13 @@ button {
 }
 
 .session-sidebar__item {
-  padding: 14px;
+  padding: var(--app-space-5);
   border: 1px solid var(--app-border);
   background: var(--app-item-bg);
 }
 
 .session-sidebar__item + .session-sidebar__item {
-  margin-top: 12px;
+  margin-top: var(--app-space-4);
 }
 
 .session-sidebar__item--active {
@@ -851,7 +881,7 @@ button {
 }
 
 .settings-card {
-  border-radius: 16px;
+  border-radius: calc(16px * var(--app-ui-scale));
 }
 
 .settings-search-bar {

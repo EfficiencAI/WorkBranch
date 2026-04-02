@@ -16,6 +16,7 @@ import {
   selectCurrentSessionId,
   selectDeletingSessionId,
   selectFocusedConversationId,
+  selectLockedSendConversationId,
   selectSelectedConversationId,
   selectSessionList,
   selectUserProfile,
@@ -56,6 +57,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const conversationNodes = useChatWorkbenchStore(selectChatWorkbenchConversationNodes)
   const streamingConversationId = useChatWorkbenchStore(selectChatWorkbenchStreamingConversationId)
   const focusedConversationId = useTreeStore(selectFocusedConversationId)
+  const lockedSendConversationId = useTreeStore(selectLockedSendConversationId)
   const selectedConversationId = useTreeStore(selectSelectedConversationId)
   const selectSession = useSessionStore((state) => state.selectSession)
   const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
@@ -85,11 +87,16 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
     () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
     [conversationNodes, selectedConversationId],
   )
+  const lockedSendConversation = useMemo(
+    () => conversationNodes.find((node) => node.conversationId === lockedSendConversationId) ?? null,
+    [conversationNodes, lockedSendConversationId],
+  )
   const focusedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
   const viewedConversationId = focusedConversationId ?? selectedConversationId ?? null
+  const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? null
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
   const isStreamingViewedConversation = Boolean(streamingConversationId && streamingConversationId === viewedConversationId)
@@ -128,7 +135,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         })
 
         useTreeStore.getState().setFocusedConversationId(null)
-        useTreeStore.getState().setSelectedConversationId(createdConversationId)
+        useTreeStore.getState().setLockedSendConversationId(createdConversationId)
       } catch (caughtError) {
         console.error('[handleCreateConversation] error:', caughtError)
         onRequestError(caughtError)
@@ -191,7 +198,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           })
 
           useTreeStore.getState().setFocusedConversationId(fallbackConversationId)
-          useTreeStore.getState().setSelectedConversationId(fallbackConversationId)
+          useTreeStore.getState().setLockedSendConversationId(fallbackConversationId)
         },
       })
     },
@@ -201,7 +208,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
-        let targetConversationId = focusedConversationId ?? selectedConversationId ?? null
+        let targetConversationId = sendTargetConversationId
 
         if (!targetConversationId) {
           if (sessionDetail?.conversations?.length) {
@@ -213,7 +220,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
             return
           }
 
-          useTreeStore.getState().setSelectedConversationId(targetConversationId)
+          useTreeStore.getState().setLockedSendConversationId(targetConversationId)
           if (selectedSessionId) {
             const detail = await loadSessionDetail(selectedSessionId)
             await enterSessionContext(detail)
@@ -231,7 +238,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         onRequestError(caughtError)
       }
     },
-    [ensureConversationForCurrentSession, enterSessionContext, focusedConversationId, loadSessionDetail, onRequestError, onSendError, selectedConversationId, selectedSessionId, sessionDetail],
+    [ensureConversationForCurrentSession, enterSessionContext, loadSessionDetail, onRequestError, onSendError, selectedSessionId, sendTargetConversationId, sessionDetail],
   )
 
   const handleStopMessage = useCallback(async () => {
@@ -316,6 +323,7 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
           currentSessionId={selectedSessionId}
           focusedConversationId={focusedConversationId}
           selectedConversationId={selectedConversationId}
+          lockedSendConversationId={lockedSendConversationId}
           sessionDetail={sessionDetail}
           conversationDetail={conversationDetail}
           workspaceDetail={workspaceDetail}
@@ -421,11 +429,11 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
                 <StatusTag label="阶段十二" tone="processing" />
                 <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话树工作台'} tone="success" />
                 <StatusTag label={focusedConversationId ? '聚焦态' : '概览态'} tone={focusedConversationId ? 'warning' : 'default'} />
-                {(focusedConversation || selectedConversation) ? (
+                {(lockedSendConversation || selectedConversation) ? (
                   <Space wrap size={6}>
                     <Typography.Text>当前目标对话</Typography.Text>
                     <StatusTag
-                      label={focusedConversation ? focusedConversation.conversationId : (selectedConversation as NonNullable<typeof selectedConversation>).conversationId}
+                      label={(lockedSendConversation ?? (selectedConversation as NonNullable<typeof selectedConversation>)).conversationId}
                       tone="processing"
                     />
                   </Space>

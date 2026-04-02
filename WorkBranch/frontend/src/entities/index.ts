@@ -1,6 +1,14 @@
 export type { ConversationDetail, ConversationId, ConversationNode, ConversationPosition } from './conversation'
 export type { ConversationState, MessageNode, MessageNodeId, MessageNodeRole } from './message-node'
-export type { SettingNode, SettingPrimitive, SettingsResponseData, SettingValue } from './setting'
+export type {
+  NumericSettingMetadata,
+  SettingMetadataNode,
+  SettingNode,
+  SettingPrimitive,
+  SettingsMetadataResponseData,
+  SettingsResponseData,
+  SettingValue,
+} from './setting'
 export type { SessionConversationSummary, SessionDetail, SessionId, SessionSummary } from './session'
 export type { UserId, UserProfile } from './user'
 export type { WorkspaceDetail } from './workspace'

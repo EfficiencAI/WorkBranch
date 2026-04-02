@@ -4,6 +4,7 @@ import type { TreeStore } from './types'
 export const useTreeStore = create<TreeStore>((set) => ({
   focusedConversationId: null,
   selectedConversationId: null,
+  lockedSendConversationId: null,
 
   setFocusedConversationId(conversationId) {
     set({ focusedConversationId: conversationId })
@@ -21,7 +22,15 @@ export const useTreeStore = create<TreeStore>((set) => ({
     set({ selectedConversationId: null })
   },
 
+  setLockedSendConversationId(conversationId) {
+    set({ lockedSendConversationId: conversationId, selectedConversationId: conversationId })
+  },
+
+  clearLockedSendConversationId() {
+    set({ lockedSendConversationId: null, selectedConversationId: null })
+  },
+
   resetTreeUiState() {
-    set({ focusedConversationId: null, selectedConversationId: null })
+    set({ focusedConversationId: null, selectedConversationId: null, lockedSendConversationId: null })
   },
 }))

@@ -18,7 +18,8 @@
     "ui": {
         "theme_mode": "dark",
         "show_debug_overlay": false,
-        "show_workspace_hud": false
+        "show_workspace_hud": false,
+        "scale": 1
     },
     "agent": {
         "memory_mode": "accumulate",

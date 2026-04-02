@@ -6,6 +6,7 @@ import {
   Flex,
   Input,
   InputNumber,
+  Slider,
   Space,
   Radio,
   Switch,
@@ -14,7 +15,7 @@ import {
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { SettingValue } from '../../entities'
+import type { NumericSettingMetadata, SettingMetadataNode, SettingValue } from '../../entities'
 import { getErrorMessage } from '../../shared/api'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { EmptyState, LoadingState, StatusTag } from '../../shared/ui'
@@ -22,7 +23,7 @@ import { useTheme } from '../../app/theme'
 import { useSettings } from '../../app/settings'
 
 type ArrayEditorKind = 'array-string' | 'array-number' | 'array-boolean'
-type EditorKind = 'string' | 'number' | 'boolean' | 'json' | 'secret' | ArrayEditorKind
+type EditorKind = 'string' | 'number' | 'number-slider' | 'boolean' | 'json' | 'secret' | ArrayEditorKind
 
 type ArrayEditorValue = string[] | number[] | boolean[]
 
@@ -31,9 +32,58 @@ type EditingState = {
   path: string[]
   kind: EditorKind
   value: string | number | boolean | null | ArrayEditorValue
+  metadata?: NumericSettingMetadata
 }
 
 const MAX_RENDER_DEPTH = 5
+
+function isNumericSettingMetadata(value: unknown): value is NumericSettingMetadata {
+  if (!isPlainObject(value)) {
+    return false
+  }
+
+  return value.type === 'number'
+}
+
+function getSettingMetadataAtPath(metadata: SettingMetadataNode | null, fullPath: string[]): NumericSettingMetadata | null {
+  if (!metadata || fullPath.length === 0) {
+    return null
+  }
+
+  let current: NumericSettingMetadata | SettingMetadataNode | undefined = metadata
+  for (const segment of fullPath) {
+    if (!isPlainObject(current) || !(segment in current)) {
+      return null
+    }
+
+    current = current[segment] as NumericSettingMetadata | SettingMetadataNode | undefined
+  }
+
+  return isNumericSettingMetadata(current) ? current : null
+}
+
+function hasSliderConfig(metadata: NumericSettingMetadata | null) {
+  return metadata?.control === 'slider' && typeof metadata.min === 'number' && typeof metadata.max === 'number' && typeof metadata.step === 'number'
+}
+
+function clampNumberValue(value: number, metadata?: NumericSettingMetadata) {
+  if (!metadata) {
+    return value
+  }
+
+  let nextValue = value
+  if (typeof metadata.min === 'number') {
+    nextValue = Math.max(metadata.min, nextValue)
+  }
+  if (typeof metadata.max === 'number') {
+    nextValue = Math.min(metadata.max, nextValue)
+  }
+  return nextValue
+}
+
+function formatScaleValue(value: number) {
+  return `${value.toFixed(1)}x`
+}
 
 function isArrayEditorKind(kind: EditorKind): kind is ArrayEditorKind {
   return kind === 'array-string' || kind === 'array-number' || kind === 'array-boolean'
@@ -104,7 +154,7 @@ function isSecretField(path: string[]) {
   return path[path.length - 1] === 'api_key'
 }
 
-function getEditorKind(path: string[], value: SettingValue, depth: number): EditorKind {
+function getEditorKind(path: string[], value: SettingValue, depth: number, metadata: NumericSettingMetadata | null): EditorKind {
   if (isSecretField(path)) {
     return 'secret'
   }
@@ -114,7 +164,7 @@ function getEditorKind(path: string[], value: SettingValue, depth: number): Edit
   }
 
   if (typeof value === 'number') {
-    return 'number'
+    return hasSliderConfig(metadata) ? 'number-slider' : 'number'
   }
 
   if (typeof value === 'boolean') {
@@ -166,7 +216,7 @@ function buildInitialEditorValue(kind: EditorKind, value: SettingValue): string 
     return ''
   }
 
-  if (kind === 'number') {
+  if (kind === 'number' || kind === 'number-slider') {
     return typeof value === 'number' ? value : null
   }
 
@@ -189,6 +239,7 @@ function parseEditorValue(
   kind: EditorKind,
   value: string | number | boolean | null | ArrayEditorValue,
   originalValue: SettingValue,
+  metadata?: NumericSettingMetadata,
 ) {
   if (kind === 'secret') {
     return value === '' ? originalValue : String(value)
@@ -198,12 +249,12 @@ function parseEditorValue(
     return String(value ?? '')
   }
 
-  if (kind === 'number') {
+  if (kind === 'number' || kind === 'number-slider') {
     const parsed = typeof value === 'number' ? value : Number(value)
     if (Number.isNaN(parsed)) {
       throw new Error('请输入有效数字')
     }
-    return parsed
+    return clampNumberValue(parsed, metadata)
   }
 
   if (kind === 'boolean') {
@@ -227,7 +278,7 @@ type SettingsPageProps = {
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const { message } = AntdApp.useApp()
-  const { settings, loading, error, patchSettings } = useSettings()
+  const { settings, settingsMetadata, loading, error, patchSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [draftRoot, setDraftRoot] = useState<SettingValue | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -294,13 +345,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       return
     }
 
-    const kind = getEditorKind(path, value, depth)
+    const metadata = getSettingMetadataAtPath(settingsMetadata, [rootKey, ...path])
+    const kind = getEditorKind(path, value, depth, metadata)
     const initialValue = buildInitialEditorValue(kind, value)
     setEditing({
       rootKey,
       path,
       kind,
       value: initialValue,
+      metadata: metadata ?? undefined,
     })
     setDraftRoot(cloneDeepJson(rootValue))
     setSaveError(null)
@@ -467,7 +520,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
 
     try {
-      const parsedValue = parseEditorValue(editing.kind, editing.value, originalValue)
+      const parsedValue = parseEditorValue(editing.kind, editing.value, originalValue, editing.metadata)
       return JSON.stringify(originalValue) !== JSON.stringify(parsedValue)
     } catch {
       return false
@@ -494,7 +547,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       setSaving(true)
       setSaveError(null)
 
-      const parsedValue = parseEditorValue(editing.kind, editing.value, originalValue)
+      const parsedValue = parseEditorValue(editing.kind, editing.value, originalValue, editing.metadata)
       const nextRoot = cloneDeepJson(draftRoot)
       const updatedRoot = setValueAtPath(nextRoot, editing.path, parsedValue)
 
@@ -552,11 +605,34 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       return null
     }
 
-    if (editing.kind === 'number') {
+    if (editing.kind === 'number' || editing.kind === 'number-slider') {
+      const value = typeof editing.value === 'number' ? editing.value : null
+
+      if (editing.kind === 'number-slider' && hasSliderConfig(editing.metadata ?? null)) {
+        const sliderMetadata = editing.metadata!
+        const { min, max, step } = sliderMetadata
+        return (
+          <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Flex align="center" justify="space-between" gap={12}>
+              <Typography.Text type="secondary">当前值</Typography.Text>
+              <Typography.Text strong>{value === null ? '-' : formatScaleValue(value)}</Typography.Text>
+            </Flex>
+            <Slider
+              min={min}
+              max={max}
+              step={step}
+              value={value ?? min}
+              onChange={(nextValue) => updateEditingValue(clampNumberValue(nextValue, sliderMetadata))}
+              tooltip={{ formatter: (currentValue) => (typeof currentValue === 'number' ? formatScaleValue(currentValue) : '') }}
+            />
+          </Space>
+        )
+      }
+
       return (
         <InputNumber
-          value={typeof editing.value === 'number' ? editing.value : null}
-          onChange={(value) => updateEditingValue(value)}
+          value={value}
+          onChange={(nextValue) => updateEditingValue(nextValue)}
           style={{ width: '100%' }}
         />
       )

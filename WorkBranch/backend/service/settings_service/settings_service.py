@@ -34,6 +34,7 @@ def _merge_missing_defaults(defaults, current):
 DEFAULT_SETTINGS = {
     "ui": {
         "theme_mode": "system",
+        "scale": 1.0,
         "show_debug_overlay": False,
         "show_workspace_hud": False
     },
@@ -99,6 +100,17 @@ DEFAULT_SETTINGS = {
         }
     }
 }
+DEFAULT_SETTINGS_METADATA = {
+    "ui": {
+        "scale": {
+            "type": "number",
+            "control": "slider",
+            "min": 0.7,
+            "max": 1.3,
+            "step": 0.1,
+        }
+    }
+}
 
 
 class SettingsService:
@@ -144,6 +156,10 @@ class SettingsService:
     def get_all(self) -> dict:
         """返回所有设置项的副本。"""
         return dict(self._data)
+
+    def get_metadata(self) -> dict:
+        """返回设置元数据。"""
+        return dict(DEFAULT_SETTINGS_METADATA)
 
     # ── 修改设置 ────────────────────────────────────────────────────────────────
 

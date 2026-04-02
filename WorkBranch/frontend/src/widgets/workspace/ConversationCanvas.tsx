@@ -14,6 +14,7 @@ type ConversationCanvasProps = {
   currentSessionId: SessionId | null
   focusedConversationId: string | null
   selectedConversationId: string | null
+  lockedSendConversationId: string | null
   sessionDetail: SessionDetail | null
   conversationDetail: ConversationDetail | null
   workspaceDetail: WorkspaceDetail | null
@@ -282,6 +283,7 @@ function FlowViewport({
   currentSessionId,
   focusedConversationId,
   selectedConversationId,
+  lockedSendConversationId,
   sessionDetail,
   conversationDetail,
   conversationNodes,
@@ -295,17 +297,15 @@ function FlowViewport({
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
-  const setSelectedConversationId = useTreeStore((state) => state.setSelectedConversationId)
   const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
-  const selectionTimeoutRef = useRef<number | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
 
   const selectedConversation = useMemo(
-    () => conversationNodes.find((conversation) => conversation.conversationId === selectedConversationId) ?? null,
-    [conversationNodes, selectedConversationId],
+    () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
+    [conversationNodes, lockedSendConversationId],
   )
   const focusedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
@@ -360,7 +360,7 @@ function FlowViewport({
         data: {
           conversation,
           focused,
-          selected: selectedConversationId === conversation.conversationId,
+          selected: lockedSendConversationId === conversation.conversationId,
           conversationMessages: focused ? conversationMessages : [],
           messagesLoading: focused ? messagesLoading : false,
           messagesError: focused ? messagesError : null,
@@ -399,23 +399,15 @@ function FlowViewport({
         source: conversation.parentConversationId as string,
         target: conversation.conversationId,
         type: 'smoothstep',
-        animated: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId,
+        animated: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId,
         style: {
-          strokeWidth: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId ? 2.5 : 2,
-          stroke: selectedConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId
+          strokeWidth: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId ? 2.5 : 2,
+          stroke: lockedSendConversationId === conversation.conversationId || focusedConversationId === conversation.conversationId
             ? 'rgba(96, 165, 250, 0.95)'
             : 'rgba(148, 163, 184, 0.72)',
         },
       }))
-  }, [conversationNodes, focusedConversationId, selectedConversationId])
-
-  useEffect(() => {
-    return () => {
-      if (selectionTimeoutRef.current !== null) {
-        window.clearTimeout(selectionTimeoutRef.current)
-      }
-    }
-  }, [])
+  }, [conversationNodes, focusedConversationId, lockedSendConversationId])
 
   useEffect(() => {
     if (!flowNodes.length) {
@@ -459,9 +451,13 @@ function FlowViewport({
 
       if (nodeElement) {
         const conversationId = nodeElement.getAttribute('data-conversation-id')
+        if (!conversationId) {
+          return
+        }
+
         setContextMenu({
           type: 'node',
-          conversationId: conversationId!,
+          conversationId,
           position: { x: event.clientX, y: event.clientY },
         })
       } else {
@@ -473,6 +469,7 @@ function FlowViewport({
     },
     [setContextMenu],
   )
+
 
   return (
     <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu} ref={viewportRef}>
@@ -501,30 +498,6 @@ function FlowViewport({
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
-        onNodeClick={(_, node) => {
-          if (selectionTimeoutRef.current !== null) {
-            window.clearTimeout(selectionTimeoutRef.current)
-          }
-
-          selectionTimeoutRef.current = window.setTimeout(() => {
-            frontendLogger.info('switch_conversation', {
-              extra: {
-                conversation_id: node.id,
-                previous_conversation_id: selectedConversationId,
-              },
-            })
-            setSelectedConversationId(node.id)
-            selectionTimeoutRef.current = null
-          }, 200)
-        }}
-        onNodeDoubleClick={(_, node) => {
-          if (selectionTimeoutRef.current !== null) {
-            window.clearTimeout(selectionTimeoutRef.current)
-            selectionTimeoutRef.current = null
-          }
-          setSelectedConversationId(node.id)
-          setFocusedConversationId(node.id)
-        }}
         onNodeDrag={(_, node) => {
           if (focusedConversation) {
             return
@@ -550,13 +523,6 @@ function FlowViewport({
           void persistConversationPositions(currentSessionId, [{ conversationId: node.id, position }])
         }}
         onPaneClick={() => {
-          if (selectionTimeoutRef.current !== null) {
-            window.clearTimeout(selectionTimeoutRef.current)
-            selectionTimeoutRef.current = null
-          }
-          if (!focusedConversation) {
-            setSelectedConversationId(null)
-          }
         }}
         proOptions={{ hideAttribution: true }}
       >
@@ -588,6 +554,9 @@ function FlowViewport({
 }
 
 export function ConversationCanvas(props: ConversationCanvasProps) {
+  const lockedSendConversationId = useTreeStore((state) => state.lockedSendConversationId)
+  const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
+
   return (
     <section className="conversation-canvas">
       <div className="conversation-canvas__backdrop" aria-hidden="true">
@@ -599,6 +568,16 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
         <ContextMenuProvider>
           <FlowViewport {...props} />
           <ContextMenu
+            onSelectConversation={(conversationId) => {
+              frontendLogger.info('switch_conversation', {
+                extra: {
+                  conversation_id: conversationId,
+                  previous_conversation_id: lockedSendConversationId,
+                  trigger: 'context_menu_action',
+                },
+              })
+              setLockedSendConversationId(conversationId)
+            }}
             onCreateConversation={props.onCreateConversation}
             onDeleteConversation={props.onDeleteConversation}
             onAutoArrange={props.onAutoArrange}
