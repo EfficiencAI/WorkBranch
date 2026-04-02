@@ -256,16 +256,18 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
             className={focused ? 'conversation-node__card conversation-node__card--assistant conversation-node__card--focused' : 'conversation-node__card conversation-node__card--assistant'}
             styles={focused && focusBodyHeight ? { body: { height: `${focusBodyHeight}px` } } : undefined}
           >
-            <div className="conversation-node__page-shell">
-              {!focused ? <OverviewNodePage conversation={conversation} focused={focused} selected={selected} /> : (
-                <FocusNodePage
-                  conversation={conversation}
-                  conversationMessages={conversationMessages}
-                  messagesLoading={messagesLoading}
-                  messagesError={messagesError}
-                  conversationError={conversationError}
-                />
-              )}
+            <div className={focused ? 'conversation-node__body-frame conversation-node__body-frame--focused' : 'conversation-node__body-frame'}>
+              <div className="conversation-node__page-shell">
+                {!focused ? <OverviewNodePage conversation={conversation} focused={focused} selected={selected} /> : (
+                  <FocusNodePage
+                    conversation={conversation}
+                    conversationMessages={conversationMessages}
+                    messagesLoading={messagesLoading}
+                    messagesError={messagesError}
+                    conversationError={conversationError}
+                  />
+                )}
+              </div>
             </div>
           </Card>
         </div>

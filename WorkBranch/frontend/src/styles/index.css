@@ -617,8 +617,24 @@ button {
   width: 100%;
 }
 
+.conversation-node__body-frame {
+  width: 100%;
+}
+
+.conversation-node__body-frame--focused {
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  overflow: hidden;
+}
+
 .conversation-node__page-shell {
   width: 100%;
+}
+
+.conversation-node__body-frame--focused .conversation-node__page-shell {
+  height: 100%;
 }
 
 .conversation-node__focus-shell {
@@ -654,6 +670,7 @@ button {
 
 .conversation-node__focused-body {
   width: 100%;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow: hidden;
