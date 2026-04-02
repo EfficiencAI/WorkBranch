@@ -282,7 +282,6 @@ const nodeTypes = {
 function FlowViewport({
   currentSessionId,
   focusedConversationId,
-  selectedConversationId,
   lockedSendConversationId,
   sessionDetail,
   conversationDetail,
@@ -385,8 +384,7 @@ function FlowViewport({
     messagesError,
     messagesLoading,
     overviewLayoutMap,
-    selectedConversationId,
-    setFocusedConversationId,
+    lockedSendConversationId,
     storeFocusedConversationId,
   ])
 
@@ -427,14 +425,23 @@ function FlowViewport({
         const bottomInset = 20
         const availableWidth = Math.max(240, viewportWidth - sideInset * 2)
         const availableHeight = Math.max(220, viewportHeight - composerHeight - topInset - bottomInset)
-        const zoom = Math.max(1, Math.min(2.4, Math.min(availableWidth / nodeWidth, availableHeight / nodeHeight)))
+        const zoom = Math.max(1.18, Math.min(2.8, Math.min(availableWidth / nodeWidth, availableHeight / nodeHeight) * 1.08))
         const centerX = position.x
         const centerY = position.y - focusMetrics.centerYOffset / zoom
-        void reactFlow.setCenter(centerX, centerY, { zoom, duration: 260 })
+        void reactFlow.setCenter(centerX, centerY, {
+          zoom,
+          duration: 420,
+          ease: (value) => 1 - Math.pow(1 - value, 3),
+        })
         return
       }
 
-      void reactFlow.fitView({ padding: 0.2, duration: 240, includeHiddenNodes: true })
+      void reactFlow.fitView({
+        padding: 0.2,
+        duration: 360,
+        ease: (value) => 1 - Math.pow(1 - value, 3),
+        includeHiddenNodes: true,
+      })
     }, 50)
 
     return () => window.clearTimeout(timeoutId)
@@ -498,6 +505,9 @@ function FlowViewport({
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
+        onNodeDoubleClick={(_, node) => {
+          setFocusedConversationId(node.id)
+        }}
         onNodeDrag={(_, node) => {
           if (focusedConversation) {
             return
