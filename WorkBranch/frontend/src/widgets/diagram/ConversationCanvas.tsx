@@ -449,6 +449,24 @@ function FlowViewport({
     return () => window.clearTimeout(timeoutId)
   }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow, focusMetrics])
 
+  useEffect(() => {
+    if (!focusedConversation) {
+      return
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      event.preventDefault()
+      setFocusedConversationId(null)
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [focusedConversation, setFocusedConversationId])
+
   const { setContextMenu } = useContextMenu()
 
   const handleContextMenu = useCallback(
