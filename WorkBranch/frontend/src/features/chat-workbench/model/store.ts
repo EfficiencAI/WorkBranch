@@ -50,25 +50,6 @@ function pickPrimaryConversationId(_sessionDetail: SessionDetail, conversationNo
   return conversationNodes[conversationNodes.length - 1]?.conversationId ?? null
 }
 
-function pickFallbackConversationId(
-  deletedConversationId: string,
-  conversationNodes: ConversationNode[],
-  nextConversationNodes: ConversationNode[],
-) {
-  const deletedConversation = conversationNodes.find((item) => item.conversationId === deletedConversationId) ?? null
-
-  if (!nextConversationNodes.length) {
-    return null
-  }
-
-  const parentConversationId = deletedConversation?.parentConversationId ?? null
-  if (parentConversationId && nextConversationNodes.some((item) => item.conversationId === parentConversationId)) {
-    return parentConversationId
-  }
-
-  return nextConversationNodes[nextConversationNodes.length - 1]?.conversationId ?? null
-}
-
 function updateConversationNodesWithPositions(
   conversationNodes: ConversationNode[],
   positions: Map<string, ConversationNode['position']>,
@@ -214,10 +195,9 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
   async deleteConversationFromSession(conversationId: string) {
     const { currentSessionId } = useSessionStore.getState()
-    const currentNodes = get().conversationNodes
 
     if (!currentSessionId) {
-      return null
+      return
     }
 
     try {
@@ -227,12 +207,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
       const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
       const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
-      const fallbackConversationId = pickFallbackConversationId(conversationId, currentNodes, conversationNodes)
 
       set({ conversationNodes })
-      await get().syncConversationContext(fallbackConversationId)
-
-      return fallbackConversationId
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '删除对话节点失败') })
       throw caughtError

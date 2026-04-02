@@ -182,27 +182,37 @@ export function WorkspaceShell({ onSendError, onRequestError, view }: WorkspaceS
         title: '确认删除该节点？',
         content: hasChildren
           ? '删除后无法恢复。该节点的子对话会保留，并在当前结构下作为根节点显示。'
-          : '删除后无法恢复。若当前正在查看该节点，将自动切换到其他可用节点。',
+          : '删除后无法恢复。',
         okText: '删除',
         okButtonProps: { danger: true },
         cancelText: '取消',
         onOk: async () => {
-          const fallbackConversationId = await deleteConversationFromSession(conversationId)
+          if (streamingConversationId === conversationId) {
+            await cancelStreamingConversation()
+          }
+
+          const treeState = useTreeStore.getState()
+          if (treeState.focusedConversationId === conversationId) {
+            treeState.clearFocusedConversationId()
+          }
+          if (treeState.lockedSendConversationId === conversationId) {
+            treeState.clearLockedSendConversationId()
+          } else if (treeState.selectedConversationId === conversationId) {
+            treeState.clearSelectedConversationId()
+          }
+
+          await deleteConversationFromSession(conversationId)
 
           frontendLogger.info('delete_conversation', {
             extra: {
               conversation_id: conversationId,
               parent_conversation_id: conversation?.parentConversationId ?? null,
-              fallback_conversation_id: fallbackConversationId,
             },
           })
-
-          useTreeStore.getState().setFocusedConversationId(fallbackConversationId)
-          useTreeStore.getState().setLockedSendConversationId(fallbackConversationId)
         },
       })
     },
-    [conversationNodes, deleteConversationFromSession],
+    [cancelStreamingConversation, conversationNodes, deleteConversationFromSession, streamingConversationId],
   )
 
   const handleSendMessage = useCallback(
