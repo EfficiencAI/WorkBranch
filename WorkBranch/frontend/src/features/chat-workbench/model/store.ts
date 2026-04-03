@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   cancelConversation,
+  cascadeDeleteConversation,
   deleteConversation,
   fetchConversationDetail,
   fetchConversationMessages,
@@ -211,6 +212,28 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       set({ conversationNodes })
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '删除对话节点失败') })
+      throw caughtError
+    }
+  },
+
+  async cascadeDeleteConversationFromSession(conversationId: string) {
+    const { currentSessionId } = useSessionStore.getState()
+
+    if (!currentSessionId) {
+      return
+    }
+
+    try {
+      set({ error: null })
+      await cascadeDeleteConversation(conversationId)
+
+      const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+      const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+      const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+
+      set({ conversationNodes })
+    } catch (caughtError) {
+      set({ error: getErrorMessage(caughtError, '级联删除对话节点失败') })
       throw caughtError
     }
   },

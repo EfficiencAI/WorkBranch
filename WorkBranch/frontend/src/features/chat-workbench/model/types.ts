@@ -30,6 +30,7 @@ export type ChatWorkbenchActions = {
   syncConversationContext: (conversationId: string | null) => Promise<void>
   enterSessionContext: (sessionDetail: SessionDetail | null) => Promise<SessionContextResult>
   deleteConversationFromSession: (conversationId: string) => Promise<void>
+  cascadeDeleteConversationFromSession: (conversationId: string) => Promise<void>
   sendMessageToConversation: (conversationId: string, messageText: string, handlers?: SendMessageHandlers) => Promise<void>
   cancelStreamingConversation: () => Promise<void>
   updateConversationNodePosition: (conversationId: string, position: ConversationPosition) => void

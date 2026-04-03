@@ -1,4 +1,5 @@
 from typing import List, Optional
+from collections import deque
 from dataclasses import dataclass
 
 from singleton import get_database
@@ -188,6 +189,98 @@ class ConversationDAO:
 
         if row:
             self._update_session_updated_at(row['session_id'])
+
+    def list_descendant_conversation_ids(self, conversation_id: str) -> List[str]:
+        root = self.get_conversation_by_id(conversation_id)
+        if not root:
+            return []
+
+        descendants: List[str] = []
+        queue = deque([conversation_id])
+
+        while queue:
+            current_id = queue.popleft()
+            rows = self._db.fetch_all(
+                '''
+                    SELECT id
+                    FROM conversations
+                    WHERE parent_conversation_id = ?
+                    ORDER BY created_at ASC, id ASC
+                ''',
+                (current_id,),
+            )
+            child_ids = [str(row['id']) for row in rows]
+            descendants.extend(child_ids)
+            queue.extend(child_ids)
+
+        return descendants
+
+    def clear_child_conversation_parents(self, conversation_id: str) -> None:
+        row = self._db.fetch_one('SELECT session_id FROM conversations WHERE id = ?', (conversation_id,))
+        self._db.execute(
+            'UPDATE conversations SET parent_conversation_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE parent_conversation_id = ?',
+            (conversation_id,),
+        )
+
+        if row:
+            self._update_session_updated_at(row['session_id'])
+
+    def delete_nodes_by_conversation(self, conversation_id: str) -> None:
+        row = self._db.fetch_one('SELECT session_id FROM conversations WHERE id = ?', (conversation_id,))
+        nodes = self._db.fetch_all(
+            'SELECT DISTINCT conversation_id FROM nodes WHERE conversation_id = ?',
+            (conversation_id,),
+        )
+        self._db.execute('DELETE FROM nodes WHERE conversation_id = ?', (conversation_id,))
+
+        if row:
+            self._update_session_updated_at(row['session_id'])
+        for node in nodes:
+            target_conversation_id = node['conversation_id']
+            if target_conversation_id:
+                self._sync_conversation_message_count(str(target_conversation_id))
+
+    def delete_nodes_by_conversations(self, conversation_ids: List[str]) -> None:
+        if not conversation_ids:
+            return
+
+        placeholders = ','.join('?' for _ in conversation_ids)
+        session_row = self._db.fetch_one(
+            f'SELECT session_id FROM conversations WHERE id IN ({placeholders}) ORDER BY session_id ASC LIMIT 1',
+            tuple(conversation_ids),
+        )
+        rows = self._db.fetch_all(
+            f'SELECT DISTINCT conversation_id FROM nodes WHERE conversation_id IN ({placeholders})',
+            tuple(conversation_ids),
+        )
+        self._db.execute(
+            f'DELETE FROM nodes WHERE conversation_id IN ({placeholders})',
+            tuple(conversation_ids),
+        )
+
+        if session_row:
+            self._update_session_updated_at(session_row['session_id'])
+        for row in rows:
+            target_conversation_id = row['conversation_id']
+            if target_conversation_id:
+                self._sync_conversation_message_count(str(target_conversation_id))
+
+    def delete_conversations(self, conversation_ids: List[str]) -> None:
+        if not conversation_ids:
+            return
+
+        placeholders = ','.join('?' for _ in conversation_ids)
+        session_row = self._db.fetch_one(
+            f'SELECT session_id FROM conversations WHERE id IN ({placeholders}) ORDER BY session_id ASC LIMIT 1',
+            tuple(conversation_ids),
+        )
+        self._db.execute(
+            f'DELETE FROM conversations WHERE id IN ({placeholders})',
+            tuple(conversation_ids),
+        )
+
+        if session_row:
+            self._update_session_updated_at(session_row['session_id'])
 
     def add_node(
         self,

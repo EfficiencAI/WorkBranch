@@ -1,4 +1,4 @@
-import { Button, Modal, Space, Typography } from 'antd'
+import { Button, Checkbox, Modal, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -67,6 +67,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const enterSessionContext = useChatWorkbenchStore((state) => state.enterSessionContext)
   const syncConversationContext = useChatWorkbenchStore((state) => state.syncConversationContext)
   const deleteConversationFromSession = useChatWorkbenchStore((state) => state.deleteConversationFromSession)
+  const cascadeDeleteConversationFromSession = useChatWorkbenchStore((state) => state.cascadeDeleteConversationFromSession)
   const updateConversationNodePositions = useChatWorkbenchStore((state) => state.updateConversationNodePositions)
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const cancelStreamingConversation = useChatWorkbenchStore((state) => state.cancelStreamingConversation)
@@ -181,12 +182,29 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
     async (conversationId: string) => {
       const conversation = conversationNodes.find((node) => node.conversationId === conversationId) ?? null
       const hasChildren = conversationNodes.some((node) => node.parentConversationId === conversationId)
+      let cascadeDelete = false
 
       Modal.confirm({
         title: '确认删除该节点？',
-        content: hasChildren
-          ? '删除后无法恢复。该节点的子对话会保留，并在当前结构下作为根节点显示。'
-          : '删除后无法恢复。',
+        content: (
+          <Space direction="vertical" size={12}>
+            <Typography.Text>
+              {hasChildren
+                ? '删除后无法恢复。未勾选级联删除时，该节点的子对话会保留，并在当前结构下作为根节点显示。'
+                : '删除后无法恢复。'}
+            </Typography.Text>
+            {hasChildren ? (
+              <>
+                <Checkbox onChange={(event) => {
+                  cascadeDelete = event.target.checked
+                }}>
+                  级联删除子对话
+                </Checkbox>
+                <Typography.Text type="danger">勾选后将同时删除当前节点及全部子对话。</Typography.Text>
+              </>
+            ) : null}
+          </Space>
+        ),
         okText: '删除',
         okButtonProps: { danger: true },
         cancelText: '取消',
@@ -208,18 +226,23 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
             treeState.clearSelectedConversationId()
           }
 
-          await deleteConversationFromSession(conversationId)
+          if (cascadeDelete) {
+            await cascadeDeleteConversationFromSession(conversationId)
+          } else {
+            await deleteConversationFromSession(conversationId)
+          }
 
           frontendLogger.info('delete_conversation', {
             extra: {
               conversation_id: conversationId,
               parent_conversation_id: conversation?.parentConversationId ?? null,
+              cascade_delete: cascadeDelete,
             },
           })
         },
       })
     },
-    [cancelStreamingConversation, conversationNodes, deleteConversationFromSession, streamingConversationId],
+    [cancelStreamingConversation, cascadeDeleteConversationFromSession, conversationNodes, deleteConversationFromSession, streamingConversationId],
   )
 
   const handleSendMessage = useCallback(

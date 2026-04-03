@@ -3,6 +3,7 @@ export { connectSse } from './sse'
 export { del, get, patch, post, put, request } from './http'
 export {
   cancelConversation,
+  cascadeDeleteConversation,
   createConversation,
   createSession,
   deleteConversation,

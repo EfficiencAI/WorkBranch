@@ -250,3 +250,16 @@ async def delete_conversation(
 
     deleted = await service.delete_conversation(conversation_id)
     return Result.success(data={"deleted": deleted, "conversation_id": conversation_id})
+
+
+@router.delete("/{conversation_id}/cascade")
+async def cascade_delete_conversation(
+    conversation_id: str,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    conversation = await service.get_conversation_detail(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    deleted = await service.cascade_delete_conversation(conversation_id)
+    return Result.success(data={"deleted": deleted, "conversation_id": conversation_id})

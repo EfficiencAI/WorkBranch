@@ -121,6 +121,10 @@ export async function deleteConversation(conversationId: string) {
   await del(`/api/session/conversations/${conversationId}`)
 }
 
+export async function cascadeDeleteConversation(conversationId: string) {
+  await del(`/api/session/conversations/${conversationId}/cascade`)
+}
+
 export async function fetchSessionDetail(sessionId: string | number) {
   const data = await get<Record<string, unknown>>(`/api/session/sessions/${sessionId}`)
   return toSessionDetail(data)

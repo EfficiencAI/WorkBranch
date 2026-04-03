@@ -414,6 +414,27 @@ class ConversationService:
         return result
 
     async def delete_conversation(self, conversation_id: str) -> bool:
+        self._dao.clear_child_conversation_parents(conversation_id)
+
+        async with self._lock:
+            for conv_info in self._conversations.values():
+                if conv_info.parent_conversation_id == conversation_id:
+                    conv_info.parent_conversation_id = None
+
+        return await self._delete_conversation_resource(conversation_id)
+
+    async def cascade_delete_conversation(self, conversation_id: str) -> bool:
+        persisted = self._dao.get_conversation_by_id(conversation_id)
+        if not persisted and conversation_id not in self._conversations:
+            return False
+
+        subtree_ids = [conversation_id, *self._dao.list_descendant_conversation_ids(conversation_id)]
+        deleted_any = False
+        for target_conversation_id in reversed(subtree_ids):
+            deleted_any = await self._delete_conversation_resource(target_conversation_id) or deleted_any
+        return deleted_any
+
+    async def _delete_conversation_resource(self, conversation_id: str) -> bool:
         persisted = self._dao.get_conversation_by_id(conversation_id)
         if not persisted and conversation_id not in self._conversations:
             return False
@@ -427,6 +448,7 @@ class ConversationService:
                 del self._conversations[conversation_id]
 
         await self._buffer.clear(conversation_id)
+        self._dao.delete_nodes_by_conversation(conversation_id)
         self._dao.delete_conversation(conversation_id)
         deleted = self._agent.delete_conversation(conversation_id)
         if persisted is not None:
