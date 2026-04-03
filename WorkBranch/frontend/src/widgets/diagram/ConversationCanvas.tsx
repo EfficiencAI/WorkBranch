@@ -78,8 +78,19 @@ function renderMessageRole(role: MessageNode['role']) {
   }
 }
 
-function buildTreeLayout(conversationNodes: ConversationNode[]) {
+const NODE_WIDTH = 320
+const MIN_HORIZONTAL_GAP = 60
+const VERTICAL_GAP = 240
+
+export function buildTreeLayout(conversationNodes: ConversationNode[]) {
+  if (conversationNodes.length === 0) {
+    return new Map<string, { x: number; y: number }>()
+  }
+
   const childMap = new Map<string | null, ConversationNode[]>()
+  const nodeDepth = new Map<string, number>()
+  const subtreeWidth = new Map<string, number>()
+
   for (const conversation of conversationNodes) {
     const key = conversation.parentConversationId ?? null
     const siblings = childMap.get(key) ?? []
@@ -94,42 +105,88 @@ function buildTreeLayout(conversationNodes: ConversationNode[]) {
     )
   }
 
-  const levels: ConversationNode[][] = []
-  const queue = (childMap.get(null) ?? []).map((conversation) => ({ conversation, depth: 0 }))
-  const seen = new Set<string>()
+  let maxDepth = 0
+  const queue: Array<{ id: string; depth: number }> = []
+  const roots = childMap.get(null) ?? []
+  for (const root of roots) {
+    queue.push({ id: root.conversationId, depth: 0 })
+  }
 
-  while (queue.length) {
-    const current = queue.shift()
-    if (!current || seen.has(current.conversation.conversationId)) {
-      continue
-    }
-
-    seen.add(current.conversation.conversationId)
-    if (!levels[current.depth]) {
-      levels[current.depth] = []
-    }
-    levels[current.depth].push(current.conversation)
-
-    for (const child of childMap.get(current.conversation.conversationId) ?? []) {
-      queue.push({ conversation: child, depth: current.depth + 1 })
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!
+    nodeDepth.set(id, depth)
+    maxDepth = Math.max(maxDepth, depth)
+    const children = childMap.get(id) ?? []
+    for (const child of children) {
+      queue.push({ id: child.conversationId, depth: depth + 1 })
     }
   }
 
-  const fallbackNodes = conversationNodes.filter((conversation) => !seen.has(conversation.conversationId))
-  if (fallbackNodes.length) {
-    const depth = levels.length
-    levels[depth] = fallbackNodes
+  for (const conversation of conversationNodes) {
+    if (!nodeDepth.has(conversation.conversationId)) {
+      nodeDepth.set(conversation.conversationId, maxDepth + 1)
+      maxDepth = Math.max(maxDepth, maxDepth + 1)
+    }
+  }
+
+  for (let depth = maxDepth; depth >= 0; depth--) {
+    const nodesAtDepth = conversationNodes.filter((n) => nodeDepth.get(n.conversationId) === depth)
+    for (const node of nodesAtDepth) {
+      const children = childMap.get(node.conversationId) ?? []
+      if (children.length === 0) {
+        subtreeWidth.set(node.conversationId, NODE_WIDTH)
+      } else {
+        let totalWidth = 0
+        for (const child of children) {
+          totalWidth += subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
+        }
+        totalWidth += (children.length - 1) * MIN_HORIZONTAL_GAP
+        subtreeWidth.set(node.conversationId, totalWidth)
+      }
+    }
   }
 
   const positions = new Map<string, { x: number; y: number }>()
-  levels.forEach((level, depth) => {
-    level.forEach((conversation, index) => {
-      positions.set(conversation.conversationId, {
-        x: index * 380,
-        y: depth * 240,
-      })
-    })
-  })
+
+  function layoutNode(nodeId: string, x: number, depth: number) {
+    positions.set(nodeId, { x, y: depth * VERTICAL_GAP })
+
+    const children = childMap.get(nodeId) ?? []
+    if (children.length === 0) return
+
+    let currentX = x - (subtreeWidth.get(nodeId) ?? NODE_WIDTH) / 2
+    for (const child of children) {
+      const childWidth = subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
+      const childX = currentX + childWidth / 2
+      layoutNode(child.conversationId, childX, depth + 1)
+      currentX += childWidth + MIN_HORIZONTAL_GAP
+    }
+  }
+
+  const sortedRoots = roots.sort(
+    (left, right) =>
+      (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
+  )
+
+  let currentRootX = 0
+  for (const root of sortedRoots) {
+    const rootWidth = subtreeWidth.get(root.conversationId) ?? NODE_WIDTH
+    const rootX = currentRootX + rootWidth / 2
+    layoutNode(root.conversationId, rootX, 0)
+    currentRootX += rootWidth + MIN_HORIZONTAL_GAP
+  }
+
+  let minX = Infinity
+  for (const pos of positions.values()) {
+    minX = Math.min(minX, pos.x - NODE_WIDTH / 2)
+  }
+
+  if (minX < 0) {
+    const offsetX = -minX
+    for (const [id, pos] of positions) {
+      positions.set(id, { x: pos.x + offsetX, y: pos.y })
+    }
+  }
 
   return positions
 }

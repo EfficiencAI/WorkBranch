@@ -28,7 +28,7 @@ import {
 import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { frontendLogger } from '../../shared/logging/logger'
 import { StatusTag } from '../../shared/ui'
-import { ConversationCanvas } from './ConversationCanvas'
+import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
 
 type SidebarMode = 'history' | 'settings'
@@ -271,28 +271,13 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
       return
     }
 
+    const positions = buildTreeLayout(conversationNodes)
+
     const arranged = conversationNodes.map((conversation) => {
-      const siblingsBefore = conversationNodes.filter((item) => item.parentConversationId === conversation.parentConversationId)
-      const depth = (() => {
-        let currentParentId = conversation.parentConversationId
-        let level = 0
-        while (currentParentId) {
-          const parent = conversationNodes.find((item) => item.conversationId === currentParentId)
-          if (!parent) {
-            break
-          }
-          level += 1
-          currentParentId = parent.parentConversationId
-        }
-        return level
-      })()
-      const siblingIndex = siblingsBefore.findIndex((item) => item.conversationId === conversation.conversationId)
+      const pos = positions.get(conversation.conversationId) ?? { x: 0, y: 0 }
       return {
         conversationId: conversation.conversationId,
-        position: {
-          x: siblingIndex * 380,
-          y: depth * 240,
-        },
+        position: pos,
       }
     })
 
