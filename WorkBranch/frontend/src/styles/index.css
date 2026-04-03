@@ -554,7 +554,9 @@ button {
   position: absolute;
   inset: 0;
   z-index: 3;
-  background: radial-gradient(circle at top, rgba(15, 23, 42, 0.12), rgba(15, 23, 42, 0.2));
+  background: rgba(15, 23, 42, 0.001);
+  opacity: 0.001;
+  backdrop-filter: blur(0);
   pointer-events: none;
 }
 

@@ -417,7 +417,6 @@ function FlowViewport({
   const composerRef = useRef<HTMLDivElement | null>(null)
   const interactionGateTimerRef = useRef<number | null>(null)
   const [interactionGateConversationId, setInteractionGateConversationId] = useState<string | null>(null)
-  const [previewRefreshMaskVisible, setPreviewRefreshMaskVisible] = useState(false)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
 
   const selectedConversation = useMemo(
@@ -664,47 +663,20 @@ function FlowViewport({
     [setContextMenu],
   )
 
-  const handleMaskedPreviewRefresh = useCallback(() => {
-    if (!halfPreviewConversation) {
-      return
-    }
 
-    const conversationId = halfPreviewConversation.conversationId
-    clearInteractionGate()
-    setPreviewRefreshMaskVisible(true)
-    clearHalfPreviewConversationId()
-
-    window.requestAnimationFrame(() => {
-      setHalfPreviewConversationId(conversationId)
-      window.requestAnimationFrame(() => {
-        setPreviewRefreshMaskVisible(false)
-      })
-    })
-  }, [clearHalfPreviewConversationId, clearInteractionGate, halfPreviewConversation, setHalfPreviewConversationId])
 
   return (
     <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu} ref={viewportRef}>
-      {previewRefreshMaskVisible ? <div className="conversation-canvas__preview-refresh-mask" aria-hidden="true" /> : null}
-      {focusedConversation || halfPreviewConversation ? (
-        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布调试控制">
-          {focusedConversation ? (
-            <button
-              type="button"
-              className="conversation-canvas__exit-focus-button"
-              onClick={() => setFocusedConversationId(null)}
-            >
-              退出聚焦
-            </button>
-          ) : null}
-          {halfPreviewConversation ? (
-            <button
-              type="button"
-              className="conversation-canvas__debug-rerender-button"
-              onClick={handleMaskedPreviewRefresh}
-            >
-              重进预览
-            </button>
-          ) : null}
+      <div className="conversation-canvas__preview-refresh-mask" aria-hidden="true" />
+      {focusedConversation ? (
+        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
+          <button
+            type="button"
+            className="conversation-canvas__exit-focus-button"
+            onClick={() => setFocusedConversationId(null)}
+          >
+            退出聚焦
+          </button>
         </div>
       ) : null}
 
