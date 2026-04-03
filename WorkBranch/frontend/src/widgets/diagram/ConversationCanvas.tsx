@@ -49,6 +49,7 @@ type FlowNodeData = {
 }
 
 const DEFAULT_HALF_PREVIEW_INTERACTION_DELAY = 300
+const DIAGRAM_POINTER_TOLERANCE_PX = 4
 
 function summarizeConversation(conversation: ConversationNode) {
   if (conversation.title?.trim()) {
@@ -693,6 +694,9 @@ function FlowViewport({
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
+        nodeDragThreshold={DIAGRAM_POINTER_TOLERANCE_PX}
+        nodeClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
+        paneClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         onNodeClick={(_, node) => {
           if (focusedConversationId === node.id) {
             return
