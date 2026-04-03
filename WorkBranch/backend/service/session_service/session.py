@@ -243,13 +243,15 @@ class SessionService:
         if runtime:
             detail.update({
                 "workspace_id": runtime.get("workspace_id"),
-                "parent_conversation_id": runtime.get("parent_conversation_id"),
                 "title": runtime.get("title"),
                 "state": runtime.get("state"),
                 "created_at": runtime.get("created_at"),
                 "message_count": actual_message_count,
                 "error": runtime.get("error"),
             })
+
+            if not persisted:
+                detail["parent_conversation_id"] = runtime.get("parent_conversation_id")
 
         return detail
 
