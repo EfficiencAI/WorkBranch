@@ -66,6 +66,10 @@ function hasSliderConfig(metadata: NumericSettingMetadata | null) {
   return metadata?.control === 'slider' && typeof metadata.min === 'number' && typeof metadata.max === 'number' && typeof metadata.step === 'number'
 }
 
+function shouldRenderDirectControl(metadata: NumericSettingMetadata | null) {
+  return hasSliderConfig(metadata)
+}
+
 function clampNumberValue(value: number, metadata?: NumericSettingMetadata) {
   if (!metadata) {
     return value
@@ -81,8 +85,8 @@ function clampNumberValue(value: number, metadata?: NumericSettingMetadata) {
   return nextValue
 }
 
-function formatScaleValue(value: number) {
-  return `${value.toFixed(1)}x`
+function formatSliderValue(value: number) {
+  return String(value)
 }
 
 function isArrayEditorKind(kind: EditorKind): kind is ArrayEditorKind {
@@ -564,6 +568,33 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
   }
 
+  async function saveDirectNumberLeaf(rootKey: string, path: string[], nextValue: number, metadata?: NumericSettingMetadata) {
+    if (!settings) {
+      return
+    }
+
+    const originalRoot = settings[rootKey]
+    if (originalRoot === undefined) {
+      return
+    }
+
+    try {
+      setSaving(true)
+      setSaveError(null)
+
+      const updatedRoot = setValueAtPath(cloneDeepJson(originalRoot), path, clampNumberValue(nextValue, metadata))
+      await patchSettings({
+        [rootKey]: updatedRoot,
+      })
+
+      message.success('设置已保存')
+    } catch (caughtError) {
+      setSaveError(getErrorMessage(caughtError, '设置保存失败'))
+    } finally {
+      setSaving(false)
+    }
+  }
+
   async function toggleBooleanLeaf(rootKey: string, path: string[], checked: boolean) {
     if (!settings) {
       return
@@ -600,42 +631,51 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
   }
 
+  function renderNumberEditor(
+    value: string | number | boolean | null | ArrayEditorValue,
+    metadata?: NumericSettingMetadata,
+    onValueChange?: (nextValue: number | null) => void,
+  ) {
+    const currentValue = typeof value === 'number' ? value : null
+
+    if (hasSliderConfig(metadata ?? null)) {
+      const sliderMetadata = metadata!
+      const { min, max, step } = sliderMetadata
+      const handleValueChange = onValueChange ?? ((nextValue: number | null) => updateEditingValue(nextValue))
+      return (
+        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+          <Flex align="center" justify="space-between" gap={12}>
+            <Typography.Text type="secondary">当前值</Typography.Text>
+            <Typography.Text strong>{currentValue === null ? '-' : formatSliderValue(currentValue)}</Typography.Text>
+          </Flex>
+          <Slider
+            min={min}
+            max={max}
+            step={step}
+            value={currentValue ?? min}
+            onChange={(nextValue) => handleValueChange(clampNumberValue(nextValue, sliderMetadata))}
+            tooltip={{ formatter: (sliderValue) => (typeof sliderValue === 'number' ? formatSliderValue(sliderValue) : '') }}
+          />
+        </Space>
+      )
+    }
+
+    return (
+      <InputNumber
+        value={currentValue}
+        onChange={(nextValue) => (onValueChange ?? updateEditingValue)(nextValue)}
+        style={{ width: '100%' }}
+      />
+    )
+  }
+
   function renderEditor() {
     if (!editing) {
       return null
     }
 
     if (editing.kind === 'number' || editing.kind === 'number-slider') {
-      const value = typeof editing.value === 'number' ? editing.value : null
-
-      if (editing.kind === 'number-slider' && hasSliderConfig(editing.metadata ?? null)) {
-        const sliderMetadata = editing.metadata!
-        const { min, max, step } = sliderMetadata
-        return (
-          <Space direction="vertical" size="small" style={{ width: '100%' }}>
-            <Flex align="center" justify="space-between" gap={12}>
-              <Typography.Text type="secondary">当前值</Typography.Text>
-              <Typography.Text strong>{value === null ? '-' : formatScaleValue(value)}</Typography.Text>
-            </Flex>
-            <Slider
-              min={min}
-              max={max}
-              step={step}
-              value={value ?? min}
-              onChange={(nextValue) => updateEditingValue(clampNumberValue(nextValue, sliderMetadata))}
-              tooltip={{ formatter: (currentValue) => (typeof currentValue === 'number' ? formatScaleValue(currentValue) : '') }}
-            />
-          </Space>
-        )
-      }
-
-      return (
-        <InputNumber
-          value={value}
-          onChange={(nextValue) => updateEditingValue(nextValue)}
-          style={{ width: '100%' }}
-        />
-      )
+      return renderNumberEditor(editing.value, editing.metadata)
     }
 
     if (isArrayEditorKind(editing.kind)) {
@@ -770,6 +810,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   function renderNode(rootKey: string, path: string[], value: SettingValue, depth: number): ReactNode {
     const fullPath = [rootKey, ...path]
     const label = path[path.length - 1] ?? rootKey
+    const metadata = getSettingMetadataAtPath(settingsMetadata, fullPath)
+    const isDirectControl = shouldRenderDirectControl(metadata)
     const isTooDeepObject = isPlainObject(value) && depth > MAX_RENDER_DEPTH
     const isLeaf = !isPlainObject(value) || isTooDeepObject
     const isEditingLeaf =
@@ -849,6 +891,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 编辑
               </Button>
             </Space.Compact>
+          ) : typeof value === 'number' && isDirectControl ? (
+            <>
+              {renderNumberEditor(value, metadata ?? undefined, (nextValue) => {
+                if (typeof nextValue !== 'number' || saving || editing !== null) {
+                  return
+                }
+                void saveDirectNumberLeaf(rootKey, path, nextValue, metadata ?? undefined)
+              })}
+            </>
           ) : typeof value === 'number' ? (
             <Space.Compact block className="settings-leaf-inline-editor">
               <InputNumber value={value} disabled style={{ width: '100%' }} />
