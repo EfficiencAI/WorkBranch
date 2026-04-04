@@ -6,6 +6,7 @@ import shutil
 
 from ...state import ToolExecutionState, ToolCall
 from ...tools import ALL_TOOLS, FILE_TOOLS, EXPLORE_TOOLS, SUBAGENT_TOOLS
+from service.session_service.canonical import SegmentType
 
 
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
@@ -241,8 +242,7 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
-            from service.session_service.canonical import ContentBlockType
-            send_message("", ContentBlockType.TOOL_USE, {
+            send_message("", SegmentType.TOOL_EXEC, {
                 "tool_name": tool_name,
                 "tool_args": tool_args,
                 "task_description": task_description
@@ -279,6 +279,14 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if tool_name == "thinking":
         if llm_service:
             print("[ToolExec] 调用 LLM 进行思考...")
+            send_message = message_context.get("send_message") if message_context else None
+            
+            if send_message:
+                send_message("", SegmentType.THINKING_START, {
+                    "tool_name": tool_name,
+                    "task_description": task_description
+                })
+            
             try:
                 context_parts = [f"当前任务: {task_description}"]
                 
@@ -294,8 +302,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 messages = [{"role": "user", "content": prompt}]
                 
                 def thinking_token_callback(token: str):
-                    if token_callback:
-                        token_callback(token)
+                    if send_message:
+                        send_message(token, SegmentType.THINKING_DELTA, {})
                 
                 result = ""
                 for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
@@ -303,15 +311,13 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 
                 print(f"[ToolExec] 思考完成")
                 
-                if message_context:
-                    send_message = message_context.get("send_message")
-                    if send_message:
-                        from service.session_service.canonical import ContentBlockType
-                        send_message("", ContentBlockType.TOOL_RESULT, {
-                            "tool_name": tool_name,
-                            "result": result[:500] + "..." if len(result) > 500 else result,
-                            "success": True
-                        })
+                if send_message:
+                    send_message("", SegmentType.THINKING_END, {})
+                    send_message("", SegmentType.TOOL_RES, {
+                        "tool_name": tool_name,
+                        "result": result[:500] + "..." if len(result) > 500 else result,
+                        "success": True
+                    })
 
                 _write_tool_event(
                     conversation_id,
@@ -322,15 +328,13 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 return {"result": result, "error": None}
             except Exception as e:
                 print(f"[ToolExec] LLM 调用失败: {e}")
-                if message_context:
-                    send_message = message_context.get("send_message")
-                    if send_message:
-                        from service.session_service.canonical import ContentBlockType
-                        send_message("", ContentBlockType.TOOL_RESULT, {
-                            "tool_name": tool_name,
-                            "error": str(e),
-                            "success": False
-                        })
+                if send_message:
+                    send_message("", SegmentType.THINKING_END, {})
+                    send_message("", SegmentType.TOOL_RES, {
+                        "tool_name": tool_name,
+                        "error": str(e),
+                        "success": False
+                    })
                 _write_tool_event(
                     conversation_id,
                     tool_name,
@@ -374,9 +378,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
-            from service.session_service.canonical import ContentBlockType
             result_content = tool_result.get("result", "")
-            send_message("", ContentBlockType.TOOL_RESULT, {
+            send_message("", SegmentType.TOOL_RES, {
                 "tool_name": tool_name,
                 "result": result_content[:500] + "..." if len(result_content) > 500 else result_content,
                 "error": tool_result.get("error"),

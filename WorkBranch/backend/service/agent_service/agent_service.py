@@ -10,7 +10,7 @@ from core.logging import bind_ctx
 from .service import WorkspaceService
 from .graph import run_graph
 from service.session_service.canonical import (
-    ContentBlockType,
+    SegmentType,
     ContentBlock,
     Message,
     MessageFormatter,
@@ -239,7 +239,7 @@ class AgentService:
 
             def send_message(
                 content: str = "",
-                block_type: ContentBlockType = ContentBlockType.TEXT,
+                block_type: SegmentType = SegmentType.TEXT_DELTA,
                 metadata: dict = None
             ):
                 merged_metadata = {"message_id": message_id}
@@ -258,7 +258,7 @@ class AgentService:
                     session_id=session_id,
                     workspace_id=workspace_id,
                     content_blocks=[block],
-                    content=content if block_type == ContentBlockType.TEXT else "",
+                    content=content if block_type == SegmentType.TEXT_DELTA else "",
                     metadata=merged_metadata,
                 )
                 mq.publish_sync(msg)
@@ -299,7 +299,7 @@ class AgentService:
                 raise
 
             done_block = ContentBlock(
-                type=ContentBlockType.DONE,
+                type=SegmentType.DONE,
                 content="",
                 metadata={"message_id": message_id},
             )

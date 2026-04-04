@@ -12,7 +12,6 @@ from service.session_service.canonical import (
     Message,
     ContentBlock,
     MessageFormatter,
-    ContentBlockType,
 )
 
 
@@ -347,9 +346,8 @@ class MessageQueue:
     async def _forward_to_buffer(self, message: Message) -> None:
         """将事件转发给 Buffer 消费"""
         from singleton import get_conversation_buffer, get_conversation_dao
-        from service.session_service.conversation_buffer import ConversationBuffer
         
-        buffer: ConversationBuffer = get_conversation_buffer()
+        buffer = get_conversation_buffer()
         
         if not buffer.has_buffer(message.conversation_id):
             dao = get_conversation_dao()
@@ -359,28 +357,7 @@ class MessageQueue:
             else:
                 return
         
-        for block in message.content_blocks:
-            if block.type == ContentBlockType.TEXT:
-                await buffer.consume_text_event(
-                    conversation_id=message.conversation_id,
-                    message_id=message.message_id,
-                    content=block.content,
-                    parent_id=message.metadata.get("parent_id")
-                )
-            elif block.type == ContentBlockType.THINKING:
-                await buffer.consume_text_event(
-                    conversation_id=message.conversation_id,
-                    message_id=message.message_id,
-                    content=block.content,
-                    parent_id=message.metadata.get("parent_id")
-                )
-            elif block.type == ContentBlockType.DONE:
-                node_id = await buffer.consume_done_event(
-                    conversation_id=message.conversation_id,
-                    message_id=message.message_id
-                )
-                if node_id:
-                    print(f"[MQ] Buffer 已持久化 assistant 节点: {message.conversation_id}, node_id={node_id}")
+        await buffer.consume_message(message)
 
     @property
     def size(self) -> int:

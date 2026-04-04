@@ -6,7 +6,37 @@ import re
 
 from ...state import AgentState, Task, IntentAnalysis
 from .tool_execution_graph import generate_tool_prompt
-from service.session_service.canonical import ContentBlockType
+from service.session_service.canonical import SegmentType
+
+
+def _send_plan_start(send_message, metadata: dict = None):
+    if send_message:
+        send_message("", SegmentType.PLAN_START, metadata or {})
+
+
+def _send_plan_delta(send_message, content: str):
+    if send_message:
+        send_message(content, SegmentType.PLAN_DELTA, {})
+
+
+def _send_plan_end(send_message):
+    if send_message:
+        send_message("", SegmentType.PLAN_END, {})
+
+
+def _send_thinking_start(send_message, metadata: dict = None):
+    if send_message:
+        send_message("", SegmentType.THINKING_START, metadata or {})
+
+
+def _send_thinking_delta(send_message, content: str):
+    if send_message:
+        send_message(content, SegmentType.THINKING_DELTA, {})
+
+
+def _send_thinking_end(send_message):
+    if send_message:
+        send_message("", SegmentType.THINKING_END, {})
 
 
 class TaskItem(BaseModel):
@@ -135,23 +165,31 @@ def parse_intent_from_text(text: str) -> IntentAnalysis:
 
 def _log(send_message, content: str):
     print(content)
-    if send_message:
-        send_message(content + "\n", ContentBlockType.TEXT, {})
+    _send_plan_delta(send_message, content + "\n")
+
+
+def _phase_start(send_message, phase: str):
+    print(f"[Plan] Phase: {phase}")
+    _send_plan_start(send_message, {"phase": phase})
+
+
+def _phase_stop(send_message):
+    print(f"[Plan] Phase end")
+    _send_plan_end(send_message)
 
 
 def phase1_understand(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """Phase 1: 理解需求 - 调用 LLM 分析用户意图"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Plan] Phase 1/5: 理解需求")
-    _log(send_message, "="*60)
+    _phase_start(send_message, "understand")
+    _log(send_message, "## Phase 1: 理解需求")
     
     user_message = state["messages"][-1] if state["messages"] else ""
-    _log(send_message, f"[Plan] 用户消息: {user_message}")
+    _log(send_message, f"**用户输入**: {user_message}")
     
     if llm_service is None:
-        _log(send_message, "[Plan] LLM 服务未配置，使用默认意图分析")
+        _log(send_message, "LLM 服务未配置，使用默认意图分析")
         intent_analysis: IntentAnalysis = {
             "intent_type": "other",
             "summary": user_message[:50] if user_message else "",
@@ -162,31 +200,35 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
         }
     else:
         try:
-            _log(send_message, "[Plan] 调用 LLM 分析用户意图...")
+            _log(send_message, "正在分析用户意图...")
             
             prompt = f"请分析以下用户输入的意图：\n\n{user_message}"
             messages = [{"role": "user", "content": prompt}]
             
+            _send_thinking_start(send_message, {"phase": "understand"})
+            
             def intent_token_callback(token: str):
-                if token_callback:
-                    token_callback(token)
+                _send_thinking_delta(send_message, token)
             
             full_response = ""
             for chunk in llm_service.chat_stream(messages, INTENT_ANALYSIS_PROMPT, intent_token_callback):
                 full_response += chunk
             
+            _send_thinking_end(send_message)
+            
             intent_analysis = parse_intent_from_text(full_response)
             
-            _log(send_message, f"[Plan] 意图分析完成:")
-            _log(send_message, f"  - 意图类型: {intent_analysis['intent_type']}")
-            _log(send_message, f"  - 需求摘要: {intent_analysis['summary']}")
-            _log(send_message, f"  - 关键点: {intent_analysis['key_points']}")
-            _log(send_message, f"  - 建议工具: {intent_analysis['suggested_tools']}")
-            _log(send_message, f"  - 复杂度: {intent_analysis['complexity']}")
-            _log(send_message, f"  - 置信度: {intent_analysis['confidence']}")
+            _log(send_message, "**意图分析结果**:")
+            _log(send_message, f"- 意图类型: `{intent_analysis['intent_type']}`")
+            _log(send_message, f"- 需求摘要: {intent_analysis['summary']}")
+            _log(send_message, f"- 关键点: {', '.join(intent_analysis['key_points'])}")
+            _log(send_message, f"- 建议工具: {', '.join(intent_analysis['suggested_tools']) or '无'}")
+            _log(send_message, f"- 复杂度: `{intent_analysis['complexity']}`")
+            _log(send_message, f"- 置信度: `{intent_analysis['confidence']}`")
             
         except Exception as e:
-            _log(send_message, f"[Plan] 意图分析失败: {e}")
+            _send_thinking_end(send_message)
+            _log(send_message, f"意图分析失败: {e}")
             intent_analysis = {
                 "intent_type": "other",
                 "summary": user_message[:50] if user_message else "",
@@ -196,7 +238,8 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
                 "confidence": 0.3
             }
     
-    _log(send_message, "[Plan] 需求分析完成，进入下一阶段")
+    _log(send_message, "需求分析完成")
+    _phase_stop(send_message)
     return {"intent_analysis": intent_analysis}
 
 
@@ -204,25 +247,23 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     """Phase 2: 生成计划"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Plan] Phase 2/5: 生成计划")
-    _log(send_message, "="*60)
+    _phase_start(send_message, "design")
+    _log(send_message, "## Phase 2: 生成计划")
     
     user_message = state["messages"][-1] if state["messages"] else ""
     agent_type = state.get("agent_type", "build_agent")
     intent_analysis = state.get("intent_analysis")
     
-    _log(send_message, f"[Plan] 基于需求设计任务计划...")
-    _log(send_message, f"[Plan] Agent 类型: {agent_type}")
+    _log(send_message, f"**Agent 类型**: `{agent_type}`")
     
     if intent_analysis:
-        _log(send_message, f"[Plan] 使用意图分析结果:")
-        _log(send_message, f"  - 意图类型: {intent_analysis.get('intent_type')}")
-        _log(send_message, f"  - 需求摘要: {intent_analysis.get('summary')}")
-        _log(send_message, f"  - 建议工具: {intent_analysis.get('suggested_tools')}")
+        _log(send_message, "**基于意图分析结果生成计划**:")
+        _log(send_message, f"- 意图类型: `{intent_analysis.get('intent_type')}`")
+        _log(send_message, f"- 需求摘要: {intent_analysis.get('summary')}")
+        _log(send_message, f"- 建议工具: {', '.join(intent_analysis.get('suggested_tools', [])) or '无'}")
     
     if llm_service is None:
-        _log(send_message, "[Plan] LLM 服务未配置，使用默认计划")
+        _log(send_message, "LLM 服务未配置，使用默认计划")
         plan = [
             {"id": 1, "description": f"分析需求: {user_message[:30]}...", "tool": None, "args": None},
             {"id": 2, "description": "设计实现方案", "tool": None, "args": None},
@@ -231,8 +272,7 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
         ]
     else:
         try:
-            _log(send_message, "[Plan] 调用 LLM 生成计划...")
-            _log(send_message, "[Plan] LLM 思考中:")
+            _log(send_message, "正在生成任务计划...")
             
             system_prompt = get_plan_system_prompt(agent_type, settings_service)
             
@@ -255,24 +295,27 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             
             messages = [{"role": "user", "content": prompt}]
             
+            _send_thinking_start(send_message, {"phase": "design"})
+            
             def plan_token_callback(token: str):
-                if token_callback:
-                    token_callback(token)
+                _send_thinking_delta(send_message, token)
             
             full_response = ""
             for chunk in llm_service.chat_stream(messages, system_prompt, plan_token_callback):
                 full_response += chunk
+            
+            _send_thinking_end(send_message)
             
             plan = parse_plan_from_text(full_response, send_message)
             
             for i, task in enumerate(plan):
                 task["id"] = i + 1
             
-            _log(send_message, f"\n[Plan] LLM 生成了 {len(plan)} 个任务")
+            _log(send_message, f"**生成了 {len(plan)} 个任务**")
             
         except Exception as e:
-            _log(send_message, f"[Plan] LLM 调用失败: {e}")
-            _log(send_message, "[Plan] 使用默认计划")
+            _send_thinking_end(send_message)
+            _log(send_message, f"LLM 调用失败: {e}，使用默认计划")
             plan = [
                 {"id": 1, "description": f"分析需求: {user_message[:30]}...", "tool": None, "args": None},
                 {"id": 2, "description": "设计实现方案", "tool": None, "args": None},
@@ -280,30 +323,28 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
                 {"id": 4, "description": "验证结果", "tool": None, "args": None},
             ]
     
-    _log(send_message, f"[Plan] 生成 {len(plan)} 个任务:")
+    _log(send_message, "**任务列表**:")
     for task in plan:
-        tool_info = f" [工具: {task.get('tool')}]" if task.get('tool') else ""
-        _log(send_message, f"  - Task {task['id']}: {task['description']}{tool_info}")
+        tool_info = f" `[工具: {task.get('tool')}]`" if task.get('tool') else ""
+        _log(send_message, f"{task['id']}. {task['description']}{tool_info}")
     
+    _phase_stop(send_message)
     return {"plan": plan}
 
 
 def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
     """从文本解析计划 - 支持 JSON 格式"""
     text = text.strip()
-    _log(send_message, f"[Plan] 原始响应文本:\n{text[:500]}...")
     
     json_match = re.search(r'```json\s*([\s\S]*?)\s*```', text)
     if json_match:
         json_str = json_match.group(1)
-        _log(send_message, f"[Plan] 从代码块提取 JSON")
     else:
         json_str = text
     
     json_match2 = re.search(r'\{[\s\S]*"tasks"[\s\S]*\}', text)
     if json_match2 and not json_match:
         json_str = json_match2.group(0)
-        _log(send_message, f"[Plan] 从文本提取 JSON 对象")
     
     try:
         data = json.loads(json_str)
@@ -321,12 +362,10 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
                         tasks.append(task)
             
             if tasks:
-                _log(send_message, f"[Plan] JSON 解析成功，找到 {len(tasks)} 个任务")
                 return tasks
-    except json.JSONDecodeError as e:
-        _log(send_message, f"[Plan] JSON 解析失败: {e}")
+    except json.JSONDecodeError:
+        pass
     
-    _log(send_message, "[Plan] JSON 解析失败，尝试逐行解析...")
     tasks = []
     lines = text.strip().split("\n")
     
@@ -387,7 +426,6 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
             {"id": 2, "description": "执行实现", "tool": None, "args": None},
         ]
     
-    _log(send_message, f"[Plan] 逐行解析完成，找到 {len(tasks)} 个任务")
     return tasks
 
 
@@ -395,17 +433,17 @@ def phase3_review(state: AgentState, llm_service=None, message_context: dict = N
     """Phase 3: 审查计划"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Plan] Phase 3/5: 审查计划")
-    _log(send_message, "="*60)
+    _phase_start(send_message, "review")
+    _log(send_message, "## Phase 3: 审查计划")
     
     plan = state.get("plan", [])
-    _log(send_message, f"[Plan] 审查 {len(plan)} 个任务...")
+    _log(send_message, f"**审查 {len(plan)} 个任务**:")
     
     for task in plan:
-        _log(send_message, f"  ✓ Task {task['id']}: {task['description']}")
+        _log(send_message, f"✓ {task['id']}. {task['description']}")
     
-    _log(send_message, "[Plan] 审查通过")
+    _log(send_message, "审查通过")
+    _phase_stop(send_message)
     return {}
 
 
@@ -413,13 +451,13 @@ def phase4_finalize(state: AgentState, llm_service=None, message_context: dict =
     """Phase 4: 最终计划"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Plan] Phase 4/5: 最终计划")
-    _log(send_message, "="*60)
+    _phase_start(send_message, "finalize")
+    _log(send_message, "## Phase 4: 确认计划")
     
     plan = state.get("plan", [])
-    _log(send_message, f"[Plan] 确认最终计划，共 {len(plan)} 个任务")
+    _log(send_message, f"**最终计划确认**: 共 {len(plan)} 个任务")
     
+    _phase_stop(send_message)
     return {"current_step": 0, "plan_failed": False}
 
 
@@ -427,11 +465,10 @@ def phase5_exit(state: AgentState, llm_service=None, message_context: dict = Non
     """Phase 5: 计划退出"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Plan] Phase 5/5: 计划完成")
-    _log(send_message, "="*60)
-    
-    _log(send_message, "[Plan] Plan 流程结束，准备进入 Build 流程")
+    _phase_start(send_message, "exit")
+    _log(send_message, "## Phase 5: 计划完成")
+    _log(send_message, "Plan 流程结束，准备进入 Build 流程")
+    _phase_stop(send_message)
     return {}
 
 
@@ -475,15 +512,13 @@ def run_plan_flow(state: AgentState, llm_service=None, token_callback: Optional[
     """运行 Plan 流程"""
     send_message = message_context.get("send_message") if message_context else None
     
-    _log(send_message, "\n" + "="*60)
-    _log(send_message, "[Flow] Plan 流程启动")
-    _log(send_message, "="*60)
+    _phase_start(send_message, "plan_flow")
+    _log(send_message, "# Plan 流程启动")
     
     graph = create_plan_subgraph(llm_service, token_callback, settings_service, message_context)
     result = graph.invoke(state)
     
-    _log(send_message, "="*60)
-    _log(send_message, "[Flow] Plan 流程完成")
-    _log(send_message, "="*60)
+    _log(send_message, "# Plan 流程完成")
+    _phase_stop(send_message)
     
     return result
