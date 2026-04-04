@@ -315,31 +315,22 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
             
             if ('content_blocks' in event) {
               for (const block of event.content_blocks) {
-                if (block.type === 'text_delta' && block.content) {
+                const isTextContent = block.type === 'text_delta' || block.type === 'thinking_delta' || block.type === 'plan_delta'
+                
+                if (isTextContent && block.content) {
                   set(state => {
                     const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
                     const isStreaming = lastMessage?.role === 'assistant' && lastMessage.status === 'streaming'
                     
-                    console.log('[Frontend] 追加文本内容:', {
-                      type: block.type,
-                      content: block.content.substring(0, 30),
-                      isStreaming,
-                      lastMessageId: lastMessage?.id,
-                      lastMessageStatus: lastMessage?.status
-                    })
-                    
                     if (isStreaming) {
                       const updatedMessages = [...state.conversationMessages]
-                      const newContent = lastMessage.content + block.content
-                      console.log('[Frontend] 追加后内容长度:', newContent.length)
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
-                        content: newContent
+                        content: lastMessage.content + block.content
                       }
                       return { conversationMessages: updatedMessages }
                     }
                     
-                    console.log('[Frontend] 创建新消息')
                     return {
                       conversationMessages: [...state.conversationMessages, {
                         id: event.message_id || `stream-${conversationId}-${Date.now()}`,
@@ -353,47 +344,10 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                   })
                 }
                 
-                if (block.type === 'thinking_delta' && block.content) {
-                  set(state => {
-                    const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                    const isStreaming = lastMessage?.role === 'assistant' && lastMessage.status === 'streaming'
-                    
-                    console.log('[Frontend] 追加思考内容:', {
-                      type: block.type,
-                      content: block.content.substring(0, 30),
-                      isStreaming
-                    })
-                    
-                    if (isStreaming) {
-                      const updatedMessages = [...state.conversationMessages]
-                      const thinkingContent = (lastMessage as any).thinkingContent || ''
-                      updatedMessages[updatedMessages.length - 1] = {
-                        ...lastMessage,
-                        thinkingContent: thinkingContent + block.content
-                      } as any
-                      return { conversationMessages: updatedMessages }
-                    }
-                    
-                    return {
-                      conversationMessages: [...state.conversationMessages, {
-                        id: event.message_id || `stream-${conversationId}-${Date.now()}`,
-                        parentId: lastMessage?.id ?? null,
-                        role: 'assistant' as const,
-                        content: '',
-                        thinkingContent: block.content,
-                        createdAt: event.timestamp ?? new Date().toISOString(),
-                        status: 'streaming' as const,
-                      } as any]
-                    }
-                  })
-                }
-                
                 if (block.type === 'done') {
-                  console.log('[Frontend] 收到 done，设置消息状态为 completed')
                   set(state => {
                     const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
                     if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
-                      console.log('[Frontend] 最终消息内容长度:', lastMessage.content.length)
                       const updatedMessages = [...state.conversationMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
@@ -424,7 +378,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
               }
             } else {
               if (event.type === 'done') {
-                console.log('[Frontend] 收到简化 done 事件，设置消息状态为 completed')
                 set(state => {
                   const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
                   if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
@@ -440,7 +393,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
               }
               
               if (event.type === 'error') {
-                console.log('[Frontend] 收到简化 error 事件:', event.content)
                 set(state => {
                   const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
                   if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
