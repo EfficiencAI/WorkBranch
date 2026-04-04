@@ -242,7 +242,7 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
-            send_message("", SegmentType.TOOL_EXEC, {
+            send_message("", SegmentType.TOOL_CALL, {
                 "tool_name": tool_name,
                 "tool_args": tool_args,
                 "task_description": task_description
@@ -330,6 +330,10 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 print(f"[ToolExec] LLM 调用失败: {e}")
                 if send_message:
                     send_message("", SegmentType.THINKING_END, {})
+                    send_message("", SegmentType.ERROR, {
+                        "error": str(e),
+                        "source": "thinking"
+                    })
                     send_message("", SegmentType.TOOL_RES, {
                         "tool_name": tool_name,
                         "error": str(e),
@@ -896,11 +900,20 @@ def create_tool_execution_subgraph(workspace_service=None, llm_service=None, tok
     def execute_tool_node(state: ToolExecutionState) -> dict:
         return execute_tool(state, workspace_service, llm_service, token_callback, message_context)
     
+    def doom_loop_check_node(state: ToolExecutionState) -> dict:
+        result = check_doom_loop(state)
+        if result.get("doom_loop_detected"):
+            if message_context:
+                send_message = message_context.get("send_message")
+                if send_message:
+                    send_message("DoomLoop detected: repeated tool calls", SegmentType.ERROR, {"source": "doom_loop"})
+        return result
+    
     graph.add_node("check_permission", check_permission_node)
     graph.add_node("ask_user", ask_user)
     graph.add_node("deny", deny_execution)
     graph.add_node("execute", execute_tool_node)
-    graph.add_node("doom_loop_check", check_doom_loop)
+    graph.add_node("doom_loop_check", doom_loop_check_node)
     
     graph.set_entry_point("check_permission")
     

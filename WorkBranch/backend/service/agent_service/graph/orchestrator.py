@@ -13,6 +13,7 @@ from langgraph.graph import StateGraph, END
 from ..state import AgentState, ToolCall
 from ..persistence import PersistenceService
 from .subgraphs import run_plan_flow, run_tool_execution, run_compaction
+from service.session_service.canonical import SegmentType, ContentBlock
 
 MAX_REPLAN_COUNT = 3
 MAX_MESSAGES = 10
@@ -59,6 +60,12 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
         is_replan = state.get("plan_failed", False)
         replan_count = state.get("replan_count", 0)
         
+        if message_context:
+            send_message = message_context.get("send_message")
+            if send_message:
+                metadata = {"state": "plan", "is_replan": is_replan}
+                send_message("", SegmentType.STATE_CHANGE, metadata)
+        
         plan_state = {**state, "agent_type": "plan_agent"}
         
         if is_replan:
@@ -92,6 +99,16 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         plan = state["plan"]
         agent_type = "build_agent"
         
+        if message_context:
+            send_message = message_context.get("send_message")
+            if send_message:
+                metadata = {
+                    "state": "build",
+                    "step": step + 1,
+                    "total": len(plan)
+                }
+                send_message("", SegmentType.STATE_CHANGE, metadata)
+        
         if step >= len(plan):
             print("[Build] 所有任务已完成")
             return {"current_step": step}
@@ -124,6 +141,10 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         if tool_result.get("error"):
             print(f"[Build] 执行失败: {tool_result['error']}")
             if tool_result.get("doom_loop_detected"):
+                if message_context:
+                    send_message = message_context.get("send_message")
+                    if send_message:
+                        send_message("DoomLoop detected: repeated tool calls", SegmentType.ERROR, {"source": "doom_loop"})
                 return {"plan_failed": True}
             result = f"任务 {task['id']} 失败: {tool_result['error']}"
         else:

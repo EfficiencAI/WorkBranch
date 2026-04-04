@@ -199,7 +199,6 @@ class ConversationBuffer:
             SegmentType.THINKING_DELTA,
             SegmentType.TEXT_DELTA,
             SegmentType.PLAN_DELTA,
-            SegmentType.TOOL_CALL_DELTA,
         }
         
         merged = []

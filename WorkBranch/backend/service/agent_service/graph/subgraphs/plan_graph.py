@@ -39,6 +39,11 @@ def _send_thinking_end(send_message):
         send_message("", SegmentType.THINKING_END, {})
 
 
+def _send_error(send_message, content: str, metadata: dict = None):
+    if send_message:
+        send_message(content, SegmentType.ERROR, metadata or {})
+
+
 class TaskItem(BaseModel):
     """单个任务"""
     id: int = Field(description="任务ID，从1开始")
@@ -228,7 +233,7 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
             
         except Exception as e:
             _send_thinking_end(send_message)
-            _log(send_message, f"意图分析失败: {e}")
+            _send_error(send_message, f"意图分析失败: {e}", {"phase": "understand"})
             intent_analysis = {
                 "intent_type": "other",
                 "summary": user_message[:50] if user_message else "",
@@ -315,7 +320,7 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             
         except Exception as e:
             _send_thinking_end(send_message)
-            _log(send_message, f"LLM 调用失败: {e}，使用默认计划")
+            _send_error(send_message, f"LLM 调用失败: {e}", {"phase": "design"})
             plan = [
                 {"id": 1, "description": f"分析需求: {user_message[:30]}...", "tool": None, "args": None},
                 {"id": 2, "description": "设计实现方案", "tool": None, "args": None},

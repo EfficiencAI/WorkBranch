@@ -14,15 +14,12 @@ class SegmentType(Enum):
     TEXT_DELTA = "text_delta"
     TEXT_END = "text_end"
     
-    TOOL_CALL_START = "tool_call_start"
-    TOOL_CALL_DELTA = "tool_call_delta"
-    TOOL_CALL_END = "tool_call_end"
-    
     PLAN_START = "plan_start"
     PLAN_DELTA = "plan_delta"
     PLAN_END = "plan_end"
     
-    TOOL_EXEC = "tool_exec"
+    STATE_CHANGE = "state_change"
+    TOOL_CALL = "tool_call"
     TOOL_RES = "tool_res"
     ERROR = "error"
     DONE = "done"
@@ -134,20 +131,12 @@ class SegmentBuilder:
         return cls.build(cid, mid, SegmentType.PLAN_END, "", meta)
     
     @classmethod
-    def tool_call_start(cls, cid: str, mid: str, meta: dict = None) -> Segment:
-        return cls.build(cid, mid, SegmentType.TOOL_CALL_START, "", meta)
+    def state_change(cls, cid: str, mid: str, meta: dict = None) -> Segment:
+        return cls.build(cid, mid, SegmentType.STATE_CHANGE, "", meta)
     
     @classmethod
-    def tool_call_delta(cls, cid: str, mid: str, payload: str) -> Segment:
-        return cls.build(cid, mid, SegmentType.TOOL_CALL_DELTA, payload)
-    
-    @classmethod
-    def tool_call_end(cls, cid: str, mid: str, meta: dict = None) -> Segment:
-        return cls.build(cid, mid, SegmentType.TOOL_CALL_END, "", meta)
-    
-    @classmethod
-    def tool_exec(cls, cid: str, mid: str, meta: dict = None) -> Segment:
-        return cls.build(cid, mid, SegmentType.TOOL_EXEC, "", meta)
+    def tool_call(cls, cid: str, mid: str, meta: dict = None) -> Segment:
+        return cls.build(cid, mid, SegmentType.TOOL_CALL, "", meta)
     
     @classmethod
     def tool_res(cls, cid: str, mid: str, payload: str, meta: dict = None) -> Segment:

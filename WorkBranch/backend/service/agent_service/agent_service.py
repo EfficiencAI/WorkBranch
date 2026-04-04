@@ -237,27 +237,48 @@ class AgentService:
                 extra={"session_id": session_id, "message_id": message_id},
             )
 
+            text_started = False
+
             def send_message(
                 content: str = "",
                 block_type: SegmentType = SegmentType.TEXT_DELTA,
                 metadata: dict = None
             ):
+                nonlocal text_started
                 merged_metadata = {"message_id": message_id}
                 if metadata:
                     merged_metadata.update(metadata)
                 
-                block = ContentBlock(
-                    type=block_type,
-                    content=content,
-                    metadata=merged_metadata,
-                )
+                blocks = []
+                
+                if block_type == SegmentType.TEXT_DELTA:
+                    if not text_started:
+                        blocks.append(ContentBlock(
+                            type=SegmentType.TEXT_START,
+                            content="",
+                            metadata=merged_metadata,
+                        ))
+                        text_started = True
+                    
+                    blocks.append(ContentBlock(
+                        type=block_type,
+                        content=content,
+                        metadata=merged_metadata,
+                    ))
+                else:
+                    blocks.append(ContentBlock(
+                        type=block_type,
+                        content=content,
+                        metadata=merged_metadata,
+                    ))
+                
                 msg = Message(
                     role="assistant",
                     message_id=message_id,
                     conversation_id=conversation_id,
                     session_id=session_id,
                     workspace_id=workspace_id,
-                    content_blocks=[block],
+                    content_blocks=blocks,
                     content=content if block_type == SegmentType.TEXT_DELTA else "",
                     metadata=merged_metadata,
                 )
@@ -298,18 +319,26 @@ class AgentService:
                 )
                 raise
 
-            done_block = ContentBlock(
+            blocks = []
+            if text_started:
+                blocks.append(ContentBlock(
+                    type=SegmentType.TEXT_END,
+                    content="",
+                    metadata={"message_id": message_id},
+                ))
+            
+            blocks.append(ContentBlock(
                 type=SegmentType.DONE,
                 content="",
                 metadata={"message_id": message_id},
-            )
+            ))
             done_msg = Message(
                 role="assistant",
                 message_id=message_id,
                 conversation_id=conversation_id,
                 session_id=session_id,
                 workspace_id=workspace_id,
-                content_blocks=[done_block],
+                content_blocks=blocks,
                 metadata={"message_id": message_id},
             )
             mq.publish_sync(done_msg)
