@@ -118,7 +118,7 @@ async def send_conversation_message(
                         yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
                         has_done_segment = any(
-                            seg.type == SegmentType.DONE for seg in message.segments
+                            seg.type == SegmentType.DONE for seg in message.content_blocks
                         )
                         if has_done_segment:
                             done_received = True

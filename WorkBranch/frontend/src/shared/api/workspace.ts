@@ -186,9 +186,14 @@ export async function fetchWorkspaceDetail(workspaceId: string) {
   return toWorkspaceDetail(data)
 }
 
-export type SegmentType = 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'error' | 'done'
+export type SegmentType =
+  | 'thinking_start' | 'thinking_delta' | 'thinking_end'
+  | 'text_start' | 'text_delta' | 'text_end'
+  | 'plan_start' | 'plan_delta' | 'plan_end'
+  | 'state_change' | 'tool_call' | 'tool_res'
+  | 'error' | 'done'
 
-export type CanonicalSegment = {
+export type ContentBlock = {
   type: SegmentType
   content: string
   metadata?: Record<string, unknown>
@@ -200,13 +205,18 @@ export type CanonicalMessage = {
   conversation_id: string
   session_id: string
   workspace_id: string
-  segments: CanonicalSegment[]
+  content_blocks: ContentBlock[]
   content: string
   timestamp: string
   metadata?: Record<string, unknown>
 }
 
-export type ChatStreamEvent = CanonicalMessage
+export type SimpleEvent = {
+  type: 'done' | 'error'
+  content: string
+}
+
+export type ChatStreamEvent = CanonicalMessage | SimpleEvent
 
 export async function cancelConversation(conversationId: string) {
   await post(`/api/session/conversations/${conversationId}/cancel`)
