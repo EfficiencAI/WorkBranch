@@ -9,6 +9,12 @@ from datetime import datetime
 from core.logging import bind_ctx
 from .service import WorkspaceService
 from .graph import run_graph
+from service.session_service.canonical import (
+    ContentBlockType,
+    ContentBlock,
+    Message,
+    MessageFormatter,
+)
 
 
 class ConversationStatus(Enum):
@@ -219,8 +225,6 @@ class AgentService:
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
         
-        from service.session_service.mq import StreamMessage, MessageType
-        
         message_id = self._generate_id()
         
         with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
@@ -233,17 +237,29 @@ class AgentService:
                 extra={"session_id": session_id, "message_id": message_id},
             )
 
-            def send_message(content: str = "", message_type: MessageType = MessageType.TEXT, metadata: dict = None):
+            def send_message(
+                content: str = "",
+                block_type: ContentBlockType = ContentBlockType.TEXT,
+                metadata: dict = None
+            ):
                 merged_metadata = {"message_id": message_id}
                 if metadata:
                     merged_metadata.update(metadata)
-                msg = StreamMessage(
-                    session_id=session_id,
-                    conversation_id=conversation_id,
-                    workspace_id=workspace_id,
+                
+                block = ContentBlock(
+                    type=block_type,
                     content=content,
-                    message_type=message_type,
-                    metadata=merged_metadata
+                    metadata=merged_metadata,
+                )
+                msg = Message(
+                    role="assistant",
+                    message_id=message_id,
+                    conversation_id=conversation_id,
+                    session_id=session_id,
+                    workspace_id=workspace_id,
+                    content_blocks=[block],
+                    content=content if block_type == ContentBlockType.TEXT else "",
+                    metadata=merged_metadata,
                 )
                 mq.publish_sync(msg)
 
@@ -282,13 +298,19 @@ class AgentService:
                 )
                 raise
 
-            done_msg = StreamMessage(
-                session_id=session_id,
-                conversation_id=conversation_id,
-                workspace_id=workspace_id,
+            done_block = ContentBlock(
+                type=ContentBlockType.DONE,
                 content="",
-                message_type=MessageType.DONE,
-                metadata={"message_id": message_id}
+                metadata={"message_id": message_id},
+            )
+            done_msg = Message(
+                role="assistant",
+                message_id=message_id,
+                conversation_id=conversation_id,
+                session_id=session_id,
+                workspace_id=workspace_id,
+                content_blocks=[done_block],
+                metadata={"message_id": message_id},
             )
             mq.publish_sync(done_msg)
 

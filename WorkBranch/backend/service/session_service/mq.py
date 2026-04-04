@@ -1,136 +1,19 @@
 import asyncio
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
-from typing import Optional, Dict, Any, List, Union
+from typing import Optional, Dict, Any, List
 import queue
 import threading
 import json
-import os
 import time
 from pathlib import Path
 
 from service.settings_service.settings_service import SettingsService
 from core.logging import bind_ctx
 from service.session_service.canonical import (
-    CanonicalMessage,
-    CanonicalSegment,
-    CanonicalFormatter,
-    SegmentType,
+    Message,
+    ContentBlock,
+    MessageFormatter,
+    ContentBlockType,
 )
-
-
-class MessageType(Enum):
-    TEXT = "text"
-    ERROR = "error"
-    DONE = "done"
-    THINKING = "thinking"
-    PLAN = "plan"
-    PLAN_START = "plan_start"
-    PLAN_END = "plan_end"
-    INTENT = "intent"
-    INTENT_START = "intent_start"
-    INTENT_END = "intent_end"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    EXECUTE_START = "execute_start"
-    EXECUTE_END = "execute_end"
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-
-
-@dataclass
-class StreamMessage:
-    session_id: str
-    conversation_id: str
-    workspace_id: str
-    content: str
-    message_type: MessageType = MessageType.TEXT
-    timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "conversation_id": self.conversation_id,
-            "workspace_id": self.workspace_id,
-            "content": self.content,
-            "message_type": self.message_type.value,
-            "timestamp": self.timestamp.isoformat(),
-            "metadata": self.metadata,
-        }
-
-    def to_canonical(self) -> CanonicalMessage:
-        message_id = self.metadata.get("message_id", "")
-        formatter = CanonicalFormatter()
-
-        if self.message_type == MessageType.TEXT:
-            return formatter.format_text_token(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                token=self.content,
-            )
-        elif self.message_type == MessageType.THINKING:
-            return formatter.format_thinking(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                content=self.content,
-            )
-        elif self.message_type == MessageType.TOOL_CALL:
-            return formatter.format_tool_call(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                tool_call_id=self.metadata.get("tool_call_id", ""),
-                name=self.metadata.get("name", ""),
-                arguments=self.metadata.get("arguments", ""),
-            )
-        elif self.message_type == MessageType.TOOL_RESULT:
-            return formatter.format_tool_result(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                tool_call_id=self.metadata.get("tool_call_id", ""),
-                content=self.content,
-            )
-        elif self.message_type == MessageType.ERROR:
-            return formatter.format_error(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                error_message=self.content,
-            )
-        elif self.message_type == MessageType.DONE:
-            return formatter.format_done(
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-            )
-        else:
-            segment = CanonicalSegment(
-                type=SegmentType.TEXT,
-                content=self.content,
-                metadata={"original_type": self.message_type.value},
-            )
-            return CanonicalMessage(
-                role="assistant",
-                message_id=message_id,
-                conversation_id=self.conversation_id,
-                session_id=self.session_id,
-                workspace_id=self.workspace_id,
-                segments=[segment],
-                content=self.content,
-                timestamp=self.timestamp,
-                metadata=self.metadata,
-            )
 
 
 class MessageQueue:
@@ -166,7 +49,7 @@ class MessageQueue:
         level: str,
         event: str,
         msg: str,
-        message: StreamMessage,
+        message: Message,
         *,
         source: str,
         target: str,
@@ -177,7 +60,6 @@ class MessageQueue:
         extra = {
             "conversation_id": message.conversation_id,
             "workspace_id": message.workspace_id,
-            "message_type": message.message_type.value,
             "source": source,
             "target": target,
             "size": len(message.content or ""),
@@ -213,7 +95,7 @@ class MessageQueue:
     def _get_conversation_file(self, conversation_id: str) -> Path:
         return self._storage_dir / f"{conversation_id}.json"
     
-    def _save_message_to_file(self, message: StreamMessage) -> None:
+    def _save_message_to_file(self, message: Message) -> None:
         msg_dict = message.to_dict()
         conv_id = message.conversation_id
         
@@ -238,44 +120,18 @@ class MessageQueue:
             except Exception as e:
                 print(f"[MQ] 保存消息文件失败: {e}")
 
-    def _save_canonical_to_file(self, message: CanonicalMessage) -> None:
-        msg_dict = message.to_dict()
-        conv_id = message.conversation_id
-        
-        with self._file_lock:
-            if conv_id not in self._conversation_messages:
-                self._conversation_messages[conv_id] = []
-                file_path = self._get_conversation_file(conv_id)
-                if file_path.exists():
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            self._conversation_messages[conv_id] = json.load(f)
-                    except Exception as e:
-                        print(f"[MQ] 加载已有消息文件失败: {e}")
-                        self._conversation_messages[conv_id] = []
-            
-            self._conversation_messages[conv_id].append(msg_dict)
-            
-            file_path = self._get_conversation_file(conv_id)
-            try:
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(self._conversation_messages[conv_id], f, ensure_ascii=False, indent=2)
-            except Exception as e:
-                print(f"[MQ] 保存消息文件失败: {e}")
-
-    async def publish(self, message: StreamMessage) -> bool:
+    async def publish(self, message: Message) -> bool:
         """
         生产者：发布消息到队列
 
         Args:
-            message: 流式消息对象
+            message: 消息对象
 
         Returns:
             是否成功发布（队列满时返回 False）
         """
-        canonical_msg = message.to_canonical()
         try:
-            self._queue.put_nowait(canonical_msg)
+            self._queue.put_nowait(message)
             self._log_message_event(
                 "INFO",
                 "mq.message.received",
@@ -298,7 +154,7 @@ class MessageQueue:
             print(f"[MQ] 队列已满 (max_size={self._max_size})，消息被丢弃: {message.content[:50]}...")
             return False
 
-    async def publish_batch(self, messages: list[StreamMessage]) -> int:
+    async def publish_batch(self, messages: list[Message]) -> int:
         """
         批量发布消息
         
@@ -314,21 +170,20 @@ class MessageQueue:
                 success_count += 1
         return success_count
 
-    def publish_sync(self, message: StreamMessage) -> bool:
+    def publish_sync(self, message: Message) -> bool:
         """
         同步发布消息（用于同步上下文，如 LLM 流式回调）
 
         将消息放入同步队列，由异步消费者线程转发到异步队列
 
         Args:
-            message: 流式消息对象
+            message: 消息对象
 
         Returns:
             是否成功发布
         """
-        canonical_msg = message.to_canonical()
         try:
-            self._sync_queue.put_nowait(canonical_msg)
+            self._sync_queue.put_nowait(message)
             self._log_message_event(
                 "INFO",
                 "mq.message.received",
@@ -385,7 +240,7 @@ class MessageQueue:
             except Exception as e:
                 print(f"[MQ] 同步桥接异常: {e}")
 
-    async def _put_to_async_queue(self, message: CanonicalMessage) -> None:
+    async def _put_to_async_queue(self, message: Message) -> None:
         """将消息放入异步队列"""
         try:
             self._queue.put_nowait(message)
@@ -408,7 +263,7 @@ class MessageQueue:
             if not self._subscribers[conversation_id]:
                 del self._subscribers[conversation_id]
 
-    def _publish_to_subscribers(self, message: CanonicalMessage) -> None:
+    def _publish_to_subscribers(self, message: Message) -> None:
         with self._subscribers_lock:
             subscribers = list(self._subscribers.get(message.conversation_id, []))
         for subscriber in subscribers:
@@ -466,7 +321,7 @@ class MessageQueue:
 
         print("[MQ] 消费循环结束")
 
-    async def _consume(self, message: CanonicalMessage) -> None:
+    async def _consume(self, message: Message) -> None:
         """
         消费单条消息
 
@@ -479,7 +334,7 @@ class MessageQueue:
         print(f"[MQ] 消费消息: {msg_dict}")
         start_time = time.perf_counter()
         try:
-            self._save_canonical_to_file(message)
+            self._save_message_to_file(message)
             self._publish_to_subscribers(message)
             
             await self._forward_to_buffer(message)
@@ -489,7 +344,7 @@ class MessageQueue:
             raise
         print(f"[MQ] 消费完成，耗时: {round((time.perf_counter() - start_time) * 1000)}ms")
 
-    async def _forward_to_buffer(self, message: CanonicalMessage) -> None:
+    async def _forward_to_buffer(self, message: Message) -> None:
         """将事件转发给 Buffer 消费"""
         from singleton import get_conversation_buffer, get_conversation_dao
         from service.session_service.conversation_buffer import ConversationBuffer
@@ -504,15 +359,22 @@ class MessageQueue:
             else:
                 return
         
-        for segment in message.segments:
-            if segment.type == SegmentType.TEXT:
+        for block in message.content_blocks:
+            if block.type == ContentBlockType.TEXT:
                 await buffer.consume_text_event(
                     conversation_id=message.conversation_id,
                     message_id=message.message_id,
-                    content=segment.content,
+                    content=block.content,
                     parent_id=message.metadata.get("parent_id")
                 )
-            elif segment.type == SegmentType.DONE:
+            elif block.type == ContentBlockType.THINKING:
+                await buffer.consume_text_event(
+                    conversation_id=message.conversation_id,
+                    message_id=message.message_id,
+                    content=block.content,
+                    parent_id=message.metadata.get("parent_id")
+                )
+            elif block.type == ContentBlockType.DONE:
                 node_id = await buffer.consume_done_event(
                     conversation_id=message.conversation_id,
                     message_id=message.message_id

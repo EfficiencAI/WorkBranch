@@ -4,18 +4,18 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 
 
-class SegmentType(Enum):
+class ContentBlockType(Enum):
     TEXT = "text"
     THINKING = "thinking"
-    TOOL_CALL = "tool_call"
+    TOOL_USE = "tool_use"
     TOOL_RESULT = "tool_result"
     ERROR = "error"
     DONE = "done"
 
 
 @dataclass
-class CanonicalSegment:
-    type: SegmentType
+class ContentBlock:
+    type: ContentBlockType
     content: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
 
@@ -27,22 +27,22 @@ class CanonicalSegment:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CanonicalSegment":
+    def from_dict(cls, data: dict) -> "ContentBlock":
         return cls(
-            type=SegmentType(data["type"]),
+            type=ContentBlockType(data["type"]),
             content=data.get("content", ""),
             metadata=data.get("metadata", {}),
         )
 
 
 @dataclass
-class CanonicalMessage:
+class Message:
     role: str
     message_id: str
     conversation_id: str
     session_id: str
     workspace_id: str
-    segments: List[CanonicalSegment] = field(default_factory=list)
+    content_blocks: List[ContentBlock] = field(default_factory=list)
     content: str = ""
     timestamp: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -54,15 +54,15 @@ class CanonicalMessage:
             "conversation_id": self.conversation_id,
             "session_id": self.session_id,
             "workspace_id": self.workspace_id,
-            "segments": [seg.to_dict() for seg in self.segments],
+            "content_blocks": [block.to_dict() for block in self.content_blocks],
             "content": self.content,
             "timestamp": self.timestamp.isoformat(),
             "metadata": self.metadata,
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "CanonicalMessage":
-        segments = [CanonicalSegment.from_dict(seg) for seg in data.get("segments", [])]
+    def from_dict(cls, data: dict) -> "Message":
+        content_blocks = [ContentBlock.from_dict(block) for block in data.get("content_blocks", [])]
         timestamp = data.get("timestamp")
         if isinstance(timestamp, str):
             try:
@@ -78,53 +78,53 @@ class CanonicalMessage:
             conversation_id=data["conversation_id"],
             session_id=data["session_id"],
             workspace_id=data["workspace_id"],
-            segments=segments,
+            content_blocks=content_blocks,
             content=data.get("content", ""),
             timestamp=timestamp,
             metadata=data.get("metadata", {}),
         )
 
-    def add_segment(self, segment: CanonicalSegment) -> None:
-        self.segments.append(segment)
-        if segment.type == SegmentType.TEXT:
-            self.content += segment.content
+    def add_block(self, block: ContentBlock) -> None:
+        self.content_blocks.append(block)
+        if block.type == ContentBlockType.TEXT:
+            self.content += block.content
 
-    def get_last_segment(self) -> Optional[CanonicalSegment]:
-        if self.segments:
-            return self.segments[-1]
+    def get_last_block(self) -> Optional[ContentBlock]:
+        if self.content_blocks:
+            return self.content_blocks[-1]
         return None
 
-    def get_segments_by_type(self, segment_type: SegmentType) -> List[CanonicalSegment]:
-        return [seg for seg in self.segments if seg.type == segment_type]
+    def get_blocks_by_type(self, block_type: ContentBlockType) -> List[ContentBlock]:
+        return [block for block in self.content_blocks if block.type == block_type]
 
 
-class CanonicalFormatter:
+class MessageFormatter:
     ROLE_USER = "user"
     ROLE_ASSISTANT = "assistant"
     ROLE_SYSTEM = "system"
     ROLE_TOOL = "tool"
 
     @staticmethod
-    def format_text_token(
+    def format_text(
         message_id: str,
         conversation_id: str,
         session_id: str,
         workspace_id: str,
-        token: str,
+        text: str,
         role: str = ROLE_ASSISTANT,
-    ) -> CanonicalMessage:
-        segment = CanonicalSegment(
-            type=SegmentType.TEXT,
-            content=token,
+    ) -> Message:
+        block = ContentBlock(
+            type=ContentBlockType.TEXT,
+            content=text,
         )
-        return CanonicalMessage(
+        return Message(
             role=role,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
-            content=token,
+            content_blocks=[block],
+            content=text,
         )
 
     @staticmethod
@@ -135,26 +135,26 @@ class CanonicalFormatter:
         workspace_id: str,
         content: str,
         duration_ms: Optional[int] = None,
-    ) -> CanonicalMessage:
+    ) -> Message:
         metadata = {}
         if duration_ms is not None:
             metadata["duration_ms"] = duration_ms
-        segment = CanonicalSegment(
-            type=SegmentType.THINKING,
+        block = ContentBlock(
+            type=ContentBlockType.THINKING,
             content=content,
             metadata=metadata,
         )
-        return CanonicalMessage(
-            role=CanonicalFormatter.ROLE_ASSISTANT,
+        return Message(
+            role=MessageFormatter.ROLE_ASSISTANT,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
+            content_blocks=[block],
         )
 
     @staticmethod
-    def format_tool_call(
+    def format_tool_use(
         message_id: str,
         conversation_id: str,
         session_id: str,
@@ -162,9 +162,9 @@ class CanonicalFormatter:
         tool_call_id: str,
         name: str,
         arguments: str,
-    ) -> CanonicalMessage:
-        segment = CanonicalSegment(
-            type=SegmentType.TOOL_CALL,
+    ) -> Message:
+        block = ContentBlock(
+            type=ContentBlockType.TOOL_USE,
             content="",
             metadata={
                 "tool_call_id": tool_call_id,
@@ -172,13 +172,13 @@ class CanonicalFormatter:
                 "arguments": arguments,
             },
         )
-        return CanonicalMessage(
-            role=CanonicalFormatter.ROLE_ASSISTANT,
+        return Message(
+            role=MessageFormatter.ROLE_ASSISTANT,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
+            content_blocks=[block],
         )
 
     @staticmethod
@@ -189,21 +189,21 @@ class CanonicalFormatter:
         workspace_id: str,
         tool_call_id: str,
         content: str,
-    ) -> CanonicalMessage:
-        segment = CanonicalSegment(
-            type=SegmentType.TOOL_RESULT,
+    ) -> Message:
+        block = ContentBlock(
+            type=ContentBlockType.TOOL_RESULT,
             content=content,
             metadata={
                 "tool_call_id": tool_call_id,
             },
         )
-        return CanonicalMessage(
-            role=CanonicalFormatter.ROLE_TOOL,
+        return Message(
+            role=MessageFormatter.ROLE_TOOL,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
+            content_blocks=[block],
         )
 
     @staticmethod
@@ -213,18 +213,18 @@ class CanonicalFormatter:
         session_id: str,
         workspace_id: str,
         error_message: str,
-    ) -> CanonicalMessage:
-        segment = CanonicalSegment(
-            type=SegmentType.ERROR,
+    ) -> Message:
+        block = ContentBlock(
+            type=ContentBlockType.ERROR,
             content=error_message,
         )
-        return CanonicalMessage(
-            role=CanonicalFormatter.ROLE_ASSISTANT,
+        return Message(
+            role=MessageFormatter.ROLE_ASSISTANT,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
+            content_blocks=[block],
         )
 
     @staticmethod
@@ -233,16 +233,22 @@ class CanonicalFormatter:
         conversation_id: str,
         session_id: str,
         workspace_id: str,
-    ) -> CanonicalMessage:
-        segment = CanonicalSegment(
-            type=SegmentType.DONE,
+    ) -> Message:
+        block = ContentBlock(
+            type=ContentBlockType.DONE,
             content="",
         )
-        return CanonicalMessage(
-            role=CanonicalFormatter.ROLE_ASSISTANT,
+        return Message(
+            role=MessageFormatter.ROLE_ASSISTANT,
             message_id=message_id,
             conversation_id=conversation_id,
             session_id=session_id,
             workspace_id=workspace_id,
-            segments=[segment],
+            content_blocks=[block],
         )
+
+
+CanonicalSegment = ContentBlock
+SegmentType = ContentBlockType
+CanonicalMessage = Message
+CanonicalFormatter = MessageFormatter

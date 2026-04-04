@@ -241,8 +241,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
-            from service.session_service.mq import MessageType
-            send_message("", MessageType.TOOL_CALL, {
+            from service.session_service.canonical import ContentBlockType
+            send_message("", ContentBlockType.TOOL_USE, {
                 "tool_name": tool_name,
                 "tool_args": tool_args,
                 "task_description": task_description
@@ -295,8 +295,7 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 
                 def thinking_token_callback(token: str):
                     if token_callback:
-                        from service.session_service.mq import MessageType
-                        token_callback(token, MessageType.THINKING)
+                        token_callback(token)
                 
                 result = ""
                 for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
@@ -307,8 +306,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 if message_context:
                     send_message = message_context.get("send_message")
                     if send_message:
-                        from service.session_service.mq import MessageType
-                        send_message("", MessageType.TOOL_RESULT, {
+                        from service.session_service.canonical import ContentBlockType
+                        send_message("", ContentBlockType.TOOL_RESULT, {
                             "tool_name": tool_name,
                             "result": result[:500] + "..." if len(result) > 500 else result,
                             "success": True
@@ -326,8 +325,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 if message_context:
                     send_message = message_context.get("send_message")
                     if send_message:
-                        from service.session_service.mq import MessageType
-                        send_message("", MessageType.TOOL_RESULT, {
+                        from service.session_service.canonical import ContentBlockType
+                        send_message("", ContentBlockType.TOOL_RESULT, {
                             "tool_name": tool_name,
                             "error": str(e),
                             "success": False
@@ -375,9 +374,9 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     if message_context:
         send_message = message_context.get("send_message")
         if send_message:
-            from service.session_service.mq import MessageType
+            from service.session_service.canonical import ContentBlockType
             result_content = tool_result.get("result", "")
-            send_message("", MessageType.TOOL_RESULT, {
+            send_message("", ContentBlockType.TOOL_RESULT, {
                 "tool_name": tool_name,
                 "result": result_content[:500] + "..." if len(result_content) > 500 else result_content,
                 "error": tool_result.get("error"),
