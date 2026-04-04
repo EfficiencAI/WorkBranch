@@ -24,6 +24,16 @@ class BufferData:
     created_at: datetime = field(default_factory=datetime.now)
 
 
+@dataclass
+class AssistantDraft:
+    conversation_id: str
+    message_id: str
+    content: str = ""
+    parent_id: Optional[int] = None
+    created_at: datetime = field(default_factory=datetime.now)
+    persisted_node_id: Optional[int] = None
+
+
 class ConversationBuffer:
     _instance = None
     _initialized = False
@@ -39,6 +49,7 @@ class ConversationBuffer:
         ConversationBuffer._initialized = True
 
         self._buffers: Dict[str, BufferData] = {}
+        self._drafts: Dict[str, Dict[str, AssistantDraft]] = {}
         self._lock = asyncio.Lock()
         self._dao: ConversationDAO = get_conversation_dao()
 
@@ -76,6 +87,104 @@ class ConversationBuffer:
                 return []
             return list(self._buffers[conversation_id].nodes)
 
+    async def consume_text_event(
+        self,
+        conversation_id: str,
+        message_id: str,
+        content: str,
+        parent_id: Optional[int] = None
+    ) -> None:
+        async with self._lock:
+            if conversation_id not in self._drafts:
+                self._drafts[conversation_id] = {}
+            
+            if message_id not in self._drafts[conversation_id]:
+                self._drafts[conversation_id][message_id] = AssistantDraft(
+                    conversation_id=conversation_id,
+                    message_id=message_id,
+                    content="",
+                    parent_id=parent_id
+                )
+            
+            self._drafts[conversation_id][message_id].content += content
+
+    async def consume_done_event(
+        self,
+        conversation_id: str,
+        message_id: str
+    ) -> Optional[int]:
+        async with self._lock:
+            if conversation_id not in self._drafts:
+                return None
+            
+            if message_id not in self._drafts[conversation_id]:
+                return None
+            
+            draft = self._drafts[conversation_id].pop(message_id)
+            
+            if not draft.content:
+                return None
+            
+            session_id = None
+            if conversation_id in self._buffers:
+                session_id = self._buffers[conversation_id].session_id
+            else:
+                persisted = self._dao.get_conversation_by_id(conversation_id)
+                if persisted:
+                    session_id = persisted.session_id
+            
+            if session_id is None:
+                return None
+            
+            parent_id = draft.parent_id
+            if parent_id is None:
+                if conversation_id in self._buffers:
+                    buffer_nodes = self._buffers[conversation_id].nodes
+                    if buffer_nodes:
+                        for i, node in enumerate(buffer_nodes):
+                            actual_parent_id = None
+                            node_id = self._dao.add_node(
+                                session_id=session_id,
+                                conversation_id=conversation_id,
+                                role=node.role,
+                                content=node.content,
+                                parent_id=actual_parent_id
+                            )
+                            parent_id = node_id
+                        self._buffers[conversation_id].nodes = []
+                
+                if parent_id is None:
+                    persisted_nodes = self._dao.get_nodes_by_conversation(conversation_id)
+                    if persisted_nodes:
+                        parent_id = persisted_nodes[-1].id
+            
+            node_id = self._dao.add_node(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                role="assistant",
+                content=draft.content,
+                parent_id=parent_id
+            )
+            
+            draft.persisted_node_id = node_id
+            
+            if conversation_id in self._drafts and not self._drafts[conversation_id]:
+                del self._drafts[conversation_id]
+            
+            return node_id
+
+    async def get_draft_content(
+        self,
+        conversation_id: str,
+        message_id: str
+    ) -> Optional[str]:
+        async with self._lock:
+            if conversation_id not in self._drafts:
+                return None
+            if message_id not in self._drafts[conversation_id]:
+                return None
+            return self._drafts[conversation_id][message_id].content
+
     async def flush(self, conversation_id: str) -> int:
         async with self._lock:
             if conversation_id not in self._buffers:
@@ -111,19 +220,25 @@ class ConversationBuffer:
 
     async def clear(self, conversation_id: str) -> bool:
         async with self._lock:
+            cleared = False
             if conversation_id in self._buffers:
                 del self._buffers[conversation_id]
-                return True
-            return False
+                cleared = True
+            if conversation_id in self._drafts:
+                del self._drafts[conversation_id]
+                cleared = True
+            return cleared
 
     async def get_active_conversations(self) -> List[Dict[str, Any]]:
         async with self._lock:
             result = []
             for conv_id, data in self._buffers.items():
+                draft_count = len(self._drafts.get(conv_id, {}))
                 result.append({
                     "conversation_id": conv_id,
                     "session_id": data.session_id,
                     "node_count": len(data.nodes),
+                    "draft_count": draft_count,
                     "created_at": data.created_at.isoformat()
                 })
             return result
@@ -135,4 +250,11 @@ class ConversationBuffer:
         async with self._lock:
             if conversation_id in self._buffers:
                 return self._buffers[conversation_id].session_id
+            return None
+
+    async def get_last_persisted_node_id(self, conversation_id: str) -> Optional[int]:
+        async with self._lock:
+            nodes = self._dao.get_nodes_by_conversation(conversation_id)
+            if nodes:
+                return nodes[-1].id
             return None

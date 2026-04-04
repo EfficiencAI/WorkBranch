@@ -218,7 +218,10 @@ class ConversationService:
         conversation_id: str,
         result: Dict[str, Any]
     ):
-        flushed_count = await self._buffer.flush(conversation_id)
+        await self._buffer.flush(conversation_id)
+
+        nodes = self._dao.get_nodes_by_conversation(conversation_id)
+        actual_count = len(nodes)
 
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
@@ -227,11 +230,11 @@ class ConversationService:
 
             conv_info.state = ConversationState.COMPLETED
             conv_info.error = None
-            conv_info.message_count = flushed_count
+            conv_info.message_count = actual_count
             self._dao.update_conversation(
                 conversation_id,
                 state=ConversationState.COMPLETED.value,
-                message_count=flushed_count,
+                message_count=actual_count,
                 error="",
                 ended_at=datetime.now().isoformat(),
             )
@@ -323,9 +326,11 @@ class ConversationService:
                 ended_at=datetime.now().isoformat(),
             )
 
-        flushed_count = await self._buffer.flush(conversation_id)
-        self._dao.update_conversation(conversation_id, message_count=flushed_count)
-        return flushed_count
+        await self._buffer.flush(conversation_id)
+        nodes = self._dao.get_nodes_by_conversation(conversation_id)
+        actual_count = len(nodes)
+        self._dao.update_conversation(conversation_id, message_count=actual_count)
+        return actual_count
 
     async def cancel_conversation(self, conversation_id: str) -> bool:
         async with self._lock:

@@ -221,6 +221,8 @@ class AgentService:
         
         from service.session_service.mq import StreamMessage, MessageType
         
+        message_id = self._generate_id()
+        
         with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
             self._log_agent_event(
                 "INFO",
@@ -228,28 +230,34 @@ class AgentService:
                 "agent run started",
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                extra={"session_id": session_id},
+                extra={"session_id": session_id, "message_id": message_id},
             )
 
             def send_message(content: str, message_type: MessageType, metadata: dict = None):
+                merged_metadata = {"message_id": message_id}
+                if metadata:
+                    merged_metadata.update(metadata)
                 msg = StreamMessage(
                     session_id=session_id,
                     conversation_id=conversation_id,
                     workspace_id=workspace_id,
                     content=content,
                     message_type=message_type,
-                    metadata=metadata or {}
+                    metadata=merged_metadata
                 )
                 mq.publish_sync(msg)
 
             def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
+                merged_metadata = {"message_id": message_id}
+                if metadata:
+                    merged_metadata.update(metadata)
                 msg = StreamMessage(
                     session_id=session_id,
                     conversation_id=conversation_id,
                     workspace_id=workspace_id,
                     content=token,
                     message_type=message_type,
-                    metadata=metadata or {}
+                    metadata=merged_metadata
                 )
                 mq.publish_sync(msg)
 
@@ -259,6 +267,7 @@ class AgentService:
                 "session_id": session_id,
                 "conversation_id": conversation_id,
                 "workspace_id": workspace_id,
+                "message_id": message_id,
             }
 
             def run_with_config():
@@ -283,7 +292,7 @@ class AgentService:
                     "agent run failed",
                     conversation_id=conversation_id,
                     workspace_id=workspace_id,
-                    extra={"session_id": session_id, "error": str(exc)},
+                    extra={"session_id": session_id, "message_id": message_id, "error": str(exc)},
                     exception="".join(traceback.format_exception(type(exc), exc, exc.__traceback__)),
                 )
                 raise
@@ -293,7 +302,8 @@ class AgentService:
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
                 content="",
-                message_type=MessageType.DONE
+                message_type=MessageType.DONE,
+                metadata={"message_id": message_id}
             )
             mq.publish_sync(done_msg)
 

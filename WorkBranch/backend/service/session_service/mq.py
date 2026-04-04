@@ -56,7 +56,7 @@ class StreamMessage:
 
 
 class MessageQueue:
-    """消息队列服务（单例）"""
+    """消息队列服务（单例）- 纯事件通道"""
 
     def __init__(self, settings: SettingsService = None):
         if settings is None:
@@ -76,7 +76,6 @@ class MessageQueue:
         self._subscribers_lock = threading.Lock()
         self._file_lock = threading.Lock()
         self._logger = None
-        self._text_accumulator: Dict[str, str] = {}
 
     def _get_max_size(self) -> int:
         try:
@@ -137,8 +136,6 @@ class MessageQueue:
         return self._storage_dir / f"{conversation_id}.json"
     
     def _save_message_to_file(self, message: StreamMessage) -> None:
-        # .temp/conversations stores MQ transport transcripts for stream/debug purposes only.
-        # Business conversation history is read from SQLite nodes plus ConversationBuffer.
         msg_dict = message.to_dict()
         conv_id = message.conversation_id
         
@@ -377,10 +374,10 @@ class MessageQueue:
         """
         消费单条消息
 
-        功能：
-        - 打印到控制台
-        - 保存到 JSON 文件（按对话 ID）
-        - 聚合 TEXT 消息，DONE 时写入 buffer
+        MQ 只做通道层：
+        - 保存到 JSON 文件（调试/转录）
+        - 广播给订阅方
+        - 转发给 Buffer 消费
         """
         msg_dict = message.to_dict()
         print(f"[MQ] 消费消息: {msg_dict}")
@@ -389,17 +386,7 @@ class MessageQueue:
             self._save_message_to_file(message)
             self._publish_to_subscribers(message)
             
-            if message.message_type == MessageType.TEXT:
-                conv_id = message.conversation_id
-                if conv_id not in self._text_accumulator:
-                    self._text_accumulator[conv_id] = ""
-                self._text_accumulator[conv_id] += message.content
-            
-            elif message.message_type == MessageType.DONE:
-                conv_id = message.conversation_id
-                accumulated_text = self._text_accumulator.pop(conv_id, "")
-                if accumulated_text:
-                    await self._write_to_buffer(conv_id, accumulated_text)
+            await self._forward_to_buffer(message)
             
         except Exception as exc:
             self._log_message_event(
@@ -423,26 +410,44 @@ class MessageQueue:
             latency_ms=round((time.perf_counter() - start_time) * 1000),
         )
 
-    async def _write_to_buffer(self, conversation_id: str, content: str) -> None:
-        """将聚合的 AI 回复写入 buffer"""
-        from singleton import get_conversation_buffer
+    async def _forward_to_buffer(self, message: StreamMessage) -> None:
+        """将事件转发给 Buffer 消费"""
+        from singleton import get_conversation_buffer, get_conversation_dao
         from service.session_service.conversation_buffer import ConversationBuffer
         
         buffer: ConversationBuffer = get_conversation_buffer()
         
-        if not buffer.has_buffer(conversation_id):
-            return
+        if not buffer.has_buffer(message.conversation_id):
+            dao = get_conversation_dao()
+            persisted = dao.get_conversation_by_id(message.conversation_id)
+            if persisted:
+                await buffer.start_buffer(message.conversation_id, persisted.session_id)
+            else:
+                return
         
-        nodes = await buffer.get_buffered_nodes(conversation_id)
-        parent_id = len(nodes) - 1 if nodes else None
+        metadata = message.metadata or {}
+        message_id = metadata.get("message_id")
         
-        await buffer.add_node(
-            conversation_id=conversation_id,
-            role="assistant",
-            content=content,
-            parent_id=parent_id
-        )
-        print(f"[MQ] AI 回复已写入 buffer: {conversation_id}, 长度: {len(content)}")
+        if message.message_type == MessageType.TEXT:
+            if not message_id:
+                return
+            parent_id = metadata.get("parent_id")
+            await buffer.consume_text_event(
+                conversation_id=message.conversation_id,
+                message_id=message_id,
+                content=message.content,
+                parent_id=parent_id
+            )
+        
+        elif message.message_type == MessageType.DONE:
+            if not message_id:
+                return
+            node_id = await buffer.consume_done_event(
+                conversation_id=message.conversation_id,
+                message_id=message_id
+            )
+            if node_id:
+                print(f"[MQ] Buffer 已持久化 assistant 节点: {message.conversation_id}, node_id={node_id}")
 
     @property
     def size(self) -> int:
