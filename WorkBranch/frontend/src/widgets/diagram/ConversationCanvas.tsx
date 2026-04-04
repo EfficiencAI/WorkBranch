@@ -1,5 +1,5 @@
-import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useReactFlow } from '@xyflow/react'
-import type { Edge, Node, NodeProps } from '@xyflow/react'
+import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
+import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -476,6 +476,10 @@ function FlowViewport({
   const interactionGateTimerRef = useRef<number | null>(null)
   const [interactionGateConversationId, setInteractionGateConversationId] = useState<string | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
+  const lastZoomRef = useRef<number>(1)
+  const isRefreshingRef = useRef(false)
+  const zoomDebounceTimerRef = useRef<number | null>(null)
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
@@ -691,6 +695,35 @@ function FlowViewport({
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [clearHalfPreviewConversationId, focusedConversation, halfPreviewConversation, setFocusedConversationId])
 
+  const handleForceRefresh = useCallback(() => {
+    if (isRefreshingRef.current) {
+      return
+    }
+
+    isRefreshingRef.current = true
+    setRefreshMaskVisible(true)
+
+    window.requestAnimationFrame(() => {
+      setRefreshMaskVisible(false)
+      isRefreshingRef.current = false
+    })
+  }, [])
+
+  useOnViewportChange({
+    onChange: (viewport: Viewport) => {
+      if (Math.abs(viewport.zoom - lastZoomRef.current) > 0.01) {
+        lastZoomRef.current = viewport.zoom
+        if (zoomDebounceTimerRef.current !== null) {
+          window.clearTimeout(zoomDebounceTimerRef.current)
+        }
+        zoomDebounceTimerRef.current = window.setTimeout(() => {
+          handleForceRefresh()
+          zoomDebounceTimerRef.current = null
+        }, 100)
+      }
+    },
+  })
+
   const { setContextMenu } = useContextMenu()
 
   const handleContextMenu = useCallback(
@@ -723,9 +756,13 @@ function FlowViewport({
 
 
 
+  const viewportClassName = [
+    'conversation-canvas__viewport',
+    refreshMaskVisible ? 'conversation-canvas__viewport--refreshing' : null,
+  ].filter(Boolean).join(' ')
+
   return (
-    <div className="conversation-canvas__viewport" onContextMenu={handleContextMenu} ref={viewportRef}>
-      <div className="conversation-canvas__preview-refresh-mask" aria-hidden="true" />
+    <div className={viewportClassName} onContextMenu={handleContextMenu} ref={viewportRef}>
       {focusedConversation ? (
         <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
           <button

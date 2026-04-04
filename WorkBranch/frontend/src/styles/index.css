@@ -550,18 +550,11 @@ button {
   gap: 8px;
 }
 
-.conversation-canvas__preview-refresh-mask {
-  position: absolute;
-  inset: 0;
-  z-index: 3;
-  background: rgba(15, 23, 42, 0.001);
-  opacity: 0.001;
-  backdrop-filter: blur(0);
-  pointer-events: none;
+.conversation-canvas__viewport--refreshing .conversation-node {
+  transform: translateZ(0.001px);
 }
 
-.conversation-canvas__exit-focus-button,
-.conversation-canvas__debug-rerender-button {
+.conversation-canvas__exit-focus-button {
   min-width: 96px;
   min-height: 44px;
   padding: 0 16px;
@@ -574,9 +567,7 @@ button {
 }
 
 .conversation-canvas__exit-focus-button:hover,
-.conversation-canvas__exit-focus-button:focus-visible,
-.conversation-canvas__debug-rerender-button:hover,
-.conversation-canvas__debug-rerender-button:focus-visible {
+.conversation-canvas__exit-focus-button:focus-visible {
   color: var(--app-text);
   border-color: rgba(34, 197, 94, 0.55);
   background: var(--app-panel-bg-strongest);
