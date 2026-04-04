@@ -313,76 +313,78 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           onEvent(event: ChatStreamEvent) {
             onEvent?.(event)
             
-            if (event.type === 'text' && event.content) {
-              set(state => {
-                const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+            for (const segment of event.segments) {
+              if (segment.type === 'text' && segment.content) {
+                set(state => {
+                  const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                  
+                  if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                    const updatedMessages = [...state.conversationMessages]
+                    updatedMessages[updatedMessages.length - 1] = {
+                      ...lastMessage,
+                      content: lastMessage.content + segment.content
+                    }
+                    return { conversationMessages: updatedMessages }
+                  }
+                  
+                  return {
+                    conversationMessages: [...state.conversationMessages, {
+                      id: event.message_id || `stream-${conversationId}-${Date.now()}`,
+                      parentId: lastMessage?.id ?? null,
+                      role: 'assistant' as const,
+                      content: segment.content,
+                      createdAt: event.timestamp ?? new Date().toISOString(),
+                      status: 'streaming' as const,
+                    }]
+                  }
+                })
+              }
+              
+              if (segment.type === 'done') {
+                frontendLogger.info('stream_completed', {
+                  extra: {
+                    conversation_id: conversationId,
+                    latency_ms: event.metadata?.latency_ms,
+                  },
+                })
                 
-                if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
-                  const updatedMessages = [...state.conversationMessages]
-                  updatedMessages[updatedMessages.length - 1] = {
-                    ...lastMessage,
-                    content: lastMessage.content + event.content
+                set(state => {
+                  const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                  if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                    const updatedMessages = [...state.conversationMessages]
+                    updatedMessages[updatedMessages.length - 1] = {
+                      ...lastMessage,
+                      status: 'completed'
+                    }
+                    return { conversationMessages: updatedMessages }
                   }
-                  return { conversationMessages: updatedMessages }
-                }
+                  return state
+                })
+              }
+              
+              if (segment.type === 'error') {
+                frontendLogger.error('stream_failed', {
+                  extra: {
+                    conversation_id: conversationId,
+                    reason: segment.content || 'stream_error_event',
+                  },
+                })
                 
-                return {
-                  conversationMessages: [...state.conversationMessages, {
-                    id: `stream-${conversationId}-${Date.now()}`,
-                    parentId: lastMessage?.id ?? null,
-                    role: 'assistant' as const,
-                    content: event.content ?? '',
-                    createdAt: event.timestamp ?? new Date().toISOString(),
-                    status: 'streaming' as const,
-                  }]
-                }
-              })
-            }
-            
-            if (event.type === 'done') {
-              frontendLogger.info('stream_completed', {
-                extra: {
-                  conversation_id: conversationId,
-                  latency_ms: event.metadata?.latency_ms,
-                },
-              })
-              
-              set(state => {
-                const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
-                  const updatedMessages = [...state.conversationMessages]
-                  updatedMessages[updatedMessages.length - 1] = {
-                    ...lastMessage,
-                    status: 'completed'
+                set(state => {
+                  const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                  if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                    const updatedMessages = [...state.conversationMessages]
+                    updatedMessages[updatedMessages.length - 1] = {
+                      ...lastMessage,
+                      status: 'error'
+                    }
+                    return { conversationMessages: updatedMessages }
                   }
-                  return { conversationMessages: updatedMessages }
-                }
-                return state
-              })
-            }
-            
-            if (event.type === 'error') {
-              frontendLogger.error('stream_failed', {
-                extra: {
-                  conversation_id: conversationId,
-                  reason: typeof event.content === 'string' ? event.content : 'stream_error_event',
-                },
-              })
-              
-              set(state => {
-                const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
-                  const updatedMessages = [...state.conversationMessages]
-                  updatedMessages[updatedMessages.length - 1] = {
-                    ...lastMessage,
-                    status: 'error'
-                  }
-                  return { conversationMessages: updatedMessages }
-                }
-                return state
-              })
-              
-              onStreamError?.(event)
+                  return state
+                })
+                
+                onStreamError?.(event)
+              }
             }
           },
         },

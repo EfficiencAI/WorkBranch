@@ -233,7 +233,7 @@ class AgentService:
                 extra={"session_id": session_id, "message_id": message_id},
             )
 
-            def send_message(content: str, message_type: MessageType, metadata: dict = None):
+            def send_message(content: str = "", message_type: MessageType = MessageType.TEXT, metadata: dict = None):
                 merged_metadata = {"message_id": message_id}
                 if metadata:
                     merged_metadata.update(metadata)
@@ -247,23 +247,8 @@ class AgentService:
                 )
                 mq.publish_sync(msg)
 
-            def token_callback(token: str, message_type: MessageType = MessageType.TEXT, metadata: dict = None):
-                merged_metadata = {"message_id": message_id}
-                if metadata:
-                    merged_metadata.update(metadata)
-                msg = StreamMessage(
-                    session_id=session_id,
-                    conversation_id=conversation_id,
-                    workspace_id=workspace_id,
-                    content=token,
-                    message_type=message_type,
-                    metadata=merged_metadata
-                )
-                mq.publish_sync(msg)
-
             message_context = {
                 "send_message": send_message,
-                "token_callback": token_callback,
                 "session_id": session_id,
                 "conversation_id": conversation_id,
                 "workspace_id": workspace_id,
@@ -275,7 +260,7 @@ class AgentService:
                     message,
                     workspace_id,
                     llm_service,
-                    token_callback,
+                    send_message,
                     memory_mode,
                     window_size,
                     settings,

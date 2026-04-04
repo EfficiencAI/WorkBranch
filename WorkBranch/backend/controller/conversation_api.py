@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from controller.VO.result import Result
 from core.logging import bind_ctx, get_ctx
 from singleton import get_logging_runtime, get_message_queue, get_session_service
-from service.session_service.mq import MessageQueue, MessageType
+from service.session_service.mq import MessageQueue
+from service.session_service.canonical import CanonicalMessage, SegmentType
 from service.session_service.session import SessionService
 
 router = APIRouter(prefix="/session/conversations", tags=["conversations"])
@@ -96,17 +97,12 @@ async def send_conversation_message(
 
                 while not done_received and timeout_counter < max_timeout:
                     try:
-                        message = await asyncio.wait_for(
+                        message: CanonicalMessage = await asyncio.wait_for(
                             subscriber.get(),
                             timeout=1.0,
                         )
 
-                        event_data = {
-                            "type": message.message_type.value,
-                            "content": message.content,
-                            "timestamp": message.timestamp.isoformat(),
-                            "metadata": message.metadata,
-                        }
+                        event_data = message.to_dict()
 
                         if not first_chunk_logged:
                             logger.info(
@@ -121,7 +117,10 @@ async def send_conversation_message(
 
                         yield f"data: {json.dumps(event_data, ensure_ascii=False)}\n\n"
 
-                        if message.message_type == MessageType.DONE:
+                        has_done_segment = any(
+                            seg.type == SegmentType.DONE for seg in message.segments
+                        )
+                        if has_done_segment:
                             done_received = True
                             logger.info(
                                 event="stream.completed",

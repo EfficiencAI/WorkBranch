@@ -295,12 +295,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
                 
                 def thinking_token_callback(token: str):
                     if token_callback:
-                        token_callback(token)
-                    if message_context:
-                        send_msg = message_context.get("send_message")
-                        if send_msg:
-                            from service.session_service.mq import MessageType
-                            send_msg(token, MessageType.THINKING)
+                        from service.session_service.mq import MessageType
+                        token_callback(token, MessageType.THINKING)
                 
                 result = ""
                 for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
@@ -814,11 +810,6 @@ def _execute_call_explore_agent(tool_args: dict, llm_service=None, token_callbac
         def explore_token_callback(token: str):
             if token_callback:
                 token_callback(token)
-            if message_context:
-                send_msg = message_context.get("send_message")
-                if send_msg:
-                    from service.session_service.mq import MessageType
-                    send_msg(token, MessageType.TEXT)
         
         result = ""
         for chunk in llm_service.chat_stream(messages, EXPLORE_AGENT_PROMPT, explore_token_callback):
@@ -859,11 +850,6 @@ def _execute_call_review_agent(tool_args: dict, llm_service=None, token_callback
         def review_token_callback(token: str):
             if token_callback:
                 token_callback(token)
-            if message_context:
-                send_msg = message_context.get("send_message")
-                if send_msg:
-                    from service.session_service.mq import MessageType
-                    send_msg(token, MessageType.TEXT)
         
         result = ""
         for chunk in llm_service.chat_stream(messages, REVIEW_AGENT_PROMPT, review_token_callback):

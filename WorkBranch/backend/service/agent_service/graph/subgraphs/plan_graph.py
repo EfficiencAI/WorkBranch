@@ -166,12 +166,8 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
             
             def intent_token_callback(token: str):
                 if token_callback:
-                    token_callback(token)
-                if message_context:
-                    send_msg = message_context.get("send_message")
-                    if send_msg:
-                        from service.session_service.mq import MessageType
-                        send_msg(token, MessageType.INTENT)
+                    from service.session_service.mq import MessageType
+                    token_callback(token, MessageType.INTENT)
             
             full_response = ""
             for chunk in llm_service.chat_stream(messages, INTENT_ANALYSIS_PROMPT, intent_token_callback):
@@ -269,12 +265,8 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
             
             def plan_token_callback(token: str):
                 if token_callback:
-                    token_callback(token)
-                if message_context:
-                    send_msg = message_context.get("send_message")
-                    if send_msg:
-                        from service.session_service.mq import MessageType
-                        send_msg(token, MessageType.PLAN)
+                    from service.session_service.mq import MessageType
+                    token_callback(token, MessageType.PLAN)
             
             full_response = ""
             for chunk in llm_service.chat_stream(messages, system_prompt, plan_token_callback):
