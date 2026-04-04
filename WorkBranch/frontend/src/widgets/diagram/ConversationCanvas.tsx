@@ -195,6 +195,14 @@ function stopEvent(event: React.SyntheticEvent) {
   event.stopPropagation()
 }
 
+function stopWheelEvent(event: React.WheelEvent) {
+  event.stopPropagation()
+  const nativeEvent = event.nativeEvent
+  if (nativeEvent && typeof nativeEvent.stopImmediatePropagation === 'function') {
+    nativeEvent.stopImmediatePropagation()
+  }
+}
+
 function resolveConversationPosition(
   conversation: ConversationNode,
   overviewLayoutMap: Map<string, { x: number; y: number }>,
@@ -217,7 +225,7 @@ function renderMessageList(
       {!messagesLoading && !messagesError && conversationMessages.length === 0 ? <Typography.Text type="secondary">当前对话暂无消息。</Typography.Text> : null}
 
       {!messagesError && conversationMessages.length ? (
-        <div className={messagesClassName}>
+        <div className={messagesClassName} onWheelCapture={stopWheelEvent}>
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             {conversationMessages.map((message) => (
               <Card key={message.id} size="small" className="conversation-node__message-card">
