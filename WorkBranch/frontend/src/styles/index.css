@@ -722,6 +722,24 @@ button {
   max-height: 100%;
 }
 
+.conversation-node__focused-body > .ant-space {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.conversation-node__focused-body > .ant-space > .ant-space-item:last-child {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.conversation-node__focused-body > .ant-space > .ant-space-item:last-child > * {
+  height: 100%;
+  overflow: hidden;
+}
+
 .conversation-node__half-preview-body {
   min-height: 0;
 }
@@ -757,7 +775,8 @@ button {
   padding-right: 2px;
 }
 
-.conversation-node__messages--half-preview {
+.conversation-node__messages--half-preview,
+.conversation-node__focused-body .conversation-node__messages {
   max-height: none;
   height: 100%;
 }
