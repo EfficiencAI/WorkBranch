@@ -33,18 +33,19 @@ class Conversation:
 
 
 @dataclass
-class Node:
-    id: int
+class Message:
+    id: str
+    conversation_id: str
     session_id: int
-    conversation_id: Optional[str]
-    parent_id: Optional[int]
-    role: str
-    content: str
+    user_content: str
+    assistant_content: Optional[str]
+    status: str
     created_at: str
+    updated_at: str
 
 
 class ConversationDAO:
-    """会话、对话和节点数据访问对象。"""
+    """会话、对话和消息数据访问对象。"""
 
     def __init__(self):
         self._db: Database = get_database()
@@ -225,22 +226,89 @@ class ConversationDAO:
         if row:
             self._update_session_updated_at(row['session_id'])
 
-    def delete_nodes_by_conversation(self, conversation_id: str) -> None:
+    def create_message(
+        self,
+        message_id: str,
+        conversation_id: str,
+        session_id: int,
+        user_content: str,
+        status: str = 'streaming',
+    ) -> None:
+        sql = '''
+            INSERT INTO messages (id, conversation_id, session_id, user_content, status)
+            VALUES (?, ?, ?, ?, ?)
+        '''
+        self._db.execute(sql, (message_id, conversation_id, session_id, user_content, status))
+        self._update_session_updated_at(session_id)
+        self._sync_conversation_message_count(conversation_id)
+
+    def update_message_assistant(
+        self,
+        message_id: str,
+        assistant_content: str,
+        status: str = 'completed',
+    ) -> None:
+        sql = '''
+            UPDATE messages
+            SET assistant_content = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+        '''
+        self._db.execute(sql, (assistant_content, status, message_id))
+
+        row = self._db.fetch_one('SELECT session_id, conversation_id FROM messages WHERE id = ?', (message_id,))
+        if row:
+            self._update_session_updated_at(row['session_id'])
+            if row['conversation_id']:
+                self._sync_conversation_message_count(row['conversation_id'])
+
+    def update_message_status(self, message_id: str, status: str) -> None:
+        sql = 'UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+        self._db.execute(sql, (status, message_id))
+
+        row = self._db.fetch_one('SELECT session_id, conversation_id FROM messages WHERE id = ?', (message_id,))
+        if row:
+            self._update_session_updated_at(row['session_id'])
+
+    def get_message_by_id(self, message_id: str) -> Optional[Message]:
+        sql = '''
+            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            FROM messages
+            WHERE id = ?
+        '''
+        row = self._db.fetch_one(sql, (message_id,))
+        if row:
+            return Message(**dict(row))
+        return None
+
+    def get_messages_by_conversation(self, conversation_id: str) -> List[Message]:
+        sql = '''
+            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            FROM messages
+            WHERE conversation_id = ?
+            ORDER BY created_at ASC, id ASC
+        '''
+        rows = self._db.fetch_all(sql, (conversation_id,))
+        return [Message(**dict(row)) for row in rows]
+
+    def get_messages_by_session(self, session_id: int) -> List[Message]:
+        sql = '''
+            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            FROM messages
+            WHERE session_id = ?
+            ORDER BY created_at ASC
+        '''
+        rows = self._db.fetch_all(sql, (session_id,))
+        return [Message(**dict(row)) for row in rows]
+
+    def delete_messages_by_conversation(self, conversation_id: str) -> None:
         row = self._db.fetch_one('SELECT session_id FROM conversations WHERE id = ?', (conversation_id,))
-        nodes = self._db.fetch_all(
-            'SELECT DISTINCT conversation_id FROM nodes WHERE conversation_id = ?',
-            (conversation_id,),
-        )
-        self._db.execute('DELETE FROM nodes WHERE conversation_id = ?', (conversation_id,))
+        self._db.execute('DELETE FROM messages WHERE conversation_id = ?', (conversation_id,))
 
         if row:
             self._update_session_updated_at(row['session_id'])
-        for node in nodes:
-            target_conversation_id = node['conversation_id']
-            if target_conversation_id:
-                self._sync_conversation_message_count(str(target_conversation_id))
+            self._sync_conversation_message_count(conversation_id)
 
-    def delete_nodes_by_conversations(self, conversation_ids: List[str]) -> None:
+    def delete_messages_by_conversations(self, conversation_ids: List[str]) -> None:
         if not conversation_ids:
             return
 
@@ -249,21 +317,15 @@ class ConversationDAO:
             f'SELECT session_id FROM conversations WHERE id IN ({placeholders}) ORDER BY session_id ASC LIMIT 1',
             tuple(conversation_ids),
         )
-        rows = self._db.fetch_all(
-            f'SELECT DISTINCT conversation_id FROM nodes WHERE conversation_id IN ({placeholders})',
-            tuple(conversation_ids),
-        )
         self._db.execute(
-            f'DELETE FROM nodes WHERE conversation_id IN ({placeholders})',
+            f'DELETE FROM messages WHERE conversation_id IN ({placeholders})',
             tuple(conversation_ids),
         )
 
         if session_row:
             self._update_session_updated_at(session_row['session_id'])
-        for row in rows:
-            target_conversation_id = row['conversation_id']
-            if target_conversation_id:
-                self._sync_conversation_message_count(str(target_conversation_id))
+        for conversation_id in conversation_ids:
+            self._sync_conversation_message_count(conversation_id)
 
     def delete_conversations(self, conversation_ids: List[str]) -> None:
         if not conversation_ids:
@@ -282,69 +344,11 @@ class ConversationDAO:
         if session_row:
             self._update_session_updated_at(session_row['session_id'])
 
-    def add_node(
-        self,
-        session_id: int,
-        conversation_id: str,
-        role: str,
-        content: str,
-        parent_id: Optional[int] = None,
-    ) -> int:
-        sql = '''
-            INSERT INTO nodes (session_id, conversation_id, parent_id, role, content)
-            VALUES (?, ?, ?, ?, ?)
-        '''
-        node_id = self._db.execute(sql, (session_id, conversation_id, parent_id, role, content))
-        self._update_session_updated_at(session_id)
-        self._sync_conversation_message_count(conversation_id)
-        return node_id
-
-    def get_nodes_by_conversation(self, conversation_id: str) -> List[Node]:
-        sql = '''
-            SELECT id, session_id, conversation_id, parent_id, role, content, created_at
-            FROM nodes
-            WHERE conversation_id = ?
-            ORDER BY created_at ASC, id ASC
-        '''
-        rows = self._db.fetch_all(sql, (conversation_id,))
-        return [Node(**dict(row)) for row in rows]
-
-    def get_nodes_by_session(self, session_id: int) -> List[Node]:
-        sql = '''
-            SELECT id, session_id, conversation_id, parent_id, role, content, created_at
-            FROM nodes
-            WHERE session_id = ?
-            ORDER BY created_at ASC
-        '''
-        rows = self._db.fetch_all(sql, (session_id,))
-        return [Node(**dict(row)) for row in rows]
-
-    def update_node_parent(self, node_id: int, new_parent_id: Optional[int]) -> None:
-        sql = 'UPDATE nodes SET parent_id = ? WHERE id = ?'
-        self._db.execute(sql, (new_parent_id, node_id))
-
-        row = self._db.fetch_one('SELECT session_id, conversation_id FROM nodes WHERE id = ?', (node_id,))
-        if row:
-            self._update_session_updated_at(row['session_id'])
-            if row['conversation_id']:
-                self._sync_conversation_message_count(row['conversation_id'])
-
-    def delete_node(self, node_id: int) -> None:
-        row = self._db.fetch_one('SELECT session_id, conversation_id FROM nodes WHERE id = ?', (node_id,))
-
-        sql = 'DELETE FROM nodes WHERE id = ?'
-        self._db.execute(sql, (node_id,))
-
-        if row:
-            self._update_session_updated_at(row['session_id'])
-            if row['conversation_id']:
-                self._sync_conversation_message_count(row['conversation_id'])
-
     def _sync_conversation_message_count(self, conversation_id: str) -> None:
         sql = '''
             UPDATE conversations
             SET message_count = (
-                SELECT COUNT(*) FROM nodes WHERE conversation_id = ?
+                SELECT COUNT(*) FROM messages WHERE conversation_id = ?
             ), updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         '''

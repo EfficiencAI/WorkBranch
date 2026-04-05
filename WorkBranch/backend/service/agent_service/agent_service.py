@@ -160,6 +160,7 @@ class AgentService:
         self,
         conversation_id: str,
         message: str,
+        message_id: str = None,
         stream_callback=None
     ) -> asyncio.Task:
         """
@@ -168,6 +169,7 @@ class AgentService:
         Args:
             conversation_id: 对话ID
             message: 用户消息
+            message_id: 消息ID（由 ConversationService 生成）
             stream_callback: 可选的流式回调函数
             
         Returns:
@@ -185,7 +187,7 @@ class AgentService:
             "message sent to conversation",
             conversation_id=conversation_id,
             workspace_id=conv.workspace_id,
-            extra={"message_length": len(message)},
+            extra={"message_length": len(message), "message_id": message_id},
         )
 
         task = asyncio.create_task(
@@ -193,6 +195,7 @@ class AgentService:
                 conv.workspace_id,
                 message,
                 conversation_id,
+                message_id,
                 stream_callback
             )
         )
@@ -212,6 +215,7 @@ class AgentService:
         workspace_id: str,
         message: str,
         conversation_id: str,
+        message_id: str = None,
         stream_callback=None
     ):
         """
@@ -225,7 +229,8 @@ class AgentService:
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
         
-        message_id = self._generate_id()
+        if message_id is None:
+            message_id = self._generate_id()
         
         with bind_ctx(conversation_id=conversation_id, workspace_id=workspace_id):
             self._log_agent_event(

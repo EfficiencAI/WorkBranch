@@ -1,33 +1,18 @@
-import type {
-  ConversationDetail,
-  ConversationPosition,
-  MessageNode,
-  SessionConversationSummary,
-  SessionDetail,
-  SessionSummary,
-  WorkspaceDetail,
-} from '../../entities'
-import { getClientId } from '../logging/clientId'
-import { del, get, post, put } from './http'
-import { ApiError } from './error'
+import { get, post, put, del } from './http'
+import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 
-function toConversationPosition(payload: Record<string, unknown>): ConversationPosition | null {
-  const rawX = payload.position_x
-  const rawY = payload.position_y
-
-  if (typeof rawX !== 'number' || typeof rawY !== 'number') {
-    return null
+function toConversationPosition(payload: Record<string, unknown>): ConversationNode['position'] {
+  const x = typeof payload.position_x === 'number' ? payload.position_x : undefined
+  const y = typeof payload.position_y === 'number' ? payload.position_y : undefined
+  if (x !== undefined && y !== undefined) {
+    return { x, y }
   }
-
-  return {
-    x: rawX,
-    y: rawY,
-  }
+  return undefined
 }
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {
   return {
-    id: payload.id as string | number,
+    id: Number(payload.id ?? 0),
     title: String(payload.title ?? ''),
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
@@ -77,19 +62,15 @@ function toConversationDetail(payload: Record<string, unknown>): ConversationDet
   }
 }
 
-function toMessageNode(payload: Record<string, unknown>, index: number): MessageNode {
-  const rawId = payload.id
-  const rawConversationId = payload.conversation_id
-  const rawBufferIndex = payload.buffer_index
+function toMessageNode(payload: Record<string, unknown>): MessageNode {
   return {
-    id: rawId === null || rawId === undefined
-      ? `${String(rawConversationId ?? 'conversation')}-buffer-${String(rawBufferIndex ?? index)}`
-      : String(rawId),
-    parentId: payload.parent_id === null || payload.parent_id === undefined ? null : String(payload.parent_id),
-    role: (payload.role as MessageNode['role']) ?? 'assistant',
-    content: String(payload.content ?? ''),
+    id: String(payload.id ?? ''),
+    conversationId: String(payload.conversation_id ?? ''),
+    userContent: String(payload.user_content ?? ''),
+    assistantContent: String(payload.assistant_content ?? ''),
+    status: (payload.status as MessageNode['status']) ?? 'completed',
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
-    status: undefined,
+    updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,
   }
 }
 
@@ -212,7 +193,10 @@ export type CanonicalMessage = {
 }
 
 export type SimpleEvent = {
-  type: 'done' | 'error'
+  type: 'done' | 'error' | 'message_created'
+  message_id?: string
+  conversation_id?: string
+  user_content?: string
   content: string
 }
 
@@ -240,44 +224,57 @@ export async function streamConversationMessage(
     signal: handlers.signal,
   })
 
-  if (!response.ok || !response.body) {
-    throw new ApiError(`请求失败：${response.status}`, { status: response.status })
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`)
   }
 
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder('utf-8')
+  const reader = response.body?.getReader()
+  if (!reader) {
+    throw new Error('No response body')
+  }
+
+  const decoder = new TextDecoder()
   let buffer = ''
 
   while (true) {
-    const { value, done } = await reader.read()
+    const { done, value } = await reader.read()
     if (done) {
       break
     }
 
     buffer += decoder.decode(value, { stream: true })
-    const chunks = buffer.split('\n\n')
-    buffer = chunks.pop() ?? ''
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
 
-    for (const chunk of chunks) {
-      const line = chunk
-        .split('\n')
-        .map((item) => item.trim())
-        .find((item) => item.startsWith('data:'))
-
-      if (!line) {
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed || !trimmed.startsWith('data: ')) {
         continue
       }
 
-      const raw = line.slice(5).trim()
-      if (!raw) {
+      const jsonStr = trimmed.slice(6)
+      if (!jsonStr) {
         continue
       }
 
       try {
-        handlers.onEvent?.(JSON.parse(raw) as ChatStreamEvent)
+        const event = JSON.parse(jsonStr) as ChatStreamEvent
+        handlers.onEvent?.(event)
       } catch {
-        handlers.onEvent?.({ type: 'message', content: raw })
+        console.warn('Failed to parse SSE event:', jsonStr)
       }
     }
   }
+}
+
+function getClientId(): string {
+  if (typeof window !== 'undefined') {
+    let clientId = localStorage.getItem('client_id')
+    if (!clientId) {
+      clientId = `client-${Date.now()}-${Math.random().toString(36).slice(2)}`
+      localStorage.setItem('client_id', clientId)
+    }
+    return clientId
+  }
+  return 'server'
 }

@@ -17,6 +17,7 @@ import type { ChatStreamEvent } from '../../../shared/api'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
+import type { MessageNode } from '../../../entities'
 
 async function loadConversationDetailBundle(conversationId: string): Promise<{
   detail: ConversationDetail
@@ -312,42 +313,47 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
             onEvent?.(event)
-            
+
+            if ('type' in event && event.type === 'message_created') {
+              const newMessage: MessageNode = {
+                id: event.message_id ?? `msg-${conversationId}-${Date.now()}`,
+                conversationId: event.conversation_id ?? conversationId,
+                userContent: event.user_content ?? messageText,
+                assistantContent: '',
+                status: 'streaming',
+              }
+              set(state => ({
+                conversationMessages: [...state.conversationMessages, newMessage]
+              }))
+              return
+            }
+
             if ('content_blocks' in event) {
               for (const block of event.content_blocks) {
                 const isTextContent = block.type === 'text_delta' || block.type === 'thinking_delta' || block.type === 'plan_delta'
-                
+
                 if (isTextContent && block.content) {
                   set(state => {
                     const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                    const isStreaming = lastMessage?.role === 'assistant' && lastMessage.status === 'streaming'
-                    
+                    const isStreaming = lastMessage?.status === 'streaming'
+
                     if (isStreaming) {
                       const updatedMessages = [...state.conversationMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
-                        content: lastMessage.content + block.content
+                        assistantContent: lastMessage.assistantContent + block.content
                       }
                       return { conversationMessages: updatedMessages }
                     }
-                    
-                    return {
-                      conversationMessages: [...state.conversationMessages, {
-                        id: event.message_id || `stream-${conversationId}-${Date.now()}`,
-                        parentId: lastMessage?.id ?? null,
-                        role: 'assistant' as const,
-                        content: block.content,
-                        createdAt: event.timestamp ?? new Date().toISOString(),
-                        status: 'streaming' as const,
-                      }]
-                    }
+
+                    return state
                   })
                 }
-                
+
                 if (block.type === 'done') {
                   set(state => {
                     const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                    if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                    if (lastMessage?.status === 'streaming') {
                       const updatedMessages = [...state.conversationMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
@@ -358,11 +364,11 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                     return state
                   })
                 }
-                
+
                 if (block.type === 'error') {
                   set(state => {
                     const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                    if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                    if (lastMessage?.status === 'streaming') {
                       const updatedMessages = [...state.conversationMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
@@ -372,15 +378,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                     }
                     return state
                   })
-                  
+
                   onStreamError?.(event)
                 }
               }
             } else {
-              if (event.type === 'done') {
+              if ('type' in event && event.type === 'done') {
                 set(state => {
                   const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                  if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                  if (lastMessage?.status === 'streaming') {
                     const updatedMessages = [...state.conversationMessages]
                     updatedMessages[updatedMessages.length - 1] = {
                       ...lastMessage,
@@ -391,11 +397,11 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                   return state
                 })
               }
-              
-              if (event.type === 'error') {
+
+              if ('type' in event && event.type === 'error') {
                 set(state => {
                   const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
-                  if (lastMessage?.role === 'assistant' && lastMessage.status === 'streaming') {
+                  if (lastMessage?.status === 'streaming') {
                     const updatedMessages = [...state.conversationMessages]
                     updatedMessages[updatedMessages.length - 1] = {
                       ...lastMessage,
@@ -405,7 +411,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                   }
                   return state
                 })
-                
+
                 onStreamError?.(event)
               }
             }

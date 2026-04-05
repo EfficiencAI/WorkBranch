@@ -1,4 +1,5 @@
 import asyncio
+import time
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, Callable, Awaitable, List
 from enum import Enum
@@ -71,6 +72,10 @@ class ConversationService:
             self._runtime = get_logging_runtime()
         return self._runtime.get_logger("app")
 
+    def generate_message_id(self, conversation_id: str) -> str:
+        timestamp = int(time.time() * 1000)
+        return f"msg-{conversation_id}-{timestamp}"
+
     async def ensure_conversations_loaded(self, session_id: int) -> None:
         conversations = self._dao.list_conversations_by_session(session_id)
         async with self._lock:
@@ -88,12 +93,6 @@ class ConversationService:
                         message_count=conv.message_count,
                     )
 
-    async def _ensure_buffer_initialized(self, conversation_id: str) -> None:
-        if not self._buffer.has_buffer(conversation_id):
-            persisted = self._dao.get_conversation_by_id(conversation_id)
-            if persisted:
-                await self._buffer.start_buffer(conversation_id, persisted.session_id)
-
     async def create_conversation(
         self,
         session_id: int,
@@ -107,7 +106,6 @@ class ConversationService:
         )
 
         resolved_workspace_id = workspace_id or agent_conv_id
-        await self._buffer.start_buffer(agent_conv_id, session_id)
         self._dao.create_conversation(
             conversation_id=agent_conv_id,
             session_id=session_id,
@@ -145,7 +143,7 @@ class ConversationService:
         conversation_id: str,
         message: str,
         on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
-    ) -> asyncio.Task:
+    ) -> Dict[str, Any]:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
@@ -168,20 +166,22 @@ class ConversationService:
             if conv_info.state == ConversationState.RUNNING:
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-        await self._ensure_buffer_initialized(conversation_id)
-        await self._buffer.add_node(
+        message_id = self.generate_message_id(conversation_id)
+
+        await self._buffer.create_message(
+            message_id=message_id,
             conversation_id=conversation_id,
-            role="user",
-            content=message
+            session_id=conv_info.session_id,
+            user_content=message,
         )
+
         self._write_content_record(
             conversation_id,
             "user_message",
             {
+                "message_id": message_id,
                 "role": "user",
-                "storage": "sqlite_nodes",
                 "content_length": len(message),
-                "state": "buffered",
             },
         )
 
@@ -196,32 +196,37 @@ class ConversationService:
             )
 
         async def wrapped_callback(result: Dict[str, Any]):
-            await self._on_message_complete(conversation_id, result)
+            await self._on_message_complete(conversation_id, message_id, result)
             if on_complete:
                 await on_complete(result)
 
         task = await self._agent.send_message(
             conversation_id=conversation_id,
             message=message,
+            message_id=message_id,
             stream_callback=wrapped_callback
         )
 
         async with self._lock:
             conv_info.task = task
 
-        asyncio.create_task(self._watch_message_task(conversation_id, task))
+        asyncio.create_task(self._watch_message_task(conversation_id, message_id, task))
 
-        return task
+        return {
+            "message_id": message_id,
+            "conversation_id": conversation_id,
+        }
 
     async def _on_message_complete(
         self,
         conversation_id: str,
+        message_id: str,
         result: Dict[str, Any]
     ):
-        await self._buffer.flush(conversation_id)
+        await self._buffer.complete_message(message_id)
 
-        nodes = self._dao.get_nodes_by_conversation(conversation_id)
-        actual_count = len(nodes)
+        messages = self._dao.get_messages_by_conversation(conversation_id)
+        actual_count = len(messages)
 
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
@@ -242,9 +247,12 @@ class ConversationService:
     async def _finalize_message_failure(
         self,
         conversation_id: str,
+        message_id: str,
         state: ConversationState,
         error: Optional[str] = None,
     ) -> None:
+        await self._buffer.fail_message(message_id)
+
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
             if not conv_info:
@@ -280,13 +288,13 @@ class ConversationService:
             {"event": f"conversation.{state.value}", "error": error},
         )
 
-    async def _watch_message_task(self, conversation_id: str, task: asyncio.Task) -> None:
+    async def _watch_message_task(self, conversation_id: str, message_id: str, task: asyncio.Task) -> None:
         try:
             await task
         except asyncio.CancelledError:
-            await self._finalize_message_failure(conversation_id, ConversationState.CANCELLED)
+            await self._finalize_message_failure(conversation_id, message_id, ConversationState.CANCELLED)
         except Exception as exc:
-            await self._finalize_message_failure(conversation_id, ConversationState.FAILED, str(exc))
+            await self._finalize_message_failure(conversation_id, message_id, ConversationState.FAILED, str(exc))
 
     async def end_conversation(self, conversation_id: str) -> int:
         async with self._lock:
@@ -326,9 +334,8 @@ class ConversationService:
                 ended_at=datetime.now().isoformat(),
             )
 
-        await self._buffer.flush(conversation_id)
-        nodes = self._dao.get_nodes_by_conversation(conversation_id)
-        actual_count = len(nodes)
+        messages = self._dao.get_messages_by_conversation(conversation_id)
+        actual_count = len(messages)
         self._dao.update_conversation(conversation_id, message_count=actual_count)
         return actual_count
 
@@ -453,7 +460,7 @@ class ConversationService:
                 del self._conversations[conversation_id]
 
         await self._buffer.clear(conversation_id)
-        self._dao.delete_nodes_by_conversation(conversation_id)
+        self._dao.delete_messages_by_conversation(conversation_id)
         self._dao.delete_conversation(conversation_id)
         deleted = self._agent.delete_conversation(conversation_id)
         if persisted is not None:

@@ -37,7 +37,8 @@ DEFAULT_SETTINGS = {
         "scale": 1.0,
         "show_debug_overlay": False,
         "show_workspace_hud": False,
-        "diagram_double_click_delay_ms": 300
+        "diagram_double_click_delay_ms": 300,
+        "message_send_shortcuts_reversed": False
     },
     "database": {
         "path": "workbranch.db"

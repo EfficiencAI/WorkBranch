@@ -345,17 +345,12 @@ class MessageQueue:
 
     async def _forward_to_buffer(self, message: Message) -> None:
         """将事件转发给 Buffer 消费"""
-        from singleton import get_conversation_buffer, get_conversation_dao
+        from singleton import get_conversation_buffer
         
         buffer = get_conversation_buffer()
         
-        if not buffer.has_buffer(message.conversation_id):
-            dao = get_conversation_dao()
-            persisted = dao.get_conversation_by_id(message.conversation_id)
-            if persisted:
-                await buffer.start_buffer(message.conversation_id, persisted.session_id)
-            else:
-                return
+        if not buffer.has_draft(message.message_id):
+            return
         
         await buffer.consume_message(message)
 

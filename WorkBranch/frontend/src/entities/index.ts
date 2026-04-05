@@ -1,5 +1,5 @@
 export type { ConversationDetail, ConversationId, ConversationNode, ConversationPosition } from './conversation'
-export type { ConversationState, MessageNode, MessageNodeId, MessageNodeRole } from './message-node'
+export type { ConversationState, MessageNode, MessageNodeId, MessageNodeStatus } from './message-node'
 export type {
   NumericSettingMetadata,
   SettingMetadataNode,

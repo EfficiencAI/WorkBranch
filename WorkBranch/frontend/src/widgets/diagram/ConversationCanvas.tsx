@@ -63,134 +63,6 @@ function summarizeConversation(conversation: ConversationNode) {
   return '空对话'
 }
 
-function renderMessageRole(role: MessageNode['role']) {
-  switch (role) {
-    case 'system':
-      return '系统'
-    case 'user':
-      return '用户'
-    case 'assistant':
-      return '助手'
-    case 'tool':
-      return '工具'
-    default:
-      return role
-  }
-}
-
-const NODE_WIDTH = 320
-const MIN_HORIZONTAL_GAP = 60
-const VERTICAL_GAP = 240
-
-export function buildTreeLayout(conversationNodes: ConversationNode[]) {
-  if (conversationNodes.length === 0) {
-    return new Map<string, { x: number; y: number }>()
-  }
-
-  const childMap = new Map<string | null, ConversationNode[]>()
-  const nodeDepth = new Map<string, number>()
-  const subtreeWidth = new Map<string, number>()
-
-  for (const conversation of conversationNodes) {
-    const key = conversation.parentConversationId ?? null
-    const siblings = childMap.get(key) ?? []
-    siblings.push(conversation)
-    childMap.set(key, siblings)
-  }
-
-  for (const siblings of childMap.values()) {
-    siblings.sort(
-      (left, right) =>
-        (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
-    )
-  }
-
-  let maxDepth = 0
-  const queue: Array<{ id: string; depth: number }> = []
-  const roots = childMap.get(null) ?? []
-  for (const root of roots) {
-    queue.push({ id: root.conversationId, depth: 0 })
-  }
-
-  while (queue.length > 0) {
-    const { id, depth } = queue.shift()!
-    nodeDepth.set(id, depth)
-    maxDepth = Math.max(maxDepth, depth)
-    const children = childMap.get(id) ?? []
-    for (const child of children) {
-      queue.push({ id: child.conversationId, depth: depth + 1 })
-    }
-  }
-
-  for (const conversation of conversationNodes) {
-    if (!nodeDepth.has(conversation.conversationId)) {
-      nodeDepth.set(conversation.conversationId, maxDepth + 1)
-      maxDepth = Math.max(maxDepth, maxDepth + 1)
-    }
-  }
-
-  for (let depth = maxDepth; depth >= 0; depth--) {
-    const nodesAtDepth = conversationNodes.filter((n) => nodeDepth.get(n.conversationId) === depth)
-    for (const node of nodesAtDepth) {
-      const children = childMap.get(node.conversationId) ?? []
-      if (children.length === 0) {
-        subtreeWidth.set(node.conversationId, NODE_WIDTH)
-      } else {
-        let totalWidth = 0
-        for (const child of children) {
-          totalWidth += subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
-        }
-        totalWidth += (children.length - 1) * MIN_HORIZONTAL_GAP
-        subtreeWidth.set(node.conversationId, totalWidth)
-      }
-    }
-  }
-
-  const positions = new Map<string, { x: number; y: number }>()
-
-  function layoutNode(nodeId: string, x: number, depth: number) {
-    positions.set(nodeId, { x, y: depth * VERTICAL_GAP })
-
-    const children = childMap.get(nodeId) ?? []
-    if (children.length === 0) return
-
-    let currentX = x - (subtreeWidth.get(nodeId) ?? NODE_WIDTH) / 2
-    for (const child of children) {
-      const childWidth = subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
-      const childX = currentX + childWidth / 2
-      layoutNode(child.conversationId, childX, depth + 1)
-      currentX += childWidth + MIN_HORIZONTAL_GAP
-    }
-  }
-
-  const sortedRoots = roots.sort(
-    (left, right) =>
-      (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
-  )
-
-  let currentRootX = 0
-  for (const root of sortedRoots) {
-    const rootWidth = subtreeWidth.get(root.conversationId) ?? NODE_WIDTH
-    const rootX = currentRootX + rootWidth / 2
-    layoutNode(root.conversationId, rootX, 0)
-    currentRootX += rootWidth + MIN_HORIZONTAL_GAP
-  }
-
-  let minX = Infinity
-  for (const pos of positions.values()) {
-    minX = Math.min(minX, pos.x - NODE_WIDTH / 2)
-  }
-
-  if (minX < 0) {
-    const offsetX = -minX
-    for (const [id, pos] of positions) {
-      positions.set(id, { x: pos.x + offsetX, y: pos.y })
-    }
-  }
-
-  return positions
-}
-
 function stopEvent(event: React.SyntheticEvent) {
   event.stopPropagation()
 }
@@ -228,19 +100,36 @@ function renderMessageList(
         <div className={messagesClassName} onWheelCapture={stopWheelEvent}>
           <Space direction="vertical" size={8} style={{ width: '100%' }}>
             {conversationMessages.map((message) => (
-              <Card key={message.id} size="small" className="conversation-node__message-card">
-                <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                  <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
-                    <Typography.Text strong>{renderMessageRole(message.role)}</Typography.Text>
-                    <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
-                  </Space>
-                  <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
-                    {message.content}
-                    {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
-                    {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
-                  </Typography.Paragraph>
-                </Space>
-              </Card>
+              <Space direction="vertical" size={8} key={message.id} style={{ width: '100%' }}>
+                {message.userContent ? (
+                  <Card size="small" className="conversation-node__message-card conversation-node__message-card--user">
+                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                      <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                        <Typography.Text strong>用户</Typography.Text>
+                        <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
+                      </Space>
+                      <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
+                        {message.userContent}
+                      </Typography.Paragraph>
+                    </Space>
+                  </Card>
+                ) : null}
+                {message.assistantContent || message.status === 'streaming' ? (
+                  <Card size="small" className="conversation-node__message-card conversation-node__message-card--assistant">
+                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                      <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
+                        <Typography.Text strong>助手</Typography.Text>
+                        <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text>
+                      </Space>
+                      <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
+                        {message.assistantContent}
+                        {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
+                        {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
+                      </Typography.Paragraph>
+                    </Space>
+                  </Card>
+                ) : null}
+              </Space>
             ))}
           </Space>
         </div>
@@ -446,6 +335,119 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
 const nodeTypes = {
   conversation: FlowConversationNode,
 } as const
+
+const NODE_WIDTH = 320
+const MIN_HORIZONTAL_GAP = 60
+const VERTICAL_GAP = 240
+
+export function buildTreeLayout(conversationNodes: ConversationNode[]) {
+  if (conversationNodes.length === 0) {
+    return new Map<string, { x: number; y: number }>()
+  }
+
+  const childMap = new Map<string | null, ConversationNode[]>()
+  const nodeDepth = new Map<string, number>()
+  const subtreeWidth = new Map<string, number>()
+
+  for (const conversation of conversationNodes) {
+    const key = conversation.parentConversationId ?? null
+    const siblings = childMap.get(key) ?? []
+    siblings.push(conversation)
+    childMap.set(key, siblings)
+  }
+
+  for (const siblings of childMap.values()) {
+    siblings.sort(
+      (left, right) =>
+        (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
+    )
+  }
+
+  let maxDepth = 0
+  const queue: Array<{ id: string; depth: number }> = []
+  const roots = childMap.get(null) ?? []
+  for (const root of roots) {
+    queue.push({ id: root.conversationId, depth: 0 })
+  }
+
+  while (queue.length > 0) {
+    const { id, depth } = queue.shift()!
+    nodeDepth.set(id, depth)
+    maxDepth = Math.max(maxDepth, depth)
+    const children = childMap.get(id) ?? []
+    for (const child of children) {
+      queue.push({ id: child.conversationId, depth: depth + 1 })
+    }
+  }
+
+  for (const conversation of conversationNodes) {
+    if (!nodeDepth.has(conversation.conversationId)) {
+      nodeDepth.set(conversation.conversationId, maxDepth + 1)
+      maxDepth = Math.max(maxDepth, maxDepth + 1)
+    }
+  }
+
+  for (let depth = maxDepth; depth >= 0; depth--) {
+    const nodesAtDepth = conversationNodes.filter((n) => nodeDepth.get(n.conversationId) === depth)
+    for (const node of nodesAtDepth) {
+      const children = childMap.get(node.conversationId) ?? []
+      if (children.length === 0) {
+        subtreeWidth.set(node.conversationId, NODE_WIDTH)
+      } else {
+        let totalWidth = 0
+        for (const child of children) {
+          totalWidth += subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
+        }
+        totalWidth += (children.length - 1) * MIN_HORIZONTAL_GAP
+        subtreeWidth.set(node.conversationId, totalWidth)
+      }
+    }
+  }
+
+  const positions = new Map<string, { x: number; y: number }>()
+
+  function layoutNode(nodeId: string, x: number, depth: number) {
+    positions.set(nodeId, { x, y: depth * VERTICAL_GAP })
+
+    const children = childMap.get(nodeId) ?? []
+    if (children.length === 0) return
+
+    let currentX = x - (subtreeWidth.get(nodeId) ?? NODE_WIDTH) / 2
+    for (const child of children) {
+      const childWidth = subtreeWidth.get(child.conversationId) ?? NODE_WIDTH
+      const childX = currentX + childWidth / 2
+      layoutNode(child.conversationId, childX, depth + 1)
+      currentX += childWidth + MIN_HORIZONTAL_GAP
+    }
+  }
+
+  const sortedRoots = roots.sort(
+    (left, right) =>
+      (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
+  )
+
+  let currentRootX = 0
+  for (const root of sortedRoots) {
+    const rootWidth = subtreeWidth.get(root.conversationId) ?? NODE_WIDTH
+    const rootX = currentRootX + rootWidth / 2
+    layoutNode(root.conversationId, rootX, 0)
+    currentRootX += rootWidth + MIN_HORIZONTAL_GAP
+  }
+
+  let minX = Infinity
+  for (const pos of positions.values()) {
+    minX = Math.min(minX, pos.x - NODE_WIDTH / 2)
+  }
+
+  if (minX < 0) {
+    const offsetX = -minX
+    for (const [id, pos] of positions) {
+      positions.set(id, { x: pos.x + offsetX, y: pos.y })
+    }
+  }
+
+  return positions
+}
 
 function FlowViewport({
   currentSessionId,

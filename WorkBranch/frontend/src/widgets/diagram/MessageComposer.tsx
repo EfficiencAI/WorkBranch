@@ -1,5 +1,7 @@
 import { Button, Input, Space, Typography } from 'antd'
 import { useEffect, useState } from 'react'
+import type { KeyboardEvent } from 'react'
+import { useSettings } from '../../app/settings'
 
 type MessageComposerProps = {
   selectedConversationId: string | null
@@ -18,8 +20,13 @@ export function MessageComposer({
   onSend,
   onStop,
 }: MessageComposerProps) {
+  const { settings } = useSettings()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  const messageSendShortcutsReversed =
+    settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
+      ? settings.ui.message_send_shortcuts_reversed === true
+      : false
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -29,12 +36,26 @@ export function MessageComposer({
 
   async function handleSend() {
     const nextMessage = message.trim()
-    if (!nextMessage || sending) {
+    if (!nextMessage || sending || (!selectedConversationId && !allowCreateOnSend)) {
       return
     }
 
-    await onSend(nextMessage)
     setMessage('')
+    await onSend(nextMessage)
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== 'Enter' || event.nativeEvent.isComposing) {
+      return
+    }
+
+    const shouldSend = messageSendShortcutsReversed ? event.shiftKey : !event.shiftKey
+    if (!shouldSend) {
+      return
+    }
+
+    event.preventDefault()
+    void handleSend()
   }
 
   if (collapsed) {
@@ -57,6 +78,7 @@ export function MessageComposer({
           rows={3}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
         />
 

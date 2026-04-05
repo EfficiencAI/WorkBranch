@@ -103,16 +103,16 @@ class SessionService:
             if self._conversation_service.is_conversation_running(conversation_id):
                 raise RuntimeError(f"Conversation {conversation_id} is already running")
 
-        task = await self._conversation_service.send_user_message(
+        result = await self._conversation_service.send_user_message(
             conversation_id=conversation_id,
             message=message,
             on_complete=on_complete,
         )
 
         return {
-            "conversation_id": conversation_id,
+            "message_id": result["message_id"],
+            "conversation_id": result["conversation_id"],
             "session_id": conversation.session_id,
-            "task": task,
         }
 
     async def end_conversation(self, conversation_id: str) -> int:
@@ -176,18 +176,13 @@ class SessionService:
     async def list_conversation_summaries(self, session_id: int) -> List[Dict[str, Any]]:
         await self._conversation_service.ensure_conversations_loaded(session_id)
         conversations = self._dao.list_conversations_by_session(session_id)
-        buffered_conversations = {
-            item["conversation_id"]: item["node_count"]
-            for item in await self._conversation_buffer.get_active_conversations()
-            if item["session_id"] == session_id
-        }
         return [
             {
                 "conversation_id": conversation.id,
                 "parent_conversation_id": conversation.parent_conversation_id,
                 "title": conversation.title,
                 "state": conversation.state,
-                "message_count": len(self._dao.get_nodes_by_conversation(conversation.id)) + buffered_conversations.get(conversation.id, 0),
+                "message_count": conversation.message_count,
                 "created_at": conversation.created_at,
                 "updated_at": conversation.updated_at,
                 "position_x": conversation.position_x,
@@ -196,7 +191,6 @@ class SessionService:
             for conversation in conversations
         ]
 
-
     async def get_conversation_detail(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         persisted = self._dao.get_conversation_by_id(conversation_id)
         runtime = self._conversation_service.get_state(conversation_id)
@@ -204,9 +198,8 @@ class SessionService:
         if not persisted and not runtime:
             return None
 
-        buffered_nodes = await self._conversation_buffer.get_buffered_nodes(conversation_id)
-        persisted_message_count = len(self._dao.get_nodes_by_conversation(conversation_id)) if persisted else 0
-        actual_message_count = persisted_message_count + len(buffered_nodes)
+        messages = self._dao.get_messages_by_conversation(conversation_id)
+        actual_message_count = len(messages)
 
         if persisted:
             detail = {
@@ -256,35 +249,17 @@ class SessionService:
         return detail
 
     async def get_conversation_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
-        # Business message history comes from SQLite nodes plus in-memory ConversationBuffer.
-        # It is intentionally not reconstructed from MQ transcripts or conversation-content logs.
-        persisted_nodes = self._dao.get_nodes_by_conversation(conversation_id)
-        result = [
+        messages = self._dao.get_messages_by_conversation(conversation_id)
+        return [
             {
-                "id": node.id,
-                "session_id": node.session_id,
-                "conversation_id": node.conversation_id,
-                "parent_id": node.parent_id,
-                "role": node.role,
-                "content": node.content,
-                "created_at": node.created_at,
+                "id": msg.id,
+                "conversation_id": msg.conversation_id,
+                "session_id": msg.session_id,
+                "user_content": msg.user_content,
+                "assistant_content": msg.assistant_content,
+                "status": msg.status,
+                "created_at": msg.created_at,
+                "updated_at": msg.updated_at,
             }
-            for node in persisted_nodes
+            for msg in messages
         ]
-
-        buffered_nodes = await self._conversation_buffer.get_buffered_nodes(conversation_id)
-        if buffered_nodes:
-            session_id = await self._conversation_buffer.get_session_id(conversation_id)
-            for index, node in enumerate(buffered_nodes):
-                result.append({
-                    "id": None,
-                    "session_id": session_id,
-                    "conversation_id": conversation_id,
-                    "parent_id": node.parent_id,
-                    "role": node.role,
-                    "content": node.content,
-                    "created_at": node.created_at.isoformat(),
-                    "buffer_index": index,
-                })
-
-        return result

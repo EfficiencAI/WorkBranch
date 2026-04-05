@@ -39,8 +39,6 @@ async def get_conversation_messages(
     conversation_id: str,
     service: SessionService = Depends(get_session_service),
 ) -> Result:
-    # This endpoint returns business conversation history from session storage,
-    # not transport transcripts under .temp/conversations or conversation-content logs.
     conversation = await service.get_conversation_detail(conversation_id)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -65,6 +63,7 @@ async def send_conversation_message(
             conversation_id=conversation_id,
             message=body.message,
         )
+        message_id = result["message_id"]
         target_conversation_id = result["conversation_id"]
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -89,8 +88,11 @@ async def send_conversation_message(
             logger.info(
                 event="stream.started",
                 msg="conversation stream started",
-                extra={"conversation_id": target_conversation_id},
+                extra={"conversation_id": target_conversation_id, "message_id": message_id},
             )
+
+            yield f"data: {json.dumps({'type': 'message_created', 'message_id': message_id, 'conversation_id': target_conversation_id, 'user_content': body.message}, ensure_ascii=False)}\n\n"
+
             try:
                 await mq.start_consumer()
                 subscriber = mq.subscribe(target_conversation_id)
@@ -103,6 +105,7 @@ async def send_conversation_message(
                         )
 
                         event_data = message.to_dict()
+                        event_data["message_id"] = message_id
 
                         if not first_chunk_logged:
                             logger.info(
@@ -110,6 +113,7 @@ async def send_conversation_message(
                                 msg="conversation stream first chunk sent",
                                 extra={
                                     "conversation_id": target_conversation_id,
+                                    "message_id": message_id,
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                                 },
                             )
@@ -127,6 +131,7 @@ async def send_conversation_message(
                                 msg="conversation stream completed",
                                 extra={
                                     "conversation_id": target_conversation_id,
+                                    "message_id": message_id,
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                                 },
                             )
@@ -150,10 +155,11 @@ async def send_conversation_message(
                                 msg="conversation stream completed from state",
                                 extra={
                                     "conversation_id": target_conversation_id,
+                                    "message_id": message_id,
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                                 },
                             )
-                            yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'done', 'message_id': message_id, 'content': ''}, ensure_ascii=False)}\n\n"
                         elif state == "failed":
                             done_received = True
                             error_message = current.get("error") or state
@@ -162,12 +168,13 @@ async def send_conversation_message(
                                 msg="conversation stream failed from state",
                                 extra={
                                     "conversation_id": target_conversation_id,
+                                    "message_id": message_id,
                                     "reason": "conversation_failed",
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                                     "conversation_error": error_message,
                                 },
                             )
-                            yield f"data: {json.dumps({'type': 'error', 'content': error_message}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'error', 'message_id': message_id, 'content': error_message}, ensure_ascii=False)}\n\n"
                         elif state == "cancelled":
                             done_received = True
                             logger.error(
@@ -175,11 +182,12 @@ async def send_conversation_message(
                                 msg="conversation stream cancelled from state",
                                 extra={
                                     "conversation_id": target_conversation_id,
+                                    "message_id": message_id,
                                     "reason": "conversation_cancelled",
                                     "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                                 },
                             )
-                            yield f"data: {json.dumps({'type': 'error', 'content': state}, ensure_ascii=False)}\n\n"
+                            yield f"data: {json.dumps({'type': 'error', 'message_id': message_id, 'content': state}, ensure_ascii=False)}\n\n"
 
                 if not done_received:
                     logger.error(
@@ -187,11 +195,12 @@ async def send_conversation_message(
                         msg="conversation stream timed out",
                         extra={
                             "conversation_id": target_conversation_id,
+                            "message_id": message_id,
                             "reason": "timeout",
                             "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                         },
                     )
-                    yield f"data: {json.dumps({'type': 'error', 'content': 'Timeout'}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'error', 'message_id': message_id, 'content': 'Timeout'}, ensure_ascii=False)}\n\n"
 
             except Exception as e:
                 logger.error(
@@ -199,12 +208,13 @@ async def send_conversation_message(
                     msg="conversation stream raised exception",
                     extra={
                         "conversation_id": target_conversation_id,
+                        "message_id": message_id,
                         "reason": "exception",
                         "latency_ms": round((time.perf_counter() - stream_start) * 1000),
                     },
                     exception="".join(traceback.format_exception(type(e), e, e.__traceback__)),
                 )
-                yield f"data: {json.dumps({'type': 'error', 'content': str(e)}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message_id': message_id, 'content': str(e)}, ensure_ascii=False)}\n\n"
             finally:
                 if subscriber is not None:
                     mq.unsubscribe(target_conversation_id, subscriber)
