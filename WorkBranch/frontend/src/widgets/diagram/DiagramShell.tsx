@@ -245,6 +245,11 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
     [cancelStreamingConversation, cascadeDeleteConversationFromSession, conversationNodes, deleteConversationFromSession, streamingConversationId],
   )
 
+  const singleMessagePerNode =
+    settings?.conversation && typeof settings.conversation === 'object' && 'single_message_per_node' in settings.conversation
+      ? settings.conversation.single_message_per_node === true
+      : true
+
   const handleSendMessage = useCallback(
     async (message: string) => {
       try {
@@ -267,6 +272,24 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           }
         }
 
+        const targetConversation = conversationNodes.find((node) => node.conversationId === targetConversationId)
+        const targetMessageCount = targetConversation?.messageCount ?? 0
+
+        if (singleMessagePerNode && targetMessageCount >= 1) {
+          const childConversationId = await ensureConversationForCurrentSession({ parentConversationId: targetConversationId })
+          if (!childConversationId) {
+            return
+          }
+
+          if (selectedSessionId) {
+            const detail = await loadSessionDetail(selectedSessionId)
+            await enterSessionContext(detail)
+          }
+
+          useTreeStore.getState().setLockedSendConversationId(childConversationId)
+          targetConversationId = childConversationId
+        }
+
         await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, {
           onStreamError(event) {
             if (event.content) {
@@ -278,7 +301,18 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
         onRequestError(caughtError)
       }
     },
-    [ensureConversationForCurrentSession, enterSessionContext, loadSessionDetail, onRequestError, onSendError, selectedSessionId, sendTargetConversationId, sessionDetail],
+    [
+      ensureConversationForCurrentSession,
+      enterSessionContext,
+      loadSessionDetail,
+      onRequestError,
+      onSendError,
+      selectedSessionId,
+      sendTargetConversationId,
+      sessionDetail,
+      conversationNodes,
+      singleMessagePerNode,
+    ],
   )
 
   const handleStopMessage = useCallback(async () => {

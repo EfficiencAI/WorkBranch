@@ -60,6 +60,9 @@ DEFAULT_SETTINGS = {
         "memory_mode": "accumulate",
         "memory_window_size": 3
     },
+    "conversation": {
+        "single_message_per_node": True
+    },
     "logging": {
         "enabled": True,
         "level": "INFO",
