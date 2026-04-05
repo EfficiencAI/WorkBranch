@@ -1,4 +1,5 @@
 import { Button, Input, Space, Tooltip, Typography } from 'antd'
+import { SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
@@ -98,10 +99,15 @@ export function MessageComposer({
             <Button size="small" onClick={() => setCollapsed(true)}>
               折叠
             </Button>
-            <Button disabled={!sending} onClick={() => void onStop?.()}>
-              停止
-            </Button>
-            {focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
+            {sending ? (
+              <Button
+                danger
+                icon={<StopOutlined />}
+                onClick={() => void onStop?.()}
+              >
+                停止
+              </Button>
+            ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
               <Tooltip
                 title={
                   <Space direction="vertical" size={4}>
@@ -125,8 +131,8 @@ export function MessageComposer({
                 <span>
                   <Button
                     type="primary"
-                    loading={sending}
-                    disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)}
+                    icon={<SendOutlined />}
+                    disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
                     onClick={() => void handleSend()}
                   >
                     发送
@@ -136,8 +142,8 @@ export function MessageComposer({
             ) : (
               <Button
                 type="primary"
-                loading={sending}
-                disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)}
+                icon={<SendOutlined />}
+                disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
                 onClick={() => void handleSend()}
               >
                 发送
