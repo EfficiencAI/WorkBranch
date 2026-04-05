@@ -477,6 +477,7 @@ function FlowViewport({
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setHalfPreviewConversationId = useTreeStore((state) => state.setHalfPreviewConversationId)
   const clearHalfPreviewConversationId = useTreeStore((state) => state.clearHalfPreviewConversationId)
+  const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
   const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
@@ -871,10 +872,13 @@ function FlowViewport({
             <MessageComposer
               selectedConversationId={selectedConversation?.conversationId ?? null}
               selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
+              focusedConversationId={focusedConversation?.conversationId ?? null}
+              focusedConversationLabel={focusedConversation ? summarizeConversation(focusedConversation) : null}
               sending={sending}
               allowCreateOnSend={canCreateConversationOnSend}
               onSend={onSendMessage}
               onStop={onStopMessage}
+              onSwitchToSendTarget={setLockedSendConversationId}
             />
           </Card>
         </div>

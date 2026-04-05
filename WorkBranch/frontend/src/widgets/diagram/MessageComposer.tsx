@@ -1,4 +1,4 @@
-import { Button, Input, Space, Typography } from 'antd'
+import { Button, Input, Space, Tooltip, Typography } from 'antd'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
@@ -6,19 +6,25 @@ import { useSettings } from '../../app/settings'
 type MessageComposerProps = {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
+  focusedConversationId: string | null
+  focusedConversationLabel: string | null
   sending: boolean
   allowCreateOnSend?: boolean
   onSend: (message: string) => Promise<void>
   onStop?: () => Promise<void> | void
+  onSwitchToSendTarget?: (conversationId: string) => void
 }
 
 export function MessageComposer({
   selectedConversationId,
   selectedConversationLabel,
+  focusedConversationId,
+  focusedConversationLabel,
   sending,
   allowCreateOnSend = false,
   onSend,
   onStop,
+  onSwitchToSendTarget,
 }: MessageComposerProps) {
   const { settings } = useSettings()
   const [message, setMessage] = useState('')
@@ -95,9 +101,48 @@ export function MessageComposer({
             <Button disabled={!sending} onClick={() => void onStop?.()}>
               停止
             </Button>
-            <Button type="primary" loading={sending} disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)} onClick={() => void handleSend()}>
-              发送
-            </Button>
+            {focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
+              <Tooltip
+                title={
+                  <Space direction="vertical" size={4}>
+                    <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
+                    <Typography.Text type="secondary">
+                      发送目标: {selectedConversationLabel ?? selectedConversationId}
+                    </Typography.Text>
+                    <Typography.Text type="secondary">
+                      聚焦节点: {focusedConversationLabel ?? focusedConversationId}
+                    </Typography.Text>
+                    <Button
+                      size="small"
+                      type="primary"
+                      onClick={() => onSwitchToSendTarget(focusedConversationId)}
+                    >
+                      切换到聚焦节点
+                    </Button>
+                  </Space>
+                }
+              >
+                <span>
+                  <Button
+                    type="primary"
+                    loading={sending}
+                    disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)}
+                    onClick={() => void handleSend()}
+                  >
+                    发送
+                  </Button>
+                </span>
+              </Tooltip>
+            ) : (
+              <Button
+                type="primary"
+                loading={sending}
+                disabled={!message.trim() || sending || (!selectedConversationId && !allowCreateOnSend)}
+                onClick={() => void handleSend()}
+              >
+                发送
+              </Button>
+            )}
           </Space>
         </div>
       </Space>
