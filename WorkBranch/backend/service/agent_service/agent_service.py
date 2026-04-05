@@ -161,7 +161,9 @@ class AgentService:
         conversation_id: str,
         message: str,
         message_id: str = None,
-        stream_callback=None
+        stream_callback=None,
+        parent_chain_messages: List[Dict] = None,
+        current_conversation_messages: List[Dict] = None
     ) -> asyncio.Task:
         """
         异步发送消息 - 立即返回 Task，不阻塞
@@ -171,6 +173,8 @@ class AgentService:
             message: 用户消息
             message_id: 消息ID（由 ConversationService 生成）
             stream_callback: 可选的流式回调函数
+            parent_chain_messages: 父节点链的历史对话
+            current_conversation_messages: 当前对话内的历史内容
             
         Returns:
             asyncio.Task 对象
@@ -187,7 +191,7 @@ class AgentService:
             "message sent to conversation",
             conversation_id=conversation_id,
             workspace_id=conv.workspace_id,
-            extra={"message_length": len(message), "message_id": message_id},
+            extra={"message_length": len(message), "message_id": message_id, "context_enabled": bool(parent_chain_messages or current_conversation_messages)},
         )
 
         task = asyncio.create_task(
@@ -196,7 +200,9 @@ class AgentService:
                 message,
                 conversation_id,
                 message_id,
-                stream_callback
+                stream_callback,
+                parent_chain_messages or [],
+                current_conversation_messages or []
             )
         )
         
@@ -216,7 +222,9 @@ class AgentService:
         message: str,
         conversation_id: str,
         message_id: str = None,
-        stream_callback=None
+        stream_callback=None,
+        parent_chain_messages: List[Dict] = None,
+        current_conversation_messages: List[Dict] = None
     ):
         """
         异步执行 Agent（将同步 run_graph 包装为异步）
@@ -239,7 +247,7 @@ class AgentService:
                 "agent run started",
                 conversation_id=conversation_id,
                 workspace_id=workspace_id,
-                extra={"session_id": session_id, "message_id": message_id},
+                extra={"session_id": session_id, "message_id": message_id, "parent_chain_count": len(parent_chain_messages) if parent_chain_messages else 0, "current_conv_count": len(current_conversation_messages) if current_conversation_messages else 0},
             )
 
             text_started = False
@@ -306,7 +314,9 @@ class AgentService:
                     memory_mode,
                     window_size,
                     settings,
-                    message_context=message_context
+                    message_context=message_context,
+                    parent_chain_messages=parent_chain_messages,
+                    current_conversation_messages=current_conversation_messages
                 )
 
             loop = asyncio.get_event_loop()

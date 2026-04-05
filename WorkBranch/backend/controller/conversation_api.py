@@ -21,6 +21,7 @@ STREAM_MAX_TIMEOUT_TICKS = 300
 
 class SendConversationMessageBody(BaseModel):
     message: str
+    enable_context: bool = False
 
 
 @router.get("/{conversation_id}")
@@ -47,6 +48,19 @@ async def get_conversation_messages(
     return Result.success(data=messages)
 
 
+@router.get("/{conversation_id}/context-info")
+async def get_conversation_context_info(
+    conversation_id: str,
+    service: SessionService = Depends(get_session_service),
+) -> Result:
+    conversation = await service.get_conversation_detail(conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    context_info = await service.get_context_info(conversation_id)
+    return Result.success(data=context_info)
+
+
 @router.post("/{conversation_id}/messages")
 async def send_conversation_message(
     conversation_id: str,
@@ -62,6 +76,7 @@ async def send_conversation_message(
         result = await service.send_message_to_conversation(
             conversation_id=conversation_id,
             message=body.message,
+            enable_context=body.enable_context,
         )
         message_id = result["message_id"]
         target_conversation_id = result["conversation_id"]

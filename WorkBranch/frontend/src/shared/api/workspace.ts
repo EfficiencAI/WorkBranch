@@ -208,7 +208,7 @@ export async function cancelConversation(conversationId: string) {
 
 export async function streamConversationMessage(
   conversationId: string,
-  body: { message: string },
+  body: { message: string; enable_context?: boolean },
   handlers: {
     onEvent?: (event: ChatStreamEvent) => void
     signal?: AbortSignal

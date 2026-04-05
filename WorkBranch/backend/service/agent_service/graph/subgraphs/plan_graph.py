@@ -183,6 +183,59 @@ def _phase_stop(send_message):
     _send_plan_end(send_message)
 
 
+def _format_parent_chain_block(parent_chain_messages: List[dict]) -> str:
+    """将父节点链消息格式化为历史对话记录版块"""
+    if not parent_chain_messages:
+        return ""
+    
+    lines = ["## 历史对话记录", ""]
+    lines.append("以下是之前对话分支的历史记录，供参考：")
+    lines.append("")
+    
+    for msg in parent_chain_messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        role_label = "用户" if role == "user" else "助手" if role == "assistant" else role
+        lines.append(f"**{role_label}**: {content}")
+    
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
+def _format_current_conversation_block(current_conversation_messages: List[dict]) -> str:
+    """将当前对话内的历史消息格式化为版块"""
+    if not current_conversation_messages:
+        return ""
+    
+    lines = ["## 当前对话内历史内容", ""]
+    lines.append("以下是当前对话内之前的交互记录：")
+    lines.append("")
+    
+    for msg in current_conversation_messages:
+        role = msg.get("role", "unknown")
+        content = msg.get("content", "")
+        role_label = "用户" if role == "user" else "助手" if role == "assistant" else role
+        lines.append(f"**{role_label}**: {content}")
+    
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+    
+    return "\n".join(lines)
+
+
+def _format_current_question(user_message: str) -> str:
+    """格式化当前用户问题"""
+    return f"""## 当前用户问题
+
+**用户**: {user_message}
+
+"""
+
+
 def phase1_understand(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """Phase 1: 理解需求 - 调用 LLM 分析用户意图"""
     send_message = message_context.get("send_message") if message_context else None
@@ -191,6 +244,14 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
     _log(send_message, "## Phase 1: 理解需求")
     
     user_message = state["messages"][-1] if state["messages"] else ""
+    parent_chain_messages = state.get("parent_chain_messages", [])
+    current_conversation_messages = state.get("current_conversation_messages", [])
+    
+    if parent_chain_messages:
+        _log(send_message, f"**历史对话记录**: {len(parent_chain_messages)} 条消息")
+    if current_conversation_messages:
+        _log(send_message, f"**当前对话内历史**: {len(current_conversation_messages)} 条消息")
+    
     _log(send_message, f"**用户输入**: {user_message}")
     
     if llm_service is None:
@@ -207,7 +268,10 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
         try:
             _log(send_message, "正在分析用户意图...")
             
-            prompt = f"请分析以下用户输入的意图：\n\n{user_message}"
+            parent_chain_block = _format_parent_chain_block(parent_chain_messages)
+            current_conv_block = _format_current_conversation_block(current_conversation_messages)
+            current_question_block = _format_current_question(user_message)
+            prompt = f"{parent_chain_block}{current_conv_block}{current_question_block}请分析以上用户当前问题的意图。"
             messages = [{"role": "user", "content": prompt}]
             
             _send_thinking_start(send_message, {"phase": "understand"})
@@ -258,8 +322,15 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
     user_message = state["messages"][-1] if state["messages"] else ""
     agent_type = state.get("agent_type", "build_agent")
     intent_analysis = state.get("intent_analysis")
+    parent_chain_messages = state.get("parent_chain_messages", [])
+    current_conversation_messages = state.get("current_conversation_messages", [])
     
     _log(send_message, f"**Agent 类型**: `{agent_type}`")
+    
+    if parent_chain_messages:
+        _log(send_message, f"**历史对话记录**: {len(parent_chain_messages)} 条消息")
+    if current_conversation_messages:
+        _log(send_message, f"**当前对话内历史**: {len(current_conversation_messages)} 条消息")
     
     if intent_analysis:
         _log(send_message, "**基于意图分析结果生成计划**:")
@@ -292,11 +363,10 @@ def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[
 - 复杂度: {intent_analysis.get('complexity', 'medium')}
 """
             
-            prompt = f"""请根据以下用户需求生成执行计划：
-
-用户需求: {user_message}
-{intent_context}
-请生成一个包含 2-5 个任务的执行计划，严格按照 JSON 格式输出。"""
+            context_block = _format_parent_chain_block(parent_chain_messages)
+            current_conv_block = _format_current_conversation_block(current_conversation_messages)
+            current_question_block = _format_current_question(user_message)
+            prompt = f"""{context_block}{current_conv_block}{current_question_block}{intent_context}请根据以上用户当前问题生成执行计划，包含 2-5 个任务，严格按照 JSON 格式输出。"""
             
             messages = [{"role": "user", "content": prompt}]
             

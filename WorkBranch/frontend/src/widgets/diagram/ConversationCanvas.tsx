@@ -25,7 +25,7 @@ type ConversationCanvasProps = {
   messagesError: string | null
   sending: boolean
   canCreateConversationOnSend: boolean
-  onSendMessage: (message: string) => Promise<void>
+  onSendMessage: (message: string, enableContext: boolean) => Promise<void>
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>

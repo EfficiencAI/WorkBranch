@@ -60,3 +60,5 @@ class AgentState(TypedDict):
     replan_count: int
     agent_type: Optional[str]
     intent_analysis: Optional[IntentAnalysis]
+    parent_chain_messages: Optional[List[dict]]
+    current_conversation_messages: Optional[List[dict]]

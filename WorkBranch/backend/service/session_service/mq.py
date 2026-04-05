@@ -150,7 +150,6 @@ class MessageQueue:
                 target="async_queue",
                 error="queue_full",
             )
-            print(f"[MQ] 队列已满 (max_size={self._max_size})，消息被丢弃: {message.content[:50]}...")
             return False
 
     async def publish_batch(self, messages: list[Message]) -> int:
@@ -202,7 +201,6 @@ class MessageQueue:
                 target="sync_queue",
                 error="queue_full",
             )
-            print(f"[MQ] 同步队列已满，消息被丢弃: {message.content[:50]}...")
             return False
 
     def _start_sync_bridge(self) -> None:
@@ -221,7 +219,6 @@ class MessageQueue:
             daemon=True
         )
         self._sync_bridge_thread.start()
-        print("[MQ] 同步-异步桥接线程已启动")
 
     def _sync_bridge_loop(self) -> None:
         """同步-异步桥接循环"""
@@ -237,14 +234,14 @@ class MessageQueue:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"[MQ] 同步桥接异常: {e}")
+                pass
 
     async def _put_to_async_queue(self, message: Message) -> None:
         """将消息放入异步队列"""
         try:
             self._queue.put_nowait(message)
         except asyncio.QueueFull:
-            print(f"[MQ] 队列已满，消息被丢弃: {message.content[:50] if message.content else ''}...")
+            pass
 
     def subscribe(self, conversation_id: str) -> asyncio.Queue:
         subscriber_queue: asyncio.Queue = asyncio.Queue()
@@ -274,13 +271,11 @@ class MessageQueue:
     async def start_consumer(self) -> None:
         """启动消费者后台任务"""
         if self._running:
-            print("[MQ] 消费者已在运行")
             return
 
         self._running = True
         self._consumer_task = asyncio.create_task(self._consume_loop())
         self._start_sync_bridge()
-        print(f"[MQ] 消费者已启动 (队列容量: {self._max_size})")
 
     async def stop_consumer(self) -> None:
         """停止消费者"""
@@ -298,11 +293,8 @@ class MessageQueue:
                 pass
             self._consumer_task = None
 
-        print("[MQ] 消费者已停止")
-
     async def _consume_loop(self) -> None:
         """消费者循环（内部方法）"""
-        print("[MQ] 消费循环开始")
         while self._running:
             try:
                 message = await asyncio.wait_for(
@@ -316,9 +308,7 @@ class MessageQueue:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"[MQ] 消费异常: {e}")
-
-        print("[MQ] 消费循环结束")
+                pass
 
     async def _consume(self, message: Message) -> None:
         """
@@ -329,9 +319,6 @@ class MessageQueue:
         - 广播给订阅方
         - 转发给 Buffer 消费
         """
-        msg_dict = message.to_dict()
-        print(f"[MQ] 消费消息: {msg_dict}")
-        start_time = time.perf_counter()
         try:
             self._save_message_to_file(message)
             self._publish_to_subscribers(message)
@@ -339,9 +326,7 @@ class MessageQueue:
             await self._forward_to_buffer(message)
             
         except Exception as exc:
-            print(f"[MQ] 消费失败: {exc}")
             raise
-        print(f"[MQ] 消费完成，耗时: {round((time.perf_counter() - start_time) * 1000)}ms")
 
     async def _forward_to_buffer(self, message: Message) -> None:
         """将事件转发给 Buffer 消费"""

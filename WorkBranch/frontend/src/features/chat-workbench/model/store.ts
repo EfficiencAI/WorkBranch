@@ -284,7 +284,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
   },
 
-  async sendMessageToConversation(conversationId: string, messageText: string, handlers: SendMessageHandlers = {}) {
+  async sendMessageToConversation(conversationId: string, messageText: string, enableContext: boolean, handlers: SendMessageHandlers = {}) {
     const { currentSessionId } = useSessionStore.getState()
 
     if (!currentSessionId) {
@@ -301,6 +301,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         extra: {
           conversation_id: conversationId,
           message_length: messageText.length,
+          enable_context: enableContext,
         },
       })
 
@@ -308,6 +309,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         conversationId,
         {
           message: messageText,
+          enable_context: enableContext,
         },
         {
           signal: abortController.signal,

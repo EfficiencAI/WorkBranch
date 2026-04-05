@@ -90,6 +90,7 @@ class SessionService:
         conversation_id: str,
         message: str,
         on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        enable_context: bool = False,
     ) -> Dict[str, Any]:
         conversation = self._dao.get_conversation_by_id(conversation_id)
         if not conversation:
@@ -107,6 +108,7 @@ class SessionService:
             conversation_id=conversation_id,
             message=message,
             on_complete=on_complete,
+            enable_context=enable_context,
         )
 
         return {
@@ -263,3 +265,33 @@ class SessionService:
             }
             for msg in messages
         ]
+
+    async def get_parent_chain_messages(self, conversation_id: str) -> List[Dict[str, Any]]:
+        messages = self._dao.get_parent_chain_messages(conversation_id)
+        return [
+            {
+                "id": msg.id,
+                "conversation_id": msg.conversation_id,
+                "session_id": msg.session_id,
+                "user_content": msg.user_content,
+                "assistant_content": msg.assistant_content,
+                "status": msg.status,
+                "created_at": msg.created_at,
+                "updated_at": msg.updated_at,
+            }
+            for msg in messages
+        ]
+
+    async def get_context_info(self, conversation_id: str) -> Dict[str, Any]:
+        messages = await self.get_parent_chain_messages(conversation_id)
+        total_chars = 0
+        for msg in messages:
+            total_chars += len(msg.get("user_content") or "")
+            total_chars += len(msg.get("assistant_content") or "")
+        estimated_tokens = total_chars // 4
+        return {
+            "conversation_id": conversation_id,
+            "message_count": len(messages),
+            "total_chars": total_chars,
+            "estimated_tokens": estimated_tokens,
+        }

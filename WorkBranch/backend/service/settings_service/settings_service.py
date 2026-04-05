@@ -63,6 +63,11 @@ DEFAULT_SETTINGS = {
     "conversation": {
         "single_message_per_node": True
     },
+    "context": {
+        "max_tokens": 32000,
+        "warning_threshold": 0.5,
+        "include_parent_context_by_default": False
+    },
     "logging": {
         "enabled": True,
         "level": "INFO",

@@ -368,3 +368,31 @@ class ConversationDAO:
         if row:
             return Session(**dict(row))
         return None
+
+    def get_parent_chain_conversation_ids(self, conversation_id: str) -> List[str]:
+        chain: List[str] = []
+        current_id: Optional[str] = conversation_id
+        visited: set = set()
+
+        while current_id and current_id not in visited:
+            visited.add(current_id)
+            chain.append(current_id)
+            conv = self.get_conversation_by_id(current_id)
+            if not conv:
+                break
+            current_id = conv.parent_conversation_id
+
+        return chain
+
+    def get_parent_chain_messages(self, conversation_id: str) -> List[Message]:
+        chain_ids = self.get_parent_chain_conversation_ids(conversation_id)
+        if not chain_ids:
+            return []
+
+        all_messages: List[Message] = []
+        for conv_id in chain_ids:
+            messages = self.get_messages_by_conversation(conv_id)
+            all_messages.extend(messages)
+
+        all_messages.sort(key=lambda m: (m.created_at, m.id))
+        return all_messages

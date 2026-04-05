@@ -251,7 +251,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
       : true
 
   const handleSendMessage = useCallback(
-    async (message: string) => {
+    async (message: string, enableContext: boolean) => {
       try {
         let targetConversationId = sendTargetConversationId
 
@@ -290,7 +290,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           targetConversationId = childConversationId
         }
 
-        await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, {
+        await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
           onStreamError(event) {
             if (event.content) {
               onSendError(String(event.content))

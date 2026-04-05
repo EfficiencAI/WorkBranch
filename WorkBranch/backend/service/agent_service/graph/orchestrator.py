@@ -223,11 +223,15 @@ def run_graph(
     memory_mode: str = "accumulate",
     window_size: int = 3,
     settings_service=None,
-    message_context: dict = None
+    message_context: dict = None,
+    parent_chain_messages: List[dict] = None,
+    current_conversation_messages: List[dict] = None
 ) -> dict:
     print("\n" + "="*60)
     print("[Orchestrator] 主编排图启动")
     print(f"[Orchestrator] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
+    print(f"[Orchestrator] 父节点链消息数量: {len(parent_chain_messages) if parent_chain_messages else 0}")
+    print(f"[Orchestrator] 当前对话内消息数量: {len(current_conversation_messages) if current_conversation_messages else 0}")
     print("="*60)
     
     saved_state = persistence.load(workspace_id)
@@ -236,6 +240,10 @@ def run_graph(
         print(f"[Orchestrator] 恢复已保存的状态")
         initial_state = saved_state
         initial_state["messages"] = initial_state.get("messages", []) + [user_message]
+        if parent_chain_messages:
+            initial_state["parent_chain_messages"] = parent_chain_messages
+        if current_conversation_messages:
+            initial_state["current_conversation_messages"] = current_conversation_messages
     else:
         initial_state: AgentState = {
             "messages": [user_message],
@@ -248,6 +256,8 @@ def run_graph(
             "tool_history": [],
             "replan_count": 0,
             "agent_type": None,
+            "parent_chain_messages": parent_chain_messages or [],
+            "current_conversation_messages": current_conversation_messages or [],
         }
     
     graph = create_orchestrator_graph(llm_service, token_callback, memory_mode, window_size, settings_service, message_context)

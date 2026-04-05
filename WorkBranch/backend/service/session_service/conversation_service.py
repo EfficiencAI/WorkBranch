@@ -142,7 +142,8 @@ class ConversationService:
         self,
         conversation_id: str,
         message: str,
-        on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None
+        on_complete: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None,
+        enable_context: bool = False
     ) -> Dict[str, Any]:
         async with self._lock:
             conv_info = self._conversations.get(conversation_id)
@@ -195,6 +196,35 @@ class ConversationService:
                 error=None,
             )
 
+        parent_chain_messages = []
+        current_conversation_messages = []
+        if enable_context:
+            parent_messages = self._dao.get_parent_chain_messages(conversation_id)
+            for msg in parent_messages:
+                if msg.user_content:
+                    parent_chain_messages.append({
+                        "role": "user",
+                        "content": msg.user_content
+                    })
+                if msg.assistant_content:
+                    parent_chain_messages.append({
+                        "role": "assistant",
+                        "content": msg.assistant_content
+                    })
+            
+            current_messages = self._dao.get_messages_by_conversation(conversation_id)
+            for msg in current_messages:
+                if msg.user_content:
+                    current_conversation_messages.append({
+                        "role": "user",
+                        "content": msg.user_content
+                    })
+                if msg.assistant_content:
+                    current_conversation_messages.append({
+                        "role": "assistant",
+                        "content": msg.assistant_content
+                    })
+
         async def wrapped_callback(result: Dict[str, Any]):
             await self._on_message_complete(conversation_id, message_id, result)
             if on_complete:
@@ -204,7 +234,9 @@ class ConversationService:
             conversation_id=conversation_id,
             message=message,
             message_id=message_id,
-            stream_callback=wrapped_callback
+            stream_callback=wrapped_callback,
+            parent_chain_messages=parent_chain_messages,
+            current_conversation_messages=current_conversation_messages
         )
 
         async with self._lock:

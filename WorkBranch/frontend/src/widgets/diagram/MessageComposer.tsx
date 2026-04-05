@@ -1,4 +1,4 @@
-import { Button, Input, Space, Tooltip, Typography } from 'antd'
+import { Button, Checkbox, Input, Space, Tooltip, Typography } from 'antd'
 import { SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
@@ -11,7 +11,7 @@ type MessageComposerProps = {
   focusedConversationLabel: string | null
   sending: boolean
   allowCreateOnSend?: boolean
-  onSend: (message: string) => Promise<void>
+  onSend: (message: string, enableContext: boolean) => Promise<void>
   onStop?: () => Promise<void> | void
   onSwitchToSendTarget?: (conversationId: string) => void
 }
@@ -30,6 +30,7 @@ export function MessageComposer({
   const { settings } = useSettings()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
+  const [enableContext, setEnableContext] = useState(false)
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
       ? settings.ui.message_send_shortcuts_reversed === true
@@ -48,7 +49,7 @@ export function MessageComposer({
     }
 
     setMessage('')
-    await onSend(nextMessage)
+    await onSend(nextMessage, enableContext)
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -96,6 +97,12 @@ export function MessageComposer({
           </Space>
 
           <Space className="message-composer__footer" wrap>
+            <Checkbox
+              checked={enableContext}
+              onChange={(e) => setEnableContext(e.target.checked)}
+            >
+              上下文组织
+            </Checkbox>
             <Button size="small" onClick={() => setCollapsed(true)}>
               折叠
             </Button>
