@@ -9,7 +9,7 @@ import {
   selectChatWorkbenchConversationNodes,
   selectChatWorkbenchMessagesError,
   selectChatWorkbenchMessagesLoading,
-  selectChatWorkbenchStreamingConversationId,
+  selectChatWorkbenchStreamingConversationIds,
   selectCreatingSession,
   selectCurrentSessionDetail,
   selectCurrentSessionId,
@@ -54,7 +54,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const messagesLoading = useChatWorkbenchStore(selectChatWorkbenchMessagesLoading)
   const messagesError = useChatWorkbenchStore(selectChatWorkbenchMessagesError)
   const conversationNodes = useChatWorkbenchStore(selectChatWorkbenchConversationNodes)
-  const streamingConversationId = useChatWorkbenchStore(selectChatWorkbenchStreamingConversationId)
+  const streamingConversationIds = useChatWorkbenchStore(selectChatWorkbenchStreamingConversationIds)
   const focusedConversationId = useTreeStore(selectFocusedConversationId)
   const halfPreviewConversationId = useTreeStore(selectHalfPreviewConversationId)
   const lockedSendConversationId = useTreeStore(selectLockedSendConversationId)
@@ -104,7 +104,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? null
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
-  const isStreamingViewedConversation = Boolean(streamingConversationId && streamingConversationId === viewedConversationId)
+  const isStreamingViewedConversation = streamingConversationIds.has(viewedConversationId)
 
   useEffect(() => {
     void syncConversationContext(viewedConversationId)
@@ -209,7 +209,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
         okButtonProps: { danger: true },
         cancelText: '取消',
         onOk: async () => {
-          if (streamingConversationId === conversationId) {
+          if (streamingConversationIds.has(conversationId)) {
             await cancelStreamingConversation()
           }
 
@@ -242,7 +242,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
         },
       })
     },
-    [cancelStreamingConversation, cascadeDeleteConversationFromSession, conversationNodes, deleteConversationFromSession, streamingConversationId],
+    [cancelStreamingConversation, cascadeDeleteConversationFromSession, conversationNodes, deleteConversationFromSession, streamingConversationIds],
   )
 
   const singleMessagePerNode =

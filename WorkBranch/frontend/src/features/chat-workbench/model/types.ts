@@ -13,7 +13,7 @@ export type ChatWorkbenchState = {
   loading: boolean
   messagesLoading: boolean
   streaming: boolean
-  streamingConversationId: string | null
+  streamingConversationIds: Set<string>
   error: string | null
   messagesError: string | null
 }

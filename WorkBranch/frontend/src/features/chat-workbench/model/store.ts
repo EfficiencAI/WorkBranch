@@ -75,7 +75,7 @@ function updateConversationMessagesCache(state: ChatWorkbenchStore, conversation
       ...state.conversationMessagesCache,
       [conversationId]: messages
     },
-    conversationMessages: state.streamingConversationId === conversationId ? messages : state.conversationMessages
+    conversationMessages: state.streamingConversationIds.has(conversationId) ? messages : state.conversationMessages
   }
 }
 
@@ -94,7 +94,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   loading: false,
   messagesLoading: false,
   streaming: false,
-  streamingConversationId: null,
+  streamingConversationIds: new Set(),
   error: null,
   messagesError: null,
 
@@ -116,7 +116,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       loading: false,
       messagesLoading: false,
       streaming: false,
-      streamingConversationId: null,
+      streamingConversationIds: new Set(),
       error: null,
       messagesError: null,
     })
@@ -145,7 +145,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           ...state.conversationMessagesCache,
           [conversationId]: conversationMessages
         },
-        conversationMessages: state.streamingConversationId === conversationId ? state.conversationMessages : conversationMessages
+        conversationMessages: state.streamingConversationIds.has(conversationId) ? state.conversationMessages : conversationMessages
       }))
     } catch (caughtError) {
       set({ messagesError: getErrorMessage(caughtError, '对话消息加载失败') })
@@ -327,7 +327,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     activeStreamAbortController = abortController
 
     try {
-      set({ streaming: true, streamingConversationId: conversationId })
+      set(state => ({ ...state, streaming: true, streamingConversationIds: new Set([...state.streamingConversationIds, conversationId]) }))
       frontendLogger.info('send_message', {
         extra: {
           conversation_id: conversationId,
@@ -345,11 +345,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
-            const { streamingConversationId } = get()
             const eventConversationId = event.conversation_id ?? conversationId
-            if (eventConversationId !== streamingConversationId) {
-              return
-            }
 
             onEvent?.(event)
 
@@ -486,50 +482,52 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       if (activeStreamAbortController === abortController) {
         activeStreamAbortController = null
       }
-      set({ streaming: false, streamingConversationId: null })
+      set(state => { const newSet = new Set(state.streamingConversationIds); newSet.delete(conversationId); return { ...state, streaming: newSet.size > 0, streamingConversationIds: newSet } })
     }
   },
 
   async cancelStreamingConversation() {
-    const { streamingConversationId } = get()
+    const { streamingConversationIds } = get()
 
-    if (!streamingConversationId) {
+    if (streamingConversationIds.size === 0) {
       return
     }
 
     activeStreamAbortController?.abort()
-    const targetConversationId = streamingConversationId
 
-    try {
-      await cancelConversation(targetConversationId)
-    } catch (err) {
-      frontendLogger.error('cancel_conversation_failed', {
-        extra: {
-          conversation_id: targetConversationId,
-          error: getErrorMessage(err, 'cancel_request_failed'),
-        },
-      })
-    } finally {
+    const promises = Array.from(streamingConversationIds).map(async (conversationId) => {
       try {
-        await Promise.all([get().loadConversationBundle(targetConversationId), get().loadConversationMessages(targetConversationId)])
-
-        const { currentSessionId } = useSessionStore.getState()
-        if (currentSessionId) {
-          const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
-          const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
-          const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
-          set({ conversationNodes })
-        }
+        await cancelConversation(conversationId)
+      } catch (err) {
+        frontendLogger.error('cancel_conversation_failed', {
+          extra: {
+            conversation_id: conversationId,
+            error: getErrorMessage(err, 'cancel_request_failed'),
+          },
+        })
+      }
+      try {
+        await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
       } catch (reloadErr) {
         frontendLogger.error('cancel_state_reload_failed', {
           extra: {
-            conversation_id: targetConversationId,
-            error: getErrorMessage(reloadErr, 'reload_failed'),
+            conversation_id: conversationId,
+            error: getErrorMessage(reloadErr, 'reload_after_cancel_failed'),
           },
         })
-      } finally {
-        set({ streaming: false, streamingConversationId: null })
       }
+    })
+
+    await Promise.all(promises)
+
+    const { currentSessionId } = useSessionStore.getState()
+    if (currentSessionId) {
+      const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+      const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+      const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+      set({ conversationNodes })
     }
+
+    set(state => ({ ...state, streaming: false, streamingConversationIds: new Set() }))
   },
 }))
