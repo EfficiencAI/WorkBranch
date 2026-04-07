@@ -1,7 +1,7 @@
 import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Card, Space, Typography } from 'antd'
+import { Button, Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -465,6 +465,7 @@ function FlowViewport({
   canCreateConversationOnSend,
   onSendMessage,
   onStopMessage,
+  onCreateConversation,
 }: ConversationCanvasProps) {
   const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
