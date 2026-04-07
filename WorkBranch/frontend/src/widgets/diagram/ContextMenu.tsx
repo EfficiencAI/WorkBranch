@@ -26,24 +26,32 @@ export function useContextMenu() {
 
 function useMenuClose(menuRef: React.RefObject<HTMLDivElement | null>, onClose: () => void) {
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleMouseDownOutside = (event: MouseEvent) => {
+      // Only handle left mouse button
+      if (event.button !== 0) return
+
+      // Check if the click is outside the menu
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        // Prevent event propagation to avoid conflicts with ReactFlow
+        event.stopPropagation()
         onClose()
       }
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
+        event.stopPropagation()
         onClose()
       }
     }
 
-    document.addEventListener('click', handleClickOutside)
-    document.addEventListener('keydown', handleKeyDown)
+    // Add listeners with capture phase to ensure we get the event before ReactFlow
+    document.addEventListener('mousedown', handleMouseDownOutside, true)
+    document.addEventListener('keydown', handleKeyDown, true)
 
     return () => {
-      document.removeEventListener('click', handleClickOutside)
-      document.removeEventListener('keydown', handleKeyDown)
+      document.removeEventListener('mousedown', handleMouseDownOutside, true)
+      document.removeEventListener('keydown', handleKeyDown, true)
     }
   }, [menuRef, onClose])
 }

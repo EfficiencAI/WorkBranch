@@ -854,6 +854,8 @@ function FlowViewport({
           if (halfPreviewConversation) {
             clearHalfPreviewConversationId()
           }
+          // Close context menu when clicking on pane
+          setContextMenu(null)
         }}
         proOptions={{ hideAttribution: true }}
       >
