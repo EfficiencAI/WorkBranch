@@ -12,6 +12,8 @@ type FrontendLogEvent =
   | 'workspace.loaded'
   | 'auto_arrange_conversations'
   | 'move_conversation_node'
+  | 'cancel_conversation_failed'
+  | 'cancel_state_reload_failed'
 
 type FrontendLogPayload = {
   msg?: string
@@ -29,6 +31,8 @@ const ALLOWED_EVENTS = new Set<FrontendLogEvent>([
   'workspace.loaded',
   'auto_arrange_conversations',
   'move_conversation_node',
+  'cancel_conversation_failed',
+  'cancel_state_reload_failed',
 ])
 
 let warnedOnce = false

@@ -108,6 +108,9 @@ DEFAULT_SETTINGS = {
             "allowed": ["read_file", "write_file", "delete_file", "list_dir", "create_dir", "explore_code", "explore_internet", "thinking", "call_explore_agent", "call_review_agent"],
             "forbidden": []
         }
+    },
+    "debug": {
+        "consistency_check": False
     }
 }
 DEFAULT_SETTINGS_METADATA = {

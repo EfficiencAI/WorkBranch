@@ -9,16 +9,37 @@ import {
   fetchConversationMessages,
   fetchSessionConversations,
   fetchWorkspaceDetail,
+  get as httpGet,
   getErrorMessage,
   streamConversationMessage,
   updateConversationPositions,
 } from '../../../shared/api'
+import { settingsConfig } from '../../../shared/config/settings'
 import { frontendLogger } from '../../../shared/logging/logger'
-import type { ChatStreamEvent, ContentBlock } from '../../../shared/api'
+import type { ChatStreamEvent } from '../../../shared/api'
+import type { ContentBlock } from '../../../shared/api/workspace'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
 import type { MessageNode } from '../../../entities'
+
+function mergeContentBlocks(blocks: ContentBlock[], newBlock: ContentBlock): ContentBlock[] {
+  const deltaTypes = ['thinking_delta', 'text_delta', 'plan_delta']
+  
+  if (deltaTypes.includes(newBlock.type) && blocks.length > 0) {
+    const lastBlock = blocks[blocks.length - 1]
+    if (lastBlock.type === newBlock.type) {
+      const merged = [...blocks]
+      merged[merged.length - 1] = {
+        ...lastBlock,
+        content: lastBlock.content + (newBlock.content ?? '')
+      }
+      return merged
+    }
+  }
+  
+  return [...blocks, newBlock]
+}
 
 async function loadConversationDetailBundle(conversationId: string): Promise<{
   detail: ConversationDetail
@@ -348,8 +369,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
-            const eventConversationId = event.conversation_id ?? conversationId
-
             onEvent?.(event)
 
             if ('type' in event && event.type === 'message_created') {
@@ -383,7 +402,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                       const currentBlocks: ContentBlock[] = lastMessage.assistantContent 
                         ? JSON.parse(lastMessage.assistantContent) 
                         : []
-                      const updatedBlocks = [...currentBlocks, block]
+                      const updatedBlocks = mergeContentBlocks(currentBlocks, block)
                       const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
@@ -470,32 +489,42 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       )
 
       if (streamingMessageId) {
-        try {
-          const dbMessages = await fetchConversationMessages(conversationId)
-          const dbMessage = dbMessages.find(m => m.id === streamingMessageId)
-          
-          if (dbMessage) {
-            const cachedMessages = get().conversationMessagesCache[conversationId] || []
-            const cachedMessage = cachedMessages.find(m => m.id === streamingMessageId)
+        ;(async () => {
+          try {
+            const settings = await httpGet<Record<string, unknown>>(settingsConfig.endpoint)
+            const debugSettings = settings?.debug as Record<string, unknown> | undefined
+            const consistencyCheckEnabled = debugSettings?.consistency_check === true
             
-            const streamingJson = JSON.stringify(streamingContentBlocks)
-            const dbJson = dbMessage.assistantContent || '[]'
-            
-            if (streamingJson !== dbJson) {
-              console.warn('[Cache Consistency] Content blocks mismatch detected', {
-                conversationId,
-                messageId: streamingMessageId,
-                streamingBlocks: streamingContentBlocks,
-                dbBlocks: JSON.parse(dbJson),
-                cachedContent: cachedMessage?.assistantContent,
-                dbContent: dbMessage.assistantContent
-              })
-              message.warning('消息缓存与数据库不一致，请查看控制台了解详情')
+            if (!consistencyCheckEnabled) {
+              return
             }
+            
+            const dbMessages = await fetchConversationMessages(conversationId)
+            const dbMessage = dbMessages.find(m => m.id === streamingMessageId)
+            
+            if (dbMessage) {
+              const cachedMessages = get().conversationMessagesCache[conversationId] || []
+              const cachedMessage = cachedMessages.find(m => m.id === streamingMessageId)
+              
+              const streamingJson = JSON.stringify(streamingContentBlocks).replace(/\s+/g, '')
+              const dbJson = (dbMessage.assistantContent || '[]').replace(/\s+/g, '')
+              
+              if (streamingJson !== dbJson) {
+                console.warn('[Cache Consistency] Content blocks mismatch detected', {
+                  conversationId,
+                  messageId: streamingMessageId,
+                  streamingBlocks: streamingContentBlocks,
+                  dbBlocks: JSON.parse(dbMessage.assistantContent || '[]'),
+                  cachedContent: cachedMessage?.assistantContent,
+                  dbContent: dbMessage.assistantContent
+                })
+                message.warning('消息缓存与数据库不一致，请查看控制台了解详情')
+              }
+            }
+          } catch (verifyError) {
+            console.error('[Cache Consistency] Failed to verify content:', verifyError)
           }
-        } catch (verifyError) {
-          console.error('[Cache Consistency] Failed to verify content:', verifyError)
-        }
+        })()
       }
 
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
