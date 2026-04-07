@@ -23,6 +23,28 @@ import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
 import type { MessageNode } from '../../../entities'
 
+function isEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true
+  if (a === null || b === null) return a === b
+  if (typeof a !== 'object' || typeof b !== 'object') return a === b
+  
+  const aObj = a as Record<string, unknown>
+  const bObj = b as Record<string, unknown>
+  
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false
+    return a.every((item, index) => isEqual(item, b[index]))
+  }
+  
+  if (Array.isArray(a) || Array.isArray(b)) return false
+  
+  const aKeys = Object.keys(aObj)
+  const bKeys = Object.keys(bObj)
+  if (aKeys.length !== bKeys.length) return false
+  
+  return aKeys.every(key => isEqual(aObj[key], bObj[key]))
+}
+
 function mergeContentBlocks(blocks: ContentBlock[], newBlock: ContentBlock): ContentBlock[] {
   const deltaTypes = ['thinking_delta', 'text_delta', 'plan_delta']
   
@@ -506,15 +528,14 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
               const cachedMessages = get().conversationMessagesCache[conversationId] || []
               const cachedMessage = cachedMessages.find(m => m.id === streamingMessageId)
               
-              const streamingJson = JSON.stringify(streamingContentBlocks).replace(/\s+/g, '')
-              const dbJson = (dbMessage.assistantContent || '[]').replace(/\s+/g, '')
+              const dbBlocks = JSON.parse(dbMessage.assistantContent || '[]')
               
-              if (streamingJson !== dbJson) {
+              if (!isEqual(streamingContentBlocks, dbBlocks)) {
                 console.warn('[Cache Consistency] Content blocks mismatch detected', {
                   conversationId,
                   messageId: streamingMessageId,
                   streamingBlocks: streamingContentBlocks,
-                  dbBlocks: JSON.parse(dbMessage.assistantContent || '[]'),
+                  dbBlocks,
                   cachedContent: cachedMessage?.assistantContent,
                   dbContent: dbMessage.assistantContent
                 })
