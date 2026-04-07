@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { message } from 'antd'
 import type { ConversationDetail, ConversationNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
 import {
   cancelConversation,
@@ -13,7 +14,7 @@ import {
   updateConversationPositions,
 } from '../../../shared/api'
 import { frontendLogger } from '../../../shared/logging/logger'
-import type { ChatStreamEvent } from '../../../shared/api'
+import type { ChatStreamEvent, ContentBlock } from '../../../shared/api'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
@@ -325,6 +326,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     const { onEvent, onStreamError } = handlers
     const abortController = new AbortController()
     activeStreamAbortController = abortController
+    let streamingMessageId: string | null = null
+    const streamingContentBlocks: ContentBlock[] = []
 
     try {
       set(state => ({ ...state, streaming: true, streamingConversationIds: new Set([...state.streamingConversationIds, conversationId]) }))
@@ -350,8 +353,9 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
             onEvent?.(event)
 
             if ('type' in event && event.type === 'message_created') {
+              streamingMessageId = event.message_id ?? `msg-${conversationId}-${Date.now()}`
               const newMessage: MessageNode = {
-                id: event.message_id ?? `msg-${conversationId}-${Date.now()}`,
+                id: streamingMessageId,
                 conversationId: event.conversation_id ?? conversationId,
                 userContent: event.user_content ?? messageText,
                 assistantContent: '',
@@ -367,19 +371,23 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
             if ('content_blocks' in event) {
               for (const block of event.content_blocks) {
-                const isTextContent = block.type === 'text_delta' || block.type === 'plan_delta'
-
-                if (isTextContent && block.content) {
+                streamingContentBlocks.push(block)
+                
+                if (block.type !== 'done' && block.type !== 'error') {
                   set(state => {
                     const currentMessages = state.conversationMessagesCache[conversationId] || []
                     const lastMessage = currentMessages[currentMessages.length - 1]
                     const isStreaming = lastMessage?.status === 'streaming'
 
                     if (isStreaming) {
+                      const currentBlocks: ContentBlock[] = lastMessage.assistantContent 
+                        ? JSON.parse(lastMessage.assistantContent) 
+                        : []
+                      const updatedBlocks = [...currentBlocks, block]
                       const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
-                        assistantContent: lastMessage.assistantContent + block.content
+                        assistantContent: JSON.stringify(updatedBlocks)
                       }
                       return updateConversationMessagesCache(state, conversationId, updatedMessages)
                     }
@@ -460,6 +468,35 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           },
         },
       )
+
+      if (streamingMessageId) {
+        try {
+          const dbMessages = await fetchConversationMessages(conversationId)
+          const dbMessage = dbMessages.find(m => m.id === streamingMessageId)
+          
+          if (dbMessage) {
+            const cachedMessages = get().conversationMessagesCache[conversationId] || []
+            const cachedMessage = cachedMessages.find(m => m.id === streamingMessageId)
+            
+            const streamingJson = JSON.stringify(streamingContentBlocks)
+            const dbJson = dbMessage.assistantContent || '[]'
+            
+            if (streamingJson !== dbJson) {
+              console.warn('[Cache Consistency] Content blocks mismatch detected', {
+                conversationId,
+                messageId: streamingMessageId,
+                streamingBlocks: streamingContentBlocks,
+                dbBlocks: JSON.parse(dbJson),
+                cachedContent: cachedMessage?.assistantContent,
+                dbContent: dbMessage.assistantContent
+              })
+              message.warning('消息缓存与数据库不一致，请查看控制台了解详情')
+            }
+          }
+        } catch (verifyError) {
+          console.error('[Cache Consistency] Failed to verify content:', verifyError)
+        }
+      }
 
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
       const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []

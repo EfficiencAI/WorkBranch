@@ -806,6 +806,7 @@ button {
 .conversation-node__message-text.ant-typography {
   font-size: var(--app-font-size-xs);
   line-height: 1.4;
+  user-select: text !important;
 }
 
 .conversation-node--interaction-gated,

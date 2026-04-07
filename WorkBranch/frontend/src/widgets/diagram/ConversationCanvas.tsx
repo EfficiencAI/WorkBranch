@@ -10,6 +10,7 @@ import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
+import { MessageRenderer } from '../../components/messages'
 
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
@@ -122,7 +123,7 @@ function renderMessageList(
                         <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text>
                       </Space>
                       <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
-                        {message.assistantContent}
+                        <MessageRenderer content={message.assistantContent} messageId={message.id} />
                         {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
                         {message.status === 'error' && <Typography.Text type="danger"> [消息发送失败]</Typography.Text>}
                       </Typography.Paragraph>
