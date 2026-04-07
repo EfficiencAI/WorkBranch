@@ -9,6 +9,7 @@ class SegmentType(Enum):
     THINKING_START = "thinking_start"
     THINKING_DELTA = "thinking_delta"
     THINKING_END = "thinking_end"
+    THINKING = "thinking"  # 新增独立的thinking消息类型
     
     TEXT_START = "text_start"
     TEXT_DELTA = "text_delta"

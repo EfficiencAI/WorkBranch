@@ -39,6 +39,7 @@ class Message:
     session_id: int
     user_content: str
     assistant_content: Optional[str]
+    thinking_content: Optional[str]  # 新增thinking内容字段
     status: str
     created_at: str
     updated_at: str
@@ -247,13 +248,14 @@ class ConversationDAO:
         message_id: str,
         assistant_content: str,
         status: str = 'completed',
+        thinking_content: str = None,  # 新增thinking_content参数
     ) -> None:
         sql = '''
             UPDATE messages
-            SET assistant_content = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+            SET assistant_content = ?, thinking_content = ?, status = ?, updated_at = CURRENT_TIMESTAMP
             WHERE id = ?
         '''
-        self._db.execute(sql, (assistant_content, status, message_id))
+        self._db.execute(sql, (assistant_content, thinking_content, status, message_id))
 
         row = self._db.fetch_one('SELECT session_id, conversation_id FROM messages WHERE id = ?', (message_id,))
         if row:
@@ -271,7 +273,7 @@ class ConversationDAO:
 
     def get_message_by_id(self, message_id: str) -> Optional[Message]:
         sql = '''
-            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
             FROM messages
             WHERE id = ?
         '''
@@ -282,7 +284,7 @@ class ConversationDAO:
 
     def get_messages_by_conversation(self, conversation_id: str) -> List[Message]:
         sql = '''
-            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
             FROM messages
             WHERE conversation_id = ?
             ORDER BY created_at ASC, id ASC
@@ -292,7 +294,7 @@ class ConversationDAO:
 
     def get_messages_by_session(self, session_id: int) -> List[Message]:
         sql = '''
-            SELECT id, conversation_id, session_id, user_content, assistant_content, status, created_at, updated_at
+            SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
             FROM messages
             WHERE session_id = ?
             ORDER BY created_at ASC

@@ -101,10 +101,15 @@ class ConversationBuffer:
                 ensure_ascii=False
             )
 
+            # 提取thinking内容
+            thinking_blocks = [block for block in merged_blocks if block.type.value == 'thinking']
+            thinking_content = ''.join(block.content for block in thinking_blocks) if thinking_blocks else None
+
             self._dao.update_message_assistant(
                 message_id=message_id,
                 assistant_content=assistant_content,
                 status=status,
+                thinking_content=thinking_content,
             )
 
             del self._drafts[message_id]
@@ -125,10 +130,15 @@ class ConversationBuffer:
                 ensure_ascii=False
             ) if merged_blocks else None
 
+            # 提取thinking内容
+            thinking_blocks = [block for block in merged_blocks if block.type.value == 'thinking']
+            thinking_content = ''.join(block.content for block in thinking_blocks) if thinking_blocks else None
+
             self._dao.update_message_assistant(
                 message_id=message_id,
                 assistant_content=assistant_content or '',
                 status='error',
+                thinking_content=thinking_content,
             )
 
             del self._drafts[message_id]
@@ -232,10 +242,16 @@ class ConversationBuffer:
                     [block.to_dict() for block in merged_blocks],
                     ensure_ascii=False
                 ) if merged_blocks else ''
+
+                # 提取thinking内容
+                thinking_blocks = [block for block in merged_blocks if block.type.value == 'thinking']
+                thinking_content = ''.join(block.content for block in thinking_blocks) if thinking_blocks else None
+
                 self._dao.update_message_assistant(
                     message_id=msg_id,
                     assistant_content=assistant_content,
                     status='error',
+                    thinking_content=thinking_content,
                 )
                 del self._drafts[msg_id]
                 cleared = True

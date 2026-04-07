@@ -72,6 +72,7 @@ class Database:
                     session_id INTEGER NOT NULL,
                     user_content TEXT NOT NULL,
                     assistant_content TEXT,
+                    thinking_content TEXT,  -- 新增thinking内容字段
                     status TEXT DEFAULT 'streaming',
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -91,6 +92,9 @@ class Database:
 
             if not self._column_exists(cursor, "conversations", "position_y"):
                 cursor.execute('ALTER TABLE conversations ADD COLUMN position_y REAL')
+
+            if not self._column_exists(cursor, "messages", "thinking_content"):
+                cursor.execute('ALTER TABLE messages ADD COLUMN thinking_content TEXT')
 
             cursor.execute('''
                 CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id)

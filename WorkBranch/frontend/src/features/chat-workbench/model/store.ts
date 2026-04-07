@@ -367,7 +367,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
             if ('content_blocks' in event) {
               for (const block of event.content_blocks) {
-                const isTextContent = block.type === 'text_delta' || block.type === 'thinking_delta' || block.type === 'plan_delta'
+                const isTextContent = block.type === 'text_delta' || block.type === 'plan_delta'
 
                 if (isTextContent && block.content) {
                   set(state => {

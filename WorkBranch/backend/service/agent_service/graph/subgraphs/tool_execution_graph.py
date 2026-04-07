@@ -13,6 +13,23 @@ FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"
 EXPLORE_TOOLS = {"explore_code", "explore_internet"}
 SUBAGENT_TOOLS = {"call_explore_agent", "call_review_agent"}
 
+# 配置哪些工具使用特殊处理（不发送tool_call/tool_res，而是使用专门的段类型）
+SPECIAL_TOOLS = {
+    "thinking": {
+        "start_type": SegmentType.THINKING_START,
+        "delta_type": SegmentType.THINKING_DELTA,
+        "end_type": SegmentType.THINKING_END,
+        "content_field": "thinking_content"  # 前端对应的内容字段
+    }
+    # 添加其他特殊工具的配置示例：
+    # "another_tool": {
+    #     "start_type": SegmentType.ANOTHER_START,
+    #     "delta_type": SegmentType.ANOTHER_DELTA,
+    #     "end_type": SegmentType.ANOTHER_END,
+    #     "content_field": "another_content"
+    # }
+}
+
 
 def _summarize_text(value: str, limit: int = 160) -> str:
     compact = " ".join((value or "").split())
@@ -247,7 +264,8 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     
     if message_context:
         send_message = message_context.get("send_message")
-        if send_message:
+        # 特殊工具不发送通用的tool_call段，而是使用专门的段类型
+        if send_message and tool_name not in SPECIAL_TOOLS:
             send_message("", SegmentType.TOOL_CALL, {
                 "tool_name": tool_name,
                 "tool_args": tool_args,
@@ -282,87 +300,154 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
             tool_args["workspace_root"] = workspace_root
             print(f"[ToolExec] 工作区根目录: {workspace_root}")
     
-    if tool_name == "thinking":
-        if llm_service:
-            print("[ToolExec] 调用 LLM 进行思考...")
-            send_message = message_context.get("send_message") if message_context else None
-            
-            if send_message:
-                send_message("", SegmentType.THINKING_START, {
-                    "tool_name": tool_name,
-                    "task_description": task_description
-                })
-            
-            try:
-                context_parts = [f"当前任务: {task_description}"]
-                
-                if previous_results:
-                    context_parts.append("\n--- 之前任务的执行结果 ---")
-                    for i, prev_result in enumerate(previous_results, 1):
-                        truncated = prev_result[:500] + "..." if len(prev_result) > 500 else prev_result
-                        context_parts.append(f"任务{i}结果:\n{truncated}")
-                    context_parts.append("---\n")
-                
-                context_parts.append("请思考并执行当前任务。")
-                prompt = "\n".join(context_parts)
-                messages = [{"role": "user", "content": prompt}]
-                
-                def thinking_token_callback(token: str):
-                    if send_message:
-                        send_message(token, SegmentType.THINKING_DELTA, {})
-                
-                result = ""
-                for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
-                    result += chunk
-                
-                print(f"[ToolExec] 思考完成")
-                
-                if send_message:
-                    send_message("", SegmentType.THINKING_END, {})
-                    send_message("", SegmentType.TOOL_RES, {
-                        "tool_name": tool_name,
-                        "result": result[:500] + "..." if len(result) > 500 else result,
-                        "success": True
-                    })
+def _execute_special_tool(
+    tool_name: str,
+    tool_args: dict,
+    task_description: str,
+    llm_service,
+    message_context: dict,
+    token_callback: Optional[Callable[[str], None]] = None,
+) -> dict:
+    """处理特殊工具的执行逻辑"""
+    if tool_name not in SPECIAL_TOOLS:
+        return {"result": f"未知特殊工具: {tool_name}", "error": f"Unknown special tool: {tool_name}"}
 
-                _write_tool_event(
-                    conversation_id,
-                    tool_name,
-                    "completed",
-                    result=result,
-                )
-                return {"result": result, "error": None}
-            except Exception as e:
-                print(f"[ToolExec] LLM 调用失败: {e}")
-                if send_message:
-                    send_message("", SegmentType.THINKING_END, {})
-                    send_message("", SegmentType.ERROR, {
-                        "error": str(e),
-                        "source": "thinking"
-                    })
-                    send_message("", SegmentType.TOOL_RES, {
-                        "tool_name": tool_name,
-                        "error": str(e),
-                        "success": False
-                    })
-                _write_tool_event(
-                    conversation_id,
-                    tool_name,
-                    "failed",
-                    error=str(e),
-                )
-                return {"result": f"思考失败: {e}", "error": str(e)}
-        else:
-            result = f"思考任务: {task_description} (LLM 服务未配置)"
-            print(f"[ToolExec] 结果: {result}")
+    config = SPECIAL_TOOLS[tool_name]
+    send_message = message_context.get("send_message") if message_context else None
+
+    if tool_name == "thinking":
+        return _execute_thinking_tool(tool_name, tool_args, task_description, llm_service, message_context, config)
+
+    # 这里可以添加其他特殊工具的处理逻辑
+    # elif tool_name == "another_special_tool":
+    #     return _execute_another_tool(...)
+
+    return {"result": f"特殊工具 {tool_name} 未实现", "error": f"Special tool {tool_name} not implemented"}
+
+
+def _execute_thinking_tool(
+    tool_name: str,
+    tool_args: dict,
+    task_description: str,
+    llm_service,
+    message_context: dict,
+    config: dict,
+) -> dict:
+    """处理thinking工具的特殊逻辑"""
+    if not llm_service:
+        result = f"思考任务: {task_description} (LLM 服务未配置)"
+        print(f"[ToolExec] 结果: {result}")
+        return {"result": result, "error": None}
+
+    print("[ToolExec] 调用 LLM 进行思考...")
+    send_message = message_context.get("send_message") if message_context else None
+
+    # 发送开始段
+    if send_message:
+        send_message("", config["start_type"], {
+            "task_description": task_description,
+            "is_start": True
+        })
+
+    try:
+        context_parts = [f"当前任务: {task_description}"]
+
+        # 获取previous_results（如果有的话）
+        previous_results = tool_args.get("previous_results", [])
+        if previous_results:
+            context_parts.append("\n--- 之前任务的执行结果 ---")
+            for i, prev_result in enumerate(previous_results, 1):
+                truncated = prev_result[:500] + "..." if len(prev_result) > 500 else prev_result
+                context_parts.append(f"任务{i}结果:\n{truncated}")
+            context_parts.append("---\n")
+
+        context_parts.append("请思考并执行当前任务。")
+        prompt = "\n".join(context_parts)
+        messages = [{"role": "user", "content": prompt}]
+
+        def thinking_token_callback(token: str):
+            if send_message:
+                send_message(token, config["delta_type"], {
+                    "task_description": task_description,
+                    "is_delta": True
+                })
+
+        result = ""
+        for chunk in llm_service.chat_stream(messages, THINK_SYSTEM_PROMPT, thinking_token_callback):
+            result += chunk
+
+        print(f"[ToolExec] 思考完成")
+
+        # 发送结束段
+        if send_message:
+            send_message("", config["end_type"], {
+                "task_description": task_description,
+                "is_end": True,
+                "result": result
+            })
+
+        return {"result": result, "error": None}
+
+    except Exception as e:
+        print(f"[ToolExec] LLM 调用失败: {e}")
+        if send_message:
+            send_message("", config["end_type"], {
+                "task_description": task_description,
+                "is_end": True,
+                "error": str(e)
+            })
+        return {"result": f"思考失败: {e}", "error": str(e)}
+
+
+def _execute_special_tool(
+    tool_name: str,
+    tool_args: dict,
+    task_description: str,
+    llm_service,
+    message_context: dict,
+    token_callback: Optional[Callable[[str], None]] = None,
+) -> dict:
+    """处理特殊工具的执行逻辑"""
+    if tool_name not in SPECIAL_TOOLS:
+        return {"result": f"未知特殊工具: {tool_name}", "error": f"Unknown special tool: {tool_name}"}
+
+    config = SPECIAL_TOOLS[tool_name]
+    send_message = message_context.get("send_message") if message_context else None
+
+    if tool_name == "thinking":
+        return _execute_thinking_tool(tool_name, tool_args, task_description, llm_service, message_context, config)
+
+    # 这里可以添加其他特殊工具的处理逻辑
+    # elif tool_name == "another_special_tool":
+    #     return _execute_another_tool(...)
+
+    return {"result": f"特殊工具 {tool_name} 未实现", "error": f"Special tool {tool_name} not implemented"}
+    
+    # 检查是否是特殊工具（使用专门的段类型）
+    if tool_name in SPECIAL_TOOLS:
+        tool_result = _execute_special_tool(
+            tool_name, tool_args, task_description, llm_service, message_context, token_callback
+        )
+        
+        # 为特殊工具写入事件日志
+        if tool_result.get("error") is None:
             _write_tool_event(
                 conversation_id,
                 tool_name,
                 "completed",
-                result=result,
+                result=tool_result.get("result") or "",
             )
-            return {"result": result, "error": None}
+        else:
+            _write_tool_event(
+                conversation_id,
+                tool_name,
+                "failed",
+                error=str(tool_result.get("error")),
+            )
+        
+        return tool_result
     
+    # 处理普通工具
     if tool_name == "read_file":
         tool_result = _execute_read_file(tool_args)
     elif tool_name == "write_file":

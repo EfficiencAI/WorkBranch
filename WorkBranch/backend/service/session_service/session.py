@@ -259,6 +259,7 @@ class SessionService:
                 "session_id": msg.session_id,
                 "user_content": msg.user_content,
                 "assistant_content": msg.assistant_content,
+                "thinking_content": msg.thinking_content,
                 "status": msg.status,
                 "created_at": msg.created_at,
                 "updated_at": msg.updated_at,
