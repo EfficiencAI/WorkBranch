@@ -8,6 +8,7 @@ export type ChatWorkbenchState = {
   workspaceDetail: WorkspaceDetail | null
   conversationNodes: ConversationNode[]
   conversationMessages: MessageNode[]
+  conversationMessagesCache: Record<string, MessageNode[]> // 新增：消息缓存
 
   loading: boolean
   messagesLoading: boolean

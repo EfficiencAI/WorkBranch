@@ -69,6 +69,16 @@ function updateConversationNodesWithPositions(
   })
 }
 
+function updateConversationMessagesCache(state: ChatWorkbenchStore, conversationId: string, messages: MessageNode[]) {
+  return {
+    conversationMessagesCache: {
+      ...state.conversationMessagesCache,
+      [conversationId]: messages
+    },
+    conversationMessages: state.streamingConversationId === conversationId ? messages : state.conversationMessages
+  }
+}
+
 function isAbortError(caughtError: unknown) {
   return caughtError instanceof DOMException && caughtError.name === 'AbortError'
 }
@@ -80,6 +90,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   workspaceDetail: null,
   conversationNodes: [],
   conversationMessages: [],
+  conversationMessagesCache: {},
   loading: false,
   messagesLoading: false,
   streaming: false,
@@ -101,6 +112,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       workspaceDetail: null,
       conversationNodes: [],
       conversationMessages: [],
+      conversationMessagesCache: {},
       loading: false,
       messagesLoading: false,
       streaming: false,
@@ -128,7 +140,13 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     try {
       set({ messagesLoading: true, messagesError: null })
       const conversationMessages = await fetchConversationMessages(conversationId)
-      set({ conversationMessages })
+      set(state => ({
+        conversationMessagesCache: {
+          ...state.conversationMessagesCache,
+          [conversationId]: conversationMessages
+        },
+        conversationMessages: state.streamingConversationId === conversationId ? state.conversationMessages : conversationMessages
+      }))
     } catch (caughtError) {
       set({ messagesError: getErrorMessage(caughtError, '对话消息加载失败') })
       throw caughtError
@@ -143,7 +161,20 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       return
     }
 
-    await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
+    await get().loadConversationBundle(conversationId)
+    
+    set(state => {
+      const cachedMessages = state.conversationMessagesCache[conversationId]
+      return { 
+        conversationMessages: cachedMessages || [],
+        messagesError: null 
+      }
+    })
+    
+    // 如果缓存中没有，异步加载
+    if (!get().conversationMessagesCache[conversationId]) {
+      void get().loadConversationMessages(conversationId)
+    }
   },
 
   async enterSessionContext(sessionDetail: SessionDetail | null): Promise<SessionContextResult> {
@@ -314,6 +345,12 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
+            const { streamingConversationId } = get()
+            const eventConversationId = event.conversation_id ?? conversationId
+            if (eventConversationId !== streamingConversationId) {
+              return
+            }
+
             onEvent?.(event)
 
             if ('type' in event && event.type === 'message_created') {
@@ -324,9 +361,11 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                 assistantContent: '',
                 status: 'streaming',
               }
-              set(state => ({
-                conversationMessages: [...state.conversationMessages, newMessage]
-              }))
+              set(state => {
+                const currentMessages = state.conversationMessagesCache[conversationId] || []
+                const updatedMessages = [...currentMessages, newMessage]
+                return updateConversationMessagesCache(state, conversationId, updatedMessages)
+              })
               return
             }
 
@@ -336,16 +375,17 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
                 if (isTextContent && block.content) {
                   set(state => {
-                    const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                    const currentMessages = state.conversationMessagesCache[conversationId] || []
+                    const lastMessage = currentMessages[currentMessages.length - 1]
                     const isStreaming = lastMessage?.status === 'streaming'
 
                     if (isStreaming) {
-                      const updatedMessages = [...state.conversationMessages]
+                      const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
                         assistantContent: lastMessage.assistantContent + block.content
                       }
-                      return { conversationMessages: updatedMessages }
+                      return updateConversationMessagesCache(state, conversationId, updatedMessages)
                     }
 
                     return state
@@ -354,14 +394,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
                 if (block.type === 'done') {
                   set(state => {
-                    const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                    const currentMessages = state.conversationMessagesCache[conversationId] || []
+                    const lastMessage = currentMessages[currentMessages.length - 1]
                     if (lastMessage?.status === 'streaming') {
-                      const updatedMessages = [...state.conversationMessages]
+                      const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
                         status: 'completed'
                       }
-                      return { conversationMessages: updatedMessages }
+                      return updateConversationMessagesCache(state, conversationId, updatedMessages)
                     }
                     return state
                   })
@@ -369,14 +410,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
                 if (block.type === 'error') {
                   set(state => {
-                    const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                    const currentMessages = state.conversationMessagesCache[conversationId] || []
+                    const lastMessage = currentMessages[currentMessages.length - 1]
                     if (lastMessage?.status === 'streaming') {
-                      const updatedMessages = [...state.conversationMessages]
+                      const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
                         status: 'error'
                       }
-                      return { conversationMessages: updatedMessages }
+                      return updateConversationMessagesCache(state, conversationId, updatedMessages)
                     }
                     return state
                   })
@@ -387,14 +429,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
             } else {
               if ('type' in event && event.type === 'done') {
                 set(state => {
-                  const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                  const currentMessages = state.conversationMessagesCache[conversationId] || []
+                  const lastMessage = currentMessages[currentMessages.length - 1]
                   if (lastMessage?.status === 'streaming') {
-                    const updatedMessages = [...state.conversationMessages]
+                    const updatedMessages = [...currentMessages]
                     updatedMessages[updatedMessages.length - 1] = {
                       ...lastMessage,
                       status: 'completed'
                     }
-                    return { conversationMessages: updatedMessages }
+                    return updateConversationMessagesCache(state, conversationId, updatedMessages)
                   }
                   return state
                 })
@@ -402,14 +445,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
               if ('type' in event && event.type === 'error') {
                 set(state => {
-                  const lastMessage = state.conversationMessages[state.conversationMessages.length - 1]
+                  const currentMessages = state.conversationMessagesCache[conversationId] || []
+                  const lastMessage = currentMessages[currentMessages.length - 1]
                   if (lastMessage?.status === 'streaming') {
-                    const updatedMessages = [...state.conversationMessages]
+                    const updatedMessages = [...currentMessages]
                     updatedMessages[updatedMessages.length - 1] = {
                       ...lastMessage,
                       status: 'error'
                     }
-                    return { conversationMessages: updatedMessages }
+                    return updateConversationMessagesCache(state, conversationId, updatedMessages)
                   }
                   return state
                 })
@@ -421,6 +465,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         },
       )
 
+      // 流式完成后，重新加载以获取服务器的最终状态
       await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
 
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
@@ -453,18 +498,37 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
 
     activeStreamAbortController?.abort()
+    const targetConversationId = streamingConversationId
 
     try {
-      await cancelConversation(streamingConversationId)
+      await cancelConversation(targetConversationId)
+    } catch (err) {
+      frontendLogger.error('cancel_conversation_failed', {
+        extra: {
+          conversation_id: targetConversationId,
+          error: getErrorMessage(err, 'cancel_request_failed'),
+        },
+      })
     } finally {
-      await Promise.all([get().loadConversationBundle(streamingConversationId), get().loadConversationMessages(streamingConversationId)])
+      try {
+        await Promise.all([get().loadConversationBundle(targetConversationId), get().loadConversationMessages(targetConversationId)])
 
-      const { currentSessionId } = useSessionStore.getState()
-      if (currentSessionId) {
-        const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
-        const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
-        const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
-        set({ conversationNodes })
+        const { currentSessionId } = useSessionStore.getState()
+        if (currentSessionId) {
+          const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
+          const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
+          const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
+          set({ conversationNodes })
+        }
+      } catch (reloadErr) {
+        frontendLogger.error('cancel_state_reload_failed', {
+          extra: {
+            conversation_id: targetConversationId,
+            error: getErrorMessage(reloadErr, 'reload_failed'),
+          },
+        })
+      } finally {
+        set({ streaming: false, streamingConversationId: null })
       }
     }
   },
