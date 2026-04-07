@@ -461,9 +461,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         },
       )
 
-      // 流式完成后，重新加载以获取服务器的最终状态
-      await Promise.all([get().loadConversationBundle(conversationId), get().loadConversationMessages(conversationId)])
-
       const currentSessionDetail = await useSessionStore.getState().loadSessionDetail(currentSessionId)
       const summaries = currentSessionDetail ? currentSessionDetail.conversations ?? (await fetchSessionConversations(currentSessionId)) : []
       const conversationNodes: ConversationNode[] = summaries.map((item) => ({ ...item }))
