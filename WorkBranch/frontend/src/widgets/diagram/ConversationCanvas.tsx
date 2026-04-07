@@ -865,7 +865,17 @@ function FlowViewport({
 
       {!conversationNodes.length ? (
         <div className="conversation-canvas__focused-empty-state">
-          <EmptyState title="当前 session 暂无对话节点" description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'} />
+          <EmptyState
+            title="当前 session 暂无对话节点"
+            description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'}
+            action={
+              sessionDetail ? (
+                <Button onClick={() => void onCreateConversation(null)}>
+                  创建第一个对话节点
+                </Button>
+              ) : undefined
+            }
+          />
         </div>
       ) : null}
 
