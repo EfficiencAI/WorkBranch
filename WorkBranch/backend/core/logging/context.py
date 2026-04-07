@@ -45,4 +45,9 @@ def bind_ctx(**kwargs) -> Iterator[LogContext]:
     try:
         yield next_ctx
     finally:
-        _CTX.reset(token)
+        try:
+            _CTX.reset(token)
+        except ValueError:
+            # Token was created in a different context (e.g., async generator cleanup)
+            # This is expected when the context manager spans across different asyncio tasks
+            pass

@@ -225,6 +225,12 @@ def execute_tool(state: ToolExecutionState, workspace_service=None, llm_service=
     """执行工具"""
     print("[ToolExec] 执行工具...")
     
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     tool_name = state["tool_name"]
     tool_args = state["tool_args"].copy()
     workspace_id = state["workspace_id"]

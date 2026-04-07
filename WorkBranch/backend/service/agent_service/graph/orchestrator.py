@@ -91,6 +91,12 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
 
 def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     def build_flow(state: AgentState) -> dict:
+        # 检查取消状态
+        if message_context:
+            cancel_check = message_context.get("cancel_check")
+            if cancel_check:
+                cancel_check()
+        
         print("\n" + "="*60)
         print("[Orchestrator] 节点: build_flow")
         print("="*60)

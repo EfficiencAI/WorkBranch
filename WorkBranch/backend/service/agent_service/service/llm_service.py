@@ -26,30 +26,35 @@ class LLMService:
         self._initialized = True
     
     def _get_llm(self) -> ChatOpenAI:
-        """获取 LLM 实例"""
+        """获取默认缓存 LLM 实例"""
         if self._llm is None:
-            if self._settings is None:
-                raise ValueError("Settings service not initialized")
-            
-            api_key = self._settings.get("llm:api_key")
-            base_url = self._settings.get("llm:base_url")
-            model = self._settings.get("llm:model")
-            temperature = self._settings.get("llm:temperature")
-            max_tokens = self._settings.get("llm:max_tokens")
-            
-            if not api_key:
-                raise ValueError("LLM API key not configured. Please set llm:api_key in settings.")
-            
-            self._llm = ChatOpenAI(
-                api_key=api_key,
-                base_url=base_url,
-                model=model,
-                temperature=temperature,
-                max_tokens=max_tokens,
-                timeout=httpx.Timeout(120.0, connect=30.0),
-            )
-        
+            self._llm = self._build_llm()
         return self._llm
+
+    def _build_llm(self, http_client: Any = None, http_async_client: Any = None) -> ChatOpenAI:
+        """构造一个可选自定义 HTTP 客户端的 LLM 实例"""
+        if self._settings is None:
+            raise ValueError("Settings service not initialized")
+        
+        api_key = self._settings.get("llm:api_key")
+        base_url = self._settings.get("llm:base_url")
+        model = self._settings.get("llm:model")
+        temperature = self._settings.get("llm:temperature")
+        max_tokens = self._settings.get("llm:max_tokens")
+        
+        if not api_key:
+            raise ValueError("LLM API key not configured. Please set llm:api_key in settings.")
+
+        return ChatOpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            timeout=httpx.Timeout(120.0, connect=30.0),
+            http_client=http_client,
+            http_async_client=http_async_client,
+        )
     
     def _log_llm_event(self, level: str, event: str, msg: str, extra: Optional[dict] = None, exception: str | None = None) -> None:
         from singleton import get_logging_runtime
@@ -169,7 +174,9 @@ class LLMService:
     def chat(
         self,
         messages: List[Dict[str, str]],
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        http_client: Any = None,
+        http_async_client: Any = None,
     ) -> str:
         """
         发送聊天请求
@@ -181,7 +188,10 @@ class LLMService:
         Returns:
             AI 响应文本
         """
-        llm = self._get_llm()
+        if http_client is not None or http_async_client is not None:
+            llm = self._build_llm(http_client=http_client, http_async_client=http_async_client)
+        else:
+            llm = self._get_llm()
         
         lc_messages = []
         
@@ -222,7 +232,9 @@ class LLMService:
         self,
         messages: List[Dict[str, str]],
         system_prompt: Optional[str] = None,
-        stream_callback: Optional[Callable[[str], None]] = None
+        stream_callback: Optional[Callable[[str], None]] = None,
+        http_client: Any = None,
+        http_async_client: Any = None,
     ) -> Generator[str, None, None]:
         """
         流式聊天请求
@@ -235,7 +247,10 @@ class LLMService:
         Yields:
             AI 响应文本片段
         """
-        llm = self._get_llm()
+        if http_client is not None or http_async_client is not None:
+            llm = self._build_llm(http_client=http_client, http_async_client=http_async_client)
+        else:
+            llm = self._get_llm()
         
         lc_messages = []
         
@@ -286,7 +301,9 @@ class LLMService:
         self,
         user_message: str,
         history: List[Dict[str, str]],
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        http_client: Any = None,
+        http_async_client: Any = None,
     ) -> str:
         """
         带历史记录的聊天
@@ -300,13 +317,15 @@ class LLMService:
             AI 响应文本
         """
         messages = history + [{"role": "user", "content": user_message}]
-        return self.chat(messages, system_prompt)
+        return self.chat(messages, system_prompt, http_client=http_client, http_async_client=http_async_client)
     
     def structured_output(
         self,
         messages: List[Dict[str, str]],
         schema: Any,
-        system_prompt: Optional[str] = None
+        system_prompt: Optional[str] = None,
+        http_client: Any = None,
+        http_async_client: Any = None,
     ) -> Any:
         """
         结构化输出
@@ -319,7 +338,10 @@ class LLMService:
         Returns:
             结构化输出
         """
-        llm = self._get_llm()
+        if http_client is not None or http_async_client is not None:
+            llm = self._build_llm(http_client=http_client, http_async_client=http_async_client)
+        else:
+            llm = self._get_llm()
         structured_llm = llm.with_structured_output(schema)
         
         lc_messages = []

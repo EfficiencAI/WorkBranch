@@ -238,6 +238,12 @@ def _format_current_question(user_message: str) -> str:
 
 def phase1_understand(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, message_context: dict = None) -> dict:
     """Phase 1: 理解需求 - 调用 LLM 分析用户意图"""
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     send_message = message_context.get("send_message") if message_context else None
     
     _phase_start(send_message, "understand")
@@ -314,6 +320,12 @@ def phase1_understand(state: AgentState, llm_service=None, token_callback: Optio
 
 def phase2_design(state: AgentState, llm_service=None, token_callback: Optional[Callable[[str], None]] = None, settings_service=None, message_context: dict = None) -> dict:
     """Phase 2: 生成计划"""
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     send_message = message_context.get("send_message") if message_context else None
     
     _phase_start(send_message, "design")
@@ -506,6 +518,12 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
 
 def phase3_review(state: AgentState, llm_service=None, message_context: dict = None) -> dict:
     """Phase 3: 审查计划"""
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     send_message = message_context.get("send_message") if message_context else None
     
     _phase_start(send_message, "review")
@@ -524,6 +542,12 @@ def phase3_review(state: AgentState, llm_service=None, message_context: dict = N
 
 def phase4_finalize(state: AgentState, llm_service=None, message_context: dict = None) -> dict:
     """Phase 4: 最终计划"""
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     send_message = message_context.get("send_message") if message_context else None
     
     _phase_start(send_message, "finalize")
@@ -538,6 +562,12 @@ def phase4_finalize(state: AgentState, llm_service=None, message_context: dict =
 
 def phase5_exit(state: AgentState, llm_service=None, message_context: dict = None) -> dict:
     """Phase 5: 计划退出"""
+    # 检查取消状态
+    if message_context:
+        cancel_check = message_context.get("cancel_check")
+        if cancel_check:
+            cancel_check()
+    
     send_message = message_context.get("send_message") if message_context else None
     
     _phase_start(send_message, "exit")

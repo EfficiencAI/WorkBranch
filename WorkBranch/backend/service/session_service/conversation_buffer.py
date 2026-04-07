@@ -226,6 +226,17 @@ class ConversationBuffer:
                 if draft.conversation_id == conversation_id
             ]
             for msg_id in to_delete:
+                draft = self._drafts[msg_id]
+                merged_blocks = self._merge_adjacent_deltas(draft.assistant_blocks)
+                assistant_content = json.dumps(
+                    [block.to_dict() for block in merged_blocks],
+                    ensure_ascii=False
+                ) if merged_blocks else ''
+                self._dao.update_message_assistant(
+                    message_id=msg_id,
+                    assistant_content=assistant_content,
+                    status='error',
+                )
                 del self._drafts[msg_id]
                 cleared = True
             return cleared

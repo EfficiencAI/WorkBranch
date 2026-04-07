@@ -1,7 +1,8 @@
 import uuid
 import asyncio
 import traceback
-from typing import Optional, Dict, List, Callable
+import httpx
+from typing import Any, Optional, Dict, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from datetime import datetime
@@ -38,6 +39,57 @@ class Conversation:
     messages: List[str] = field(default_factory=list)
 
 
+class _CancellableLLMServiceProxy:
+    def __init__(self, llm_service: Any, http_client: httpx.Client) -> None:
+        self._llm_service = llm_service
+        self._http_client = http_client
+
+    def chat(self, messages: List[Dict[str, str]], system_prompt: Optional[str] = None, **kwargs: Any) -> str:
+        return self._llm_service.chat(messages, system_prompt, http_client=self._http_client, **kwargs)
+
+    def chat_stream(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: Optional[str] = None,
+        stream_callback: Optional[Callable[[str], None]] = None,
+        **kwargs: Any,
+    ):
+        return self._llm_service.chat_stream(
+            messages,
+            system_prompt,
+            stream_callback=stream_callback,
+            http_client=self._http_client,
+            **kwargs,
+        )
+
+    def chat_with_history(
+        self,
+        user_message: str,
+        history: List[Dict[str, str]],
+        system_prompt: Optional[str] = None,
+        **kwargs: Any,
+    ) -> str:
+        return self._llm_service.chat_with_history(
+            user_message,
+            history,
+            system_prompt,
+            http_client=self._http_client,
+            **kwargs,
+        )
+
+    def structured_output(self, messages: List[Dict[str, str]], schema: Any, system_prompt: Optional[str] = None, **kwargs: Any) -> Any:
+        return self._llm_service.structured_output(
+            messages,
+            schema,
+            system_prompt,
+            http_client=self._http_client,
+            **kwargs,
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._llm_service, name)
+
+
 class AgentService:
     """Agent 服务：管理多个并发对话"""
 
@@ -49,6 +101,7 @@ class AgentService:
         self._message_queue = message_queue
         self._settings = settings_service
         self._conversations: Dict[str, Conversation] = {}
+        self._conversation_http_clients: Dict[str, List[httpx.Client]] = {}
         self._lock = asyncio.Lock()
     
     def _get_settings(self):
@@ -90,6 +143,43 @@ class AgentService:
         from singleton import get_logging_runtime
 
         return get_logging_runtime().get_logger("agent")
+
+    def _create_http_client(self) -> httpx.Client:
+        settings = self._get_settings()
+        timeout = httpx.Timeout(120.0, connect=30.0)
+        proxy = None
+
+        try:
+            openai_proxy = settings.get("llm:openai_proxy")
+        except KeyError:
+            openai_proxy = None
+
+        if openai_proxy:
+            proxy = openai_proxy
+
+        return httpx.Client(timeout=timeout, proxy=proxy)
+
+    def _register_conversation_http_client(self, conversation_id: str, client: httpx.Client) -> None:
+        self._conversation_http_clients.setdefault(conversation_id, []).append(client)
+
+    def _deregister_conversation_http_client(self, conversation_id: str, client: httpx.Client) -> None:
+        clients = self._conversation_http_clients.get(conversation_id)
+        if not clients:
+            return
+        try:
+            clients.remove(client)
+        except ValueError:
+            pass
+        if not clients:
+            self._conversation_http_clients.pop(conversation_id, None)
+
+    def _close_conversation_http_clients(self, conversation_id: str) -> None:
+        clients = self._conversation_http_clients.pop(conversation_id, [])
+        for client in clients:
+            try:
+                client.close()
+            except Exception:
+                pass
 
     def _log_agent_event(
         self,
@@ -229,10 +319,13 @@ class AgentService:
         """
         异步执行 Agent（将同步 run_graph 包装为异步）
         """
-        llm_service = self._get_llm_service()
+        base_llm_service = self._get_llm_service()
         mq = self._get_message_queue()
         memory_mode, window_size = self._get_memory_config()
         settings = self._get_settings()
+        http_client = self._create_http_client()
+        self._register_conversation_http_client(conversation_id, http_client)
+        llm_service = _CancellableLLMServiceProxy(base_llm_service, http_client)
         
         conv = self._conversations.get(conversation_id)
         session_id = conv.session_id if conv else ""
@@ -297,27 +390,42 @@ class AgentService:
                 )
                 mq.publish_sync(msg)
 
+            def cancel_check():
+                """检查对话是否被取消，如果取消则抛出异常"""
+                conv = self._conversations.get(conversation_id)
+                if conv and conv.status == ConversationStatus.CANCELLED:
+                    raise asyncio.CancelledError("对话已被取消")
+
             message_context = {
                 "send_message": send_message,
                 "session_id": session_id,
                 "conversation_id": conversation_id,
                 "workspace_id": workspace_id,
                 "message_id": message_id,
+                "cancel_check": cancel_check,
             }
 
+
             def run_with_config():
-                return run_graph(
-                    message,
-                    workspace_id,
-                    llm_service,
-                    send_message,
-                    memory_mode,
-                    window_size,
-                    settings,
-                    message_context=message_context,
-                    parent_chain_messages=parent_chain_messages,
-                    current_conversation_messages=current_conversation_messages
-                )
+                try:
+                    return run_graph(
+                        message,
+                        workspace_id,
+                        llm_service,
+                        send_message,
+                        memory_mode,
+                        window_size,
+                        settings,
+                        message_context=message_context,
+                        parent_chain_messages=parent_chain_messages,
+                        current_conversation_messages=current_conversation_messages
+                    )
+                finally:
+                    self._deregister_conversation_http_client(conversation_id, http_client)
+                    try:
+                        http_client.close()
+                    except Exception:
+                        pass
 
             loop = asyncio.get_event_loop()
             try:
@@ -440,6 +548,7 @@ class AgentService:
         Returns:
             是否成功取消
         """
+        self._close_conversation_http_clients(conversation_id)
         conv = self._conversations.get(conversation_id)
         if conv and conv.task and not conv.task.done():
             conv.task.cancel()
