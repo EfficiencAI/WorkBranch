@@ -1,4 +1,4 @@
-import { Button, Checkbox, Input, Space, Tooltip, Typography } from 'antd'
+import { App, Button, Checkbox, Input, Space, Tooltip, Typography } from 'antd'
 import { SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
@@ -28,6 +28,7 @@ export function MessageComposer({
   onSwitchToSendTarget,
 }: MessageComposerProps) {
   const { settings } = useSettings()
+  const { message: messageApi } = App.useApp()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [enableContext, setEnableContext] = useState(false)
@@ -59,6 +60,13 @@ export function MessageComposer({
 
     const shouldSend = messageSendShortcutsReversed ? event.shiftKey : !event.shiftKey
     if (!shouldSend) {
+      return
+    }
+
+    // 检查选中节点是否是聚焦节点
+    if (focusedConversationId && selectedConversationId !== focusedConversationId) {
+      event.preventDefault()
+      void messageApi.warning('当前聚焦节点不是被选中的消息发送节点，快捷键已被禁用')
       return
     }
 
