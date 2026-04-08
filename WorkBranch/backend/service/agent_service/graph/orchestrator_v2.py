@@ -5,6 +5,7 @@ from ..state import AgentState
 from ..persistence import PersistenceService
 from .subgraphs import run_tool_execution
 from service.session_service.canonical import SegmentType, ContentBlock
+from core.logging import console
 
 
 MAX_REPLAN_COUNT = 3
@@ -48,13 +49,7 @@ def create_analyze_node(llm_service=None):
     def analyze_node(state: AgentState) -> dict:
         user_message = state["messages"][-1] if state["messages"] else ""
         
-        print("\n" + "╔" + "═"*78 + "╗")
-        print("║" + " "*30 + "Graph 执行日志" + " "*34 + "║")
-        print("╠" + "═"*78 + "╣")
-        print("║ 当前步骤: 分析节点" + " "*58 + "║")
-        print("║ 上一步:   入口" + " "*62 + "║")
-        print("║ 输入消息: " + user_message[:65] + ("..." if len(user_message) > 65 else "") + " "*(68-min(len(user_message), 65)) + "║")
-        print("╚" + "═"*78 + "╝")
+        console.step("分析节点", "入口", user_message)
         
         if llm_service:
             system_prompt = """你是一个任务分析专家。请分析用户任务的复杂度，并决定执行模式。
@@ -78,24 +73,12 @@ def create_analyze_node(llm_service=None):
             
             messages = [{"role": "user", "content": f"请分析以下任务：\n\n{user_message}"}]
             
-            print("\n┌─ 发送给大模型的 Prompt " + "─"*52 + "┐")
-            print("│")
-            print("│ [系统提示词]")
-            print("│ " + system_prompt.replace("\n", "\n│ "))
-            print("│")
-            print("│ [用户消息]")
-            print("│ " + user_message)
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.prompt_box("发送给大模型的 Prompt", system_prompt, user_message)
             
             try:
                 response = llm_service.chat(messages, system_prompt=system_prompt)
                 
-                print("\n┌─ 大模型的回复 " + "─"*62 + "┐")
-                print("│")
-                print("│ " + response.replace("\n", "\n│ "))
-                print("│")
-                print("└" + "─"*78 + "┘")
+                console.response_box(response)
                 
                 import json
                 response_text = response.strip()
@@ -129,7 +112,7 @@ def create_analyze_node(llm_service=None):
                 }
                 
             except Exception as e:
-                print(f"\n⚠️  调用大模型失败: {e}，使用默认逻辑")
+                console.warning(f"调用大模型失败: {e}，使用默认逻辑")
                 complexity = evaluate_task_complexity(user_message)
                 intent_analysis = {
                     "intent_type": "other",
@@ -152,13 +135,10 @@ def create_analyze_node(llm_service=None):
             }
             mode_decision = analyze_task_complexity(user_message, intent_analysis)
         
-        print("\n┌─ 执行决策 " + "─"*66 + "┐")
-        print("│")
-        print(f"│ 执行模式: {mode_decision['mode']}")
-        print(f"│ 原因:     {mode_decision['reason']}")
-        print(f"│ 下一步:   {route_after_analyze({'execution_mode': mode_decision['mode']})}")
-        print("│")
-        print("└" + "─"*78 + "┘")
+        console.decision_box(
+            route_after_analyze({'execution_mode': mode_decision['mode']}),
+            f"执行模式: {mode_decision['mode']}\n原因: {mode_decision['reason']}"
+        )
         
         return {
             "intent_analysis": intent_analysis,
@@ -176,32 +156,22 @@ def create_analyze_node(llm_service=None):
 def create_execute_node(llm_service=None, token_callback=None, settings_service=None, message_context=None):
     """执行节点"""
     def execute_node(state: AgentState) -> dict:
-        # 检查取消状态
         if message_context:
             cancel_check = message_context.get("cancel_check")
             if cancel_check:
                 cancel_check()
         
-        # 执行待处理工具
         pending_tools = state.get("pending_tools", [])
         if pending_tools:
             tool_name = pending_tools[0].get("tool")
             tool_args = pending_tools[0].get("args", {})
             
-            print("\n" + "╔" + "═"*78 + "╗")
-            print("║" + " "*30 + "Graph 执行日志" + " "*34 + "║")
-            print("╠" + "═"*78 + "╣")
-            print("║ 当前步骤: 执行节点" + " "*58 + "║")
-            print("║ 上一步:   分析节点" + " "*60 + "║")
-            print("║ 执行模式: " + str(state.get("execution_mode")) + " "*(66-len(str(state.get("execution_mode")))) + "║")
-            print("╚" + "═"*78 + "╝")
+            console.step("执行节点", "分析节点", f"执行工具: {tool_name}")
             
-            print("\n┌─ 执行工具 " + "─"*66 + "┐")
-            print("│")
-            print(f"│ 工具名称: {tool_name}")
-            print(f"│ 工具参数: {tool_args}")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.box("执行工具", {
+                "工具名称": tool_name,
+                "工具参数": tool_args
+            })
             
             tool_result = run_tool_execution(
                 tool_name=tool_name,
@@ -217,14 +187,8 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
                 message_context=message_context
             )
             
-            print("\n┌─ 工具执行结果 " + "─"*62 + "┐")
-            print("│")
             result_str = str(tool_result.get("result", ""))
-            print("│ " + result_str[:200].replace("\n", "\n│ "))
-            if len(result_str) > 200:
-                print("│ ...")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.box("工具执行结果", result_str[:200])
             
             new_tool_history = state.get("tool_history", []) + [{
                 "tool": tool_name,
@@ -233,19 +197,13 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
             }]
             
             next_step = "execute" if pending_tools[1:] else "done"
-            
-            print("\n┌─ 执行决策 " + "─"*66 + "┐")
-            print("│")
-            print(f"│ 下一步: {next_step}")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.decision_box(next_step)
             
             return {
                 "pending_tools": pending_tools[1:],
                 "tool_history": new_tool_history
             }
         
-        # 执行规划中的任务
         if state.get("plan") and state.get("current_step", 0) < len(state["plan"]):
             step = state.get("current_step", 0)
             plan = state["plan"]
@@ -260,26 +218,15 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
             }
             phase_name = phase_names.get(phase, phase)
             
-            print("\n" + "╔" + "═"*78 + "╗")
-            print("║" + " "*30 + "Graph 执行日志" + " "*34 + "║")
-            print("╠" + "═"*78 + "╣")
-            print("║ 当前步骤: 执行节点" + " "*58 + "║")
-            print("║ 上一步:   规划节点" + " "*60 + "║")
-            print("║ 执行模式: " + str(state.get("execution_mode")) + " "*(66-len(str(state.get("execution_mode")))) + "║")
-            print("╚" + "═"*78 + "╝")
+            console.step("执行节点", "规划节点", task['description'])
             
-            print("\n┌─ 执行任务 " + "─"*66 + "┐")
-            print("│")
-            print(f"│ 任务进度: {step + 1}/{len(plan)}")
-            print(f"│ 任务阶段: {phase_name}")
-            print(f"│ 任务描述: {task['description']}")
             tool_name = task.get("tool") or "thinking"
-            print(f"│ 使用工具: {tool_name}")
             tool_args = task.get("args") or {}
-            if tool_args:
-                print(f"│ 工具参数: {tool_args}")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            
+            console.execution_box(
+                step + 1, len(plan), phase_name,
+                task['description'], tool_name, tool_args
+            )
             
             tool_result = run_tool_execution(
                 tool_name=tool_name,
@@ -308,17 +255,7 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
             elif phase == "verification":
                 task["feedback"] = f"验证完成：{result_str[:100]}..."
             
-            print("\n┌─ 任务执行结果 " + "─"*60 + "┐")
-            print("│")
-            print(f"│ 状态: {task['status']}")
-            print("│ 结果:")
-            print("│ " + result_str[:200].replace("\n", "\n│ "))
-            if len(result_str) > 200:
-                print("│ ...")
-            print("│")
-            print(f"│ 反馈: {task['feedback']}")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.result_box(task['status'], result_str[:200], task['feedback'])
             
             new_results = state.get("results", []) + [{
                 "task": task,
@@ -332,12 +269,7 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
             }]
             
             next_step = "execute" if step + 1 < len(plan) else "done"
-            
-            print("\n┌─ 执行决策 " + "─"*66 + "┐")
-            print("│")
-            print(f"│ 下一步: {next_step}")
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.decision_box(next_step)
             
             return {
                 "current_step": step + 1,
@@ -346,20 +278,8 @@ def create_execute_node(llm_service=None, token_callback=None, settings_service=
                 "plan": plan
             }
         
-        # 没有任务可执行，返回完成状态
-        print("\n" + "╔" + "═"*78 + "╗")
-        print("║" + " "*30 + "Graph 执行日志" + " "*34 + "║")
-        print("╠" + "═"*78 + "╣")
-        print("║ 当前步骤: 执行节点" + " "*58 + "║")
-        print("║ 上一步:   无" + " "*66 + "║")
-        print("╚" + "═"*78 + "╝")
-        
-        print("\n┌─ 执行决策 " + "─"*66 + "┐")
-        print("│")
-        print("│ 没有任务可执行，执行完成")
-        print("│ 下一步: done")
-        print("│")
-        print("└" + "─"*78 + "┘")
+        console.step("执行节点", "无", "没有任务可执行")
+        console.decision_box("done", "没有任务可执行，执行完成")
         
         return {
             "pending_tools": [],
@@ -376,13 +296,7 @@ def create_plan_node(llm_service=None, token_callback=None, settings_service=Non
     def plan_node(state: AgentState) -> dict:
         user_message = state["messages"][-1] if state["messages"] else ""
         
-        print("\n" + "╔" + "═"*78 + "╗")
-        print("║" + " "*30 + "Graph 执行日志" + " "*34 + "║")
-        print("╠" + "═"*78 + "╣")
-        print("║ 当前步骤: 规划节点" + " "*58 + "║")
-        print("║ 上一步:   分析节点" + " "*60 + "║")
-        print("║ 输入消息: " + user_message[:65] + ("..." if len(user_message) > 65 else "") + " "*(68-min(len(user_message), 65)) + "║")
-        print("╚" + "═"*78 + "╝")
+        console.step("规划节点", "分析节点", user_message)
         
         if llm_service:
             from .subgraphs.plan_graph import get_plan_system_prompt, parse_plan_from_text
@@ -391,54 +305,22 @@ def create_plan_node(llm_service=None, token_callback=None, settings_service=Non
             
             messages = [{"role": "user", "content": f"请为以下任务生成详细的执行计划，包含2-5个步骤：\n\n{user_message}"}]
             
-            print("\n┌─ 发送给大模型的 Prompt " + "─"*52 + "┐")
-            print("│")
-            print("│ [系统提示词]")
-            print("│ " + system_prompt[:200].replace("\n", "\n│ ") + "...")
-            print("│")
-            print("│ [用户消息]")
-            print("│ " + user_message)
-            print("│")
-            print("└" + "─"*78 + "┘")
+            console.prompt_box("发送给大模型的 Prompt", system_prompt[:200] + "...", user_message)
             
             try:
                 response = llm_service.chat(messages, system_prompt=system_prompt)
                 
-                print("\n┌─ 大模型的回复 " + "─"*62 + "┐")
-                print("│")
-                print("│ " + response.replace("\n", "\n│ "))
-                print("│")
-                print("└" + "─"*78 + "┘")
+                console.response_box(response)
                 
                 plan = parse_plan_from_text(response)
                 
                 for i, task in enumerate(plan):
                     task["id"] = i + 1
                 
-                print("\n┌─ 生成的任务计划 " + "─"*58 + "┐")
-                print("│")
-                print(f"│ 共生成 {len(plan)} 个任务:")
-                current_phase = None
-                for task in plan:
-                    phase = task.get('phase', 'implementation')
-                    if phase != current_phase:
-                        current_phase = phase
-                        phase_names = {
-                            'research': '研究阶段',
-                            'synthesis': '综合阶段',
-                            'implementation': '实现阶段',
-                            'verification': '验证阶段'
-                        }
-                        print(f"│")
-                        print(f"│ [{phase_names.get(phase, phase)}]")
-                    
-                    tool_info = f" [工具: {task.get('tool')}]" if task.get('tool') else ""
-                    print(f"│   {task['id']}. {task['description']}{tool_info}")
-                print("│")
-                print("└" + "─"*78 + "┘")
+                console.task_list_box(plan)
                 
             except Exception as e:
-                print(f"\n⚠️  调用大模型失败: {e}，使用默认计划")
+                console.warning(f"调用大模型失败: {e}，使用默认计划")
                 plan = [
                     {"id": 1, "description": f"分析需求: {user_message[:30]}...", "phase": "research", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
                     {"id": 2, "description": "设计实现方案", "phase": "synthesis", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
@@ -446,7 +328,7 @@ def create_plan_node(llm_service=None, token_callback=None, settings_service=Non
                     {"id": 4, "description": "验证结果", "phase": "verification", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
                 ]
         else:
-            print("\n⚠️  LLM服务未配置，使用默认计划")
+            console.warning("LLM服务未配置，使用默认计划")
             plan = [
                 {"id": 1, "description": f"分析需求: {user_message[:30]}...", "phase": "research", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
                 {"id": 2, "description": "设计实现方案", "phase": "synthesis", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
@@ -454,11 +336,7 @@ def create_plan_node(llm_service=None, token_callback=None, settings_service=Non
                 {"id": 4, "description": "验证结果", "phase": "verification", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
             ]
         
-        print("\n┌─ 执行决策 " + "─"*66 + "┐")
-        print("│")
-        print("│ 下一步: execute")
-        print("│")
-        print("└" + "─"*78 + "┘")
+        console.decision_box("execute")
         
         return {
             "plan": plan,

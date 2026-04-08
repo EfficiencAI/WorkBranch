@@ -4,6 +4,7 @@ from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
 import httpx
 import time
 import traceback
+from core.logging import console
 
 
 class LLMService:
@@ -209,22 +210,17 @@ class LLMService:
             elif role == "system":
                 lc_messages.append(SystemMessage(content=content))
         
-        print("\n" + "=" * 60)
-        print("[LLM] 原始提示词:")
-        print("=" * 60)
+        console.header("LLM 原始提示词", style="single")
+        
         for i, msg in enumerate(lc_messages):
             role_name = msg.__class__.__name__.replace("Message", "").upper()
-            content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
-            print(f"\n[{i+1}] {role_name}:")
-            print("-" * 40)
-            print(content_preview)
-        print("\n" + "=" * 60)
+            console.box(f"[{i+1}] {role_name}", msg.content[:200])
         
-        print(f"[LLM] 发送请求: {len(lc_messages)} 条消息")
+        console.info(f"发送请求: {len(lc_messages)} 条消息")
 
         response = self._invoke_with_logging("chat", lambda: llm.invoke(lc_messages))
 
-        print(f"[LLM] 收到响应: {len(response.content)} 字符")
+        console.success(f"收到响应: {len(response.content)} 字符")
         
         return response.content
     
@@ -268,20 +264,14 @@ class LLMService:
             elif role == "system":
                 lc_messages.append(SystemMessage(content=content))
         
-        print("\n" + "=" * 60)
-        print("[LLM] 原始提示词:")
-        print("=" * 60)
+        console.header("LLM 原始提示词", style="single")
+        
         for i, msg in enumerate(lc_messages):
             role_name = msg.__class__.__name__.replace("Message", "").upper()
-            content_preview = msg.content[:200] + "..." if len(msg.content) > 200 else msg.content
-            print(f"\n[{i+1}] {role_name}:")
-            print("-" * 40)
-            print(content_preview)
-        print("\n" + "=" * 60)
+            console.box(f"[{i+1}] {role_name}", msg.content[:200])
         
-        print(f"[LLM] 发送流式请求: {len(lc_messages)} 条消息")
-        print("[LLM] 流式输出:")
-        print("-" * 40)
+        console.info(f"发送流式请求: {len(lc_messages)} 条消息")
+        console.section("流式输出")
         
         def stream_chunks():
             for chunk in llm.stream(lc_messages):
@@ -294,8 +284,7 @@ class LLMService:
 
         yield from self._stream_with_logging("chat_stream", stream_chunks)
         
-        print()
-        print("-" * 40)
+        console.section_end()
     
     def chat_with_history(
         self,
@@ -358,14 +347,14 @@ class LLMService:
             elif role == "assistant":
                 lc_messages.append(AIMessage(content=content))
         
-        print(f"[LLM] 结构化输出请求: {len(lc_messages)} 条消息")
+        console.info(f"结构化输出请求: {len(lc_messages)} 条消息")
         
         response = self._invoke_with_logging(
             "structured_output",
             lambda: structured_llm.invoke(lc_messages),
         )
         
-        print(f"[LLM] 结构化输出完成")
+        console.success("结构化输出完成")
         
         return response
 
