@@ -9,7 +9,10 @@ from datetime import datetime
 
 from core.logging import bind_ctx
 from .service import WorkspaceService
-from .graph import run_graph
+from .graph import run_graph, run_graph_v2
+from .agents.registry import AgentRegistry
+from .tools.executors import ToolExecutor
+from .tools import register_all_tools
 from service.session_service.canonical import (
     SegmentType,
     ContentBlock,
@@ -103,6 +106,10 @@ class AgentService:
         self._conversations: Dict[str, Conversation] = {}
         self._conversation_http_clients: Dict[str, List[httpx.Client]] = {}
         self._lock = asyncio.Lock()
+        self.agent_registry = AgentRegistry()
+        self.tool_executor = ToolExecutor(llm_service, self)
+        # 注册所有工具
+        register_all_tools()
     
     def _get_settings(self):
         if self._settings is None:
@@ -408,14 +415,14 @@ class AgentService:
 
             def run_with_config():
                 try:
-                    return run_graph(
+                    return run_graph_v2(
                         message,
                         workspace_id,
-                        llm_service,
-                        send_message,
-                        memory_mode,
-                        window_size,
-                        settings,
+                        llm_service=llm_service,
+                        token_callback=send_message,
+                        memory_mode=memory_mode,
+                        window_size=window_size,
+                        settings_service=settings,
                         message_context=message_context,
                         parent_chain_messages=parent_chain_messages,
                         current_conversation_messages=current_conversation_messages
@@ -653,7 +660,14 @@ class AgentService:
         llm_service = self._get_llm_service()
         memory_mode, window_size = self._get_memory_config()
         settings = self._get_settings()
-        result = run_graph(user_message, workspace_id, llm_service, None, memory_mode, window_size, settings)
+        result = run_graph_v2(
+            user_message,
+            workspace_id,
+            llm_service=llm_service,
+            memory_mode=memory_mode,
+            window_size=window_size,
+            settings_service=settings
+        )
 
         print("\n[Agent] 任务完成！")
         print("="*60)
