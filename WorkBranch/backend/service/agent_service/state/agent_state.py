@@ -22,12 +22,32 @@ class IntentType(str, Enum):
     OTHER = "other"
 
 
+class TaskPhase(str, Enum):
+    """任务阶段"""
+    RESEARCH = "research"
+    SYNTHESIS = "synthesis"
+    IMPLEMENTATION = "implementation"
+    VERIFICATION = "verification"
+
+
+class TaskStatus(str, Enum):
+    """任务状态"""
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class Task(TypedDict):
     """单个任务定义"""
     id: int
     description: str
+    phase: str
+    status: str
     tool: Optional[str]
     args: Optional[dict]
+    result: Optional[str]
+    feedback: Optional[str]
 
 
 class ToolCall(TypedDict):
@@ -62,3 +82,10 @@ class AgentState(TypedDict):
     intent_analysis: Optional[IntentAnalysis]
     parent_chain_messages: Optional[List[dict]]
     current_conversation_messages: Optional[List[dict]]
+    execution_mode: Optional[str]
+    mode_reason: Optional[str]
+    suggested_tools: Optional[List[str]]
+    suggested_subagent: Optional[str]
+    in_plan_mode: Optional[bool]
+    active_subagent: Optional[bool]
+    pending_tools: Optional[List[dict]]

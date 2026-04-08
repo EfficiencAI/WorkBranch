@@ -110,6 +110,31 @@ ALL_TOOLS = {
         "name": "call_review_agent",
         "description": "调用审查子代理执行代码审查任务",
         "params": "task_description"
+    },
+    "todo_add": {
+        "name": "todo_add",
+        "description": "添加任务到TODO列表",
+        "params": "description, priority(high/medium/low), tool, args"
+    },
+    "todo_update": {
+        "name": "todo_update",
+        "description": "更新TODO任务状态",
+        "params": "task_id, status(pending/in_progress/completed/failed), result"
+    },
+    "todo_delete": {
+        "name": "todo_delete",
+        "description": "删除TODO任务",
+        "params": "task_id"
+    },
+    "todo_list": {
+        "name": "todo_list",
+        "description": "列出TODO任务",
+        "params": "status(pending/in_progress/completed/all)"
+    },
+    "todo_clear": {
+        "name": "todo_clear",
+        "description": "清除TODO任务",
+        "params": "completed_only(true/false)"
     }
 }
 
@@ -117,3 +142,4 @@ ALL_TOOLS = {
 FILE_TOOLS = {"read_file", "write_file", "delete_file", "list_dir", "create_dir"}
 EXPLORE_TOOLS = {"explore_code", "explore_internet"}
 SUBAGENT_TOOLS = {"call_explore_agent", "call_review_agent"}
+TODO_TOOLS = {"todo_add", "todo_update", "todo_delete", "todo_list", "todo_clear"}

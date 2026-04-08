@@ -94,6 +94,13 @@ PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的
 
 {tool_prompt}
 
+## 任务阶段说明
+每个任务必须属于以下四个阶段之一：
+1. **research** - 研究阶段：探索代码库，理解问题，收集信息
+2. **synthesis** - 综合阶段：综合研究结果，制定实现规范，设计解决方案
+3. **implementation** - 实现阶段：实现代码，执行工具，应用更改
+4. **verification** - 验证阶段：运行测试，验证功能，检查质量
+
 ## 输出格式要求
 你必须严格按照以下 JSON 格式输出，不要有任何其他文字：
 
@@ -103,6 +110,7 @@ PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的
     {{
       "id": 1,
       "description": "任务描述",
+      "phase": "research/synthesis/implementation/verification",
       "tool": "工具名称或null",
       "args": {{"参数名": "参数值"}}或null
     }}
@@ -111,10 +119,13 @@ PLAN_SYSTEM_PROMPT_BASE = """你是一个专业的软件工程师助手。你的
 ```
 
 ## 注意事项
-1. 每个任务必须包含 id, description, tool, args 四个字段
-2. tool 如果不需要使用工具，设为 null
-3. args 如果没有参数，设为 null
-4. 只输出 JSON，不要有任何解释或额外文字"""
+1. 每个任务必须包含 id, description, phase, tool, args 五个字段
+2. phase 必须是 research, synthesis, implementation, verification 之一
+3. tool 如果不需要使用工具，设为 null
+4. args 如果没有参数，设为 null
+5. 只输出 JSON，不要有任何解释或额外文字
+6. 任务应该按照阶段顺序排列：research -> synthesis -> implementation -> verification
+7. 每个阶段可以有多个任务，但必须保持阶段顺序"""
 
 
 def get_plan_system_prompt(agent_type: str = "build_agent", settings_service=None) -> str:
@@ -442,8 +453,12 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
                     task = {
                         "id": task_data.get("id", len(tasks) + 1),
                         "description": task_data.get("description", ""),
+                        "phase": task_data.get("phase", "implementation"),
+                        "status": "pending",
                         "tool": task_data.get("tool"),
                         "args": task_data.get("args"),
+                        "result": None,
+                        "feedback": None
                     }
                     if task["description"]:
                         tasks.append(task)
@@ -469,8 +484,12 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
             current_task = {
                 "id": int(task_match.group(1)),
                 "description": task_match.group(2).strip(),
+                "phase": "implementation",
+                "status": "pending",
                 "tool": None,
-                "args": None
+                "args": None,
+                "result": None,
+                "feedback": None
             }
             continue
         
@@ -487,6 +506,11 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
                 except:
                     current_task["args"] = None
                 continue
+            
+            phase_match = re.match(r'^阶段\s*[:：]\s*(\w+)', line)
+            if phase_match:
+                current_task["phase"] = phase_match.group(1).lower()
+                continue
     
     if current_task and current_task.get("description"):
         tasks.append(current_task)
@@ -499,18 +523,22 @@ def parse_plan_from_text(text: str, send_message=None) -> List[dict]:
             
             if line[0].isdigit() or line.startswith("-") or line.startswith("*"):
                 desc = line.lstrip("0123456789.-* ").strip()
-                if desc and not desc.lower().startswith(("工具", "参数", "tool", "args")):
+                if desc and not desc.lower().startswith(("工具", "参数", "tool", "args", "阶段", "phase")):
                     tasks.append({
                         "id": len(tasks) + 1,
                         "description": desc,
+                        "phase": "implementation",
+                        "status": "pending",
                         "tool": None,
-                        "args": None
+                        "args": None,
+                        "result": None,
+                        "feedback": None
                     })
     
     if not tasks:
         tasks = [
-            {"id": 1, "description": "分析需求", "tool": None, "args": None},
-            {"id": 2, "description": "执行实现", "tool": None, "args": None},
+            {"id": 1, "description": "分析需求", "phase": "research", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
+            {"id": 2, "description": "执行实现", "phase": "implementation", "status": "pending", "tool": None, "args": None, "result": None, "feedback": None},
         ]
     
     return tasks
