@@ -14,7 +14,10 @@
     "dev:backend": "pnpm --filter @workbranch/backend run dev",
     "build:frontend": "pnpm --filter @workbranch/frontend run build",
     "build:backend": "pnpm --filter @workbranch/backend run build",
-    "start:backend": "pnpm --filter @workbranch/backend run start"
+    "start:backend": "pnpm --filter @workbranch/backend run start",
+    "build:electron": "pnpm --filter @workbranch/electron run build",
+    "build:android": "pnpm --filter @workbranch/android run build",
+    "dev:electron": "pnpm --filter @workbranch/electron run dev"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

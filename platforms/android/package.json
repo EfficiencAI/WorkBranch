@@ -1,0 +1,19 @@
+{
+  "name": "@workbranch/android",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "cap build android",
+    "sync": "cap sync android",
+    "open": "cap open android",
+    "run": "cap run android",
+    "copy": "cap copy android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^5.5.1",
+    "@capacitor/core": "^5.5.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^5.5.1"
+  }
+}
