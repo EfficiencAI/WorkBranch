@@ -2,6 +2,7 @@
 # 类比 Spring：@lru_cache 相当于 @Bean，Depends() 相当于 @Autowired
 from functools import lru_cache
 
+from core.logging.runtime import LoggingRuntime
 from db.sqlite import Database
 from data.file_storage_system import FileStorageSystem
 from service.agent_service.service import WorkspaceService, LLMService
@@ -42,9 +43,9 @@ def get_session_service():
     return SessionService()
 
 @lru_cache(maxsize=1)
-def get_conversation_creator():
-    from service.session_service.conversation_creator import ConversationCreator
-    return ConversationCreator()
+def get_conversation_service():
+    from service.session_service.conversation_service import ConversationService
+    return ConversationService()
 
 @lru_cache(maxsize=1)
 def get_agent_service():
@@ -84,8 +85,19 @@ def get_message_queue() -> MessageQueue:
     return MessageQueue(settings)
 
 
+@lru_cache(maxsize=1)
+def get_logging_runtime() -> LoggingRuntime:
+    settings = get_settings_service()
+    return LoggingRuntime(settings)
+
+
 def clear_all_singletons():
     """清除所有单例缓存（例如测试用例 teardown 时调用）"""
+    try:
+        get_logging_runtime().shutdown()
+    except Exception:
+        pass
+
     get_settings_service.cache_clear()
     get_database.cache_clear()
     get_conversation_buffer.cache_clear()
@@ -93,10 +105,11 @@ def clear_all_singletons():
     get_user_service.cache_clear()
     get_session_history.cache_clear()
     get_session_service.cache_clear()
-    get_conversation_creator.cache_clear()
+    get_conversation_service.cache_clear()
     get_agent_service.cache_clear()
     get_workspace_service.cache_clear()
     get_llm_service.cache_clear()
     get_user_info_dao.cache_clear()
     get_conversation_dao.cache_clear()
     get_message_queue.cache_clear()
+    get_logging_runtime.cache_clear()

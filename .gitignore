@@ -1,11 +1,18 @@
 .venv/
 .dev/
+.claude/
 AGENTS.md
+CLAUDE.md
+setting.json
+.playwright/
+.playwright-cli/
+*.yaml
 
 __pycache__/
 .agent_states/
 *.py[cod]
 *$py.class
+node_modules/
 
 .temp/
 

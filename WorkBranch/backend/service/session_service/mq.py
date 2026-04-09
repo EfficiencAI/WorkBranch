@@ -1,60 +1,22 @@
 import asyncio
-from dataclasses import dataclass, field
-from datetime import datetime
-from enum import Enum
 from typing import Optional, Dict, Any, List
 import queue
 import threading
 import json
-import os
+import time
 from pathlib import Path
 
 from service.settings_service.settings_service import SettingsService
-
-
-class MessageType(Enum):
-    TEXT = "text"
-    ERROR = "error"
-    DONE = "done"
-    THINKING = "thinking"
-    PLAN = "plan"
-    PLAN_START = "plan_start"
-    PLAN_END = "plan_end"
-    INTENT = "intent"
-    INTENT_START = "intent_start"
-    INTENT_END = "intent_end"
-    TOOL_CALL = "tool_call"
-    TOOL_RESULT = "tool_result"
-    EXECUTE_START = "execute_start"
-    EXECUTE_END = "execute_end"
-    STEP_START = "step_start"
-    STEP_END = "step_end"
-
-
-@dataclass
-class StreamMessage:
-    session_id: str
-    conversation_id: str
-    workspace_id: str
-    content: str
-    message_type: MessageType = MessageType.TEXT
-    timestamp: datetime = field(default_factory=datetime.now)
-    metadata: Dict[str, Any] = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return {
-            "session_id": self.session_id,
-            "conversation_id": self.conversation_id,
-            "workspace_id": self.workspace_id,
-            "content": self.content,
-            "message_type": self.message_type.value,
-            "timestamp": self.timestamp.isoformat(),
-            "metadata": self.metadata,
-        }
+from core.logging import bind_ctx
+from service.session_service.canonical import (
+    Message,
+    ContentBlock,
+    MessageFormatter,
+)
 
 
 class MessageQueue:
-    """消息队列服务（单例）"""
+    """消息队列服务（单例）- 纯事件通道"""
 
     def __init__(self, settings: SettingsService = None):
         if settings is None:
@@ -70,7 +32,10 @@ class MessageQueue:
         self._main_loop: Optional[asyncio.AbstractEventLoop] = None
         self._storage_dir = self._get_storage_dir()
         self._conversation_messages: Dict[str, List[dict]] = {}
+        self._subscribers: Dict[str, List[asyncio.Queue]] = {}
+        self._subscribers_lock = threading.Lock()
         self._file_lock = threading.Lock()
+        self._logger = None
 
     def _get_max_size(self) -> int:
         try:
@@ -78,6 +43,44 @@ class MessageQueue:
         except KeyError:
             return 1000
     
+    def _log_message_event(
+        self,
+        level: str,
+        event: str,
+        msg: str,
+        message: Message,
+        *,
+        source: str,
+        target: str,
+        latency_ms: Optional[int] = None,
+        exception: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        extra = {
+            "conversation_id": message.conversation_id,
+            "workspace_id": message.workspace_id,
+            "source": source,
+            "target": target,
+            "size": len(message.content or ""),
+        }
+        if latency_ms is not None:
+            extra["latency_ms"] = latency_ms
+        if error is not None:
+            extra["error"] = error
+        with bind_ctx(conversation_id=message.conversation_id, workspace_id=message.workspace_id):
+            logger = self._get_logger()
+            if level == "ERROR":
+                logger.error(event=event, msg=msg, extra=extra, exception=exception)
+            else:
+                logger.info(event=event, msg=msg, extra=extra)
+
+    def _get_logger(self):
+        if self._logger is None:
+            from singleton import get_logging_runtime
+
+            self._logger = get_logging_runtime().get_logger("mq")
+        return self._logger
+
     def _get_storage_dir(self) -> Path:
         try:
             storage_dir = self._settings.get("mq:storage_dir")
@@ -91,7 +94,7 @@ class MessageQueue:
     def _get_conversation_file(self, conversation_id: str) -> Path:
         return self._storage_dir / f"{conversation_id}.json"
     
-    def _save_message_to_file(self, message: StreamMessage) -> None:
+    def _save_message_to_file(self, message: Message) -> None:
         msg_dict = message.to_dict()
         conv_id = message.conversation_id
         
@@ -116,24 +119,40 @@ class MessageQueue:
             except Exception as e:
                 print(f"[MQ] 保存消息文件失败: {e}")
 
-    async def publish(self, message: StreamMessage) -> bool:
+    async def publish(self, message: Message) -> bool:
         """
         生产者：发布消息到队列
-        
+
         Args:
-            message: 流式消息对象
-            
+            message: 消息对象
+
         Returns:
             是否成功发布（队列满时返回 False）
         """
         try:
             self._queue.put_nowait(message)
+            self._log_message_event(
+                "INFO",
+                "mq.message.received",
+                "mq message queued",
+                message,
+                source="producer",
+                target="async_queue",
+            )
             return True
         except asyncio.QueueFull:
-            print(f"[MQ] 队列已满 (max_size={self._max_size})，消息被丢弃: {message.content[:50]}...")
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq message dropped because queue is full",
+                message,
+                source="producer",
+                target="async_queue",
+                error="queue_full",
+            )
             return False
 
-    async def publish_batch(self, messages: list[StreamMessage]) -> int:
+    async def publish_batch(self, messages: list[Message]) -> int:
         """
         批量发布消息
         
@@ -149,23 +168,39 @@ class MessageQueue:
                 success_count += 1
         return success_count
 
-    def publish_sync(self, message: StreamMessage) -> bool:
+    def publish_sync(self, message: Message) -> bool:
         """
         同步发布消息（用于同步上下文，如 LLM 流式回调）
-        
+
         将消息放入同步队列，由异步消费者线程转发到异步队列
-        
+
         Args:
-            message: 流式消息对象
-            
+            message: 消息对象
+
         Returns:
             是否成功发布
         """
         try:
             self._sync_queue.put_nowait(message)
+            self._log_message_event(
+                "INFO",
+                "mq.message.received",
+                "mq sync message queued",
+                message,
+                source="agent",
+                target="sync_queue",
+            )
             return True
         except queue.Full:
-            print(f"[MQ] 同步队列已满，消息被丢弃: {message.content[:50]}...")
+            self._log_message_event(
+                "ERROR",
+                "mq.message.failed",
+                "mq sync message dropped because queue is full",
+                message,
+                source="agent",
+                target="sync_queue",
+                error="queue_full",
+            )
             return False
 
     def _start_sync_bridge(self) -> None:
@@ -184,7 +219,6 @@ class MessageQueue:
             daemon=True
         )
         self._sync_bridge_thread.start()
-        print("[MQ] 同步-异步桥接线程已启动")
 
     def _sync_bridge_loop(self) -> None:
         """同步-异步桥接循环"""
@@ -200,27 +234,48 @@ class MessageQueue:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"[MQ] 同步桥接异常: {e}")
-        
-        loop.close()
+                pass
 
-    async def _put_to_async_queue(self, message: StreamMessage) -> None:
+    async def _put_to_async_queue(self, message: Message) -> None:
         """将消息放入异步队列"""
         try:
             self._queue.put_nowait(message)
         except asyncio.QueueFull:
-            print(f"[MQ] 队列已满，消息被丢弃: {message.content[:50]}...")
+            pass
+
+    def subscribe(self, conversation_id: str) -> asyncio.Queue:
+        subscriber_queue: asyncio.Queue = asyncio.Queue()
+        with self._subscribers_lock:
+            subscribers = self._subscribers.setdefault(conversation_id, [])
+            subscribers.append(subscriber_queue)
+        return subscriber_queue
+
+    def unsubscribe(self, conversation_id: str, subscriber_queue: asyncio.Queue) -> None:
+        with self._subscribers_lock:
+            subscribers = self._subscribers.get(conversation_id)
+            if not subscribers:
+                return
+            self._subscribers[conversation_id] = [q for q in subscribers if q is not subscriber_queue]
+            if not self._subscribers[conversation_id]:
+                del self._subscribers[conversation_id]
+
+    def _publish_to_subscribers(self, message: Message) -> None:
+        with self._subscribers_lock:
+            subscribers = list(self._subscribers.get(message.conversation_id, []))
+        for subscriber in subscribers:
+            try:
+                subscriber.put_nowait(message)
+            except Exception:
+                continue
 
     async def start_consumer(self) -> None:
         """启动消费者后台任务"""
         if self._running:
-            print("[MQ] 消费者已在运行")
             return
 
         self._running = True
         self._consumer_task = asyncio.create_task(self._consume_loop())
         self._start_sync_bridge()
-        print(f"[MQ] 消费者已启动 (队列容量: {self._max_size})")
 
     async def stop_consumer(self) -> None:
         """停止消费者"""
@@ -238,11 +293,8 @@ class MessageQueue:
                 pass
             self._consumer_task = None
 
-        print("[MQ] 消费者已停止")
-
     async def _consume_loop(self) -> None:
         """消费者循环（内部方法）"""
-        print("[MQ] 消费循环开始")
         while self._running:
             try:
                 message = await asyncio.wait_for(
@@ -256,22 +308,36 @@ class MessageQueue:
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                print(f"[MQ] 消费异常: {e}")
+                pass
 
-        print("[MQ] 消费循环结束")
-
-    async def _consume(self, message: StreamMessage) -> None:
+    async def _consume(self, message: Message) -> None:
         """
         消费单条消息
-        
-        功能：
-        - 打印到控制台
-        - 保存到 JSON 文件（按对话 ID）
+
+        MQ 只做通道层：
+        - 保存到 JSON 文件（调试/转录）
+        - 广播给订阅方
+        - 转发给 Buffer 消费
         """
-        msg_dict = message.to_dict()
-        print(f"[MQ] 消费消息: {msg_dict}")
+        try:
+            self._save_message_to_file(message)
+            self._publish_to_subscribers(message)
+            
+            await self._forward_to_buffer(message)
+            
+        except Exception as exc:
+            raise
+
+    async def _forward_to_buffer(self, message: Message) -> None:
+        """将事件转发给 Buffer 消费"""
+        from singleton import get_conversation_buffer
         
-        self._save_message_to_file(message)
+        buffer = get_conversation_buffer()
+        
+        if not buffer.has_draft(message.message_id):
+            return
+        
+        await buffer.consume_message(message)
 
     @property
     def size(self) -> int:

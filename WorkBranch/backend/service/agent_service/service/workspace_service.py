@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Optional, Dict, Set
+from typing import Optional, Dict, Set, List, Tuple
 from pathlib import Path
 
 
@@ -51,9 +51,13 @@ class WorkspaceService:
         }
 
         workspace_path = self.get_workspace_path(session_id, workspace_id)
+        is_new = not os.path.exists(workspace_path)
         os.makedirs(workspace_path, exist_ok=True)
         
-        print(f"[Workspace] 工作区已注册: {workspace_id}")
+        if is_new:
+            print(f"[Workspace] 工作区已创建: {workspace_id}")
+        else:
+            print(f"[Workspace] 工作区信息已载入: {workspace_id}")
         print(f"[Workspace] 会话ID: {session_id}")
         print(f"[Workspace] 路径: {workspace_path}")
         return workspace_id
@@ -201,3 +205,76 @@ class WorkspaceService:
                 sessions[session_id] = []
             sessions[session_id].append(ws_id)
         return sessions
+
+    def _get_unique_filename(self, directory: str, filename: str) -> str:
+        """
+        获取唯一的文件名，如果文件已存在则自动重命名
+        
+        Args:
+            directory: 目标目录
+            filename: 原始文件名
+            
+        Returns:
+            唯一的文件名
+        """
+        name, ext = os.path.splitext(filename)
+        counter = 1
+        new_filename = filename
+        
+        while os.path.exists(os.path.join(directory, new_filename)):
+            new_filename = f"{name}_{counter}{ext}"
+            counter += 1
+        
+        return new_filename
+
+    async def save_uploaded_files(
+        self,
+        workspace_id: str,
+        files: List,
+        sub_dir: Optional[str] = None
+    ) -> Tuple[bool, List[Dict], str]:
+        """
+        保存上传的文件到工作区
+        
+        Args:
+            workspace_id: 工作区ID
+            files: UploadFile 对象列表
+            sub_dir: 可选的子目录路径
+            
+        Returns:
+            (是否成功, 文件信息列表, 错误信息)
+        """
+        workspace_dir = self.get_workspace_dir(workspace_id)
+        if not workspace_dir:
+            return False, [], f"工作区不存在: {workspace_id}"
+
+        target_dir = workspace_dir
+        if sub_dir:
+            valid, resolved_path = self.resolve_path(workspace_id, sub_dir)
+            if not valid:
+                return False, [], f"无效的子目录路径: {sub_dir}"
+            target_dir = resolved_path
+            os.makedirs(target_dir, exist_ok=True)
+
+        saved_files = []
+        try:
+            for file in files:
+                original_filename = file.filename
+                unique_filename = self._get_unique_filename(target_dir, original_filename)
+                file_path = os.path.join(target_dir, unique_filename)
+                
+                content = await file.read()
+                with open(file_path, "wb") as f:
+                    f.write(content)
+                
+                saved_files.append({
+                    "original_filename": original_filename,
+                    "saved_as": unique_filename,
+                    "path": file_path,
+                    "size": len(content)
+                })
+                await file.seek(0)
+            
+            return True, saved_files, ""
+        except Exception as e:
+            return False, saved_files, f"文件保存失败: {str(e)}"

@@ -13,6 +13,7 @@ from langgraph.graph import StateGraph, END
 from ..state import AgentState, ToolCall
 from ..persistence import PersistenceService
 from .subgraphs import run_plan_flow, run_tool_execution, run_compaction
+from service.session_service.canonical import SegmentType, ContentBlock
 
 MAX_REPLAN_COUNT = 3
 MAX_MESSAGES = 10
@@ -59,6 +60,12 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
         is_replan = state.get("plan_failed", False)
         replan_count = state.get("replan_count", 0)
         
+        if message_context:
+            send_message = message_context.get("send_message")
+            if send_message:
+                metadata = {"state": "plan", "is_replan": is_replan}
+                send_message("", SegmentType.STATE_CHANGE, metadata)
+        
         plan_state = {**state, "agent_type": "plan_agent"}
         
         if is_replan:
@@ -84,6 +91,12 @@ def create_plan_node(llm_service=None, token_callback: Optional[Callable[[str], 
 
 def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str], None]] = None, memory_mode: str = "accumulate", window_size: int = 3, settings_service=None, message_context: dict = None):
     def build_flow(state: AgentState) -> dict:
+        # 检查取消状态
+        if message_context:
+            cancel_check = message_context.get("cancel_check")
+            if cancel_check:
+                cancel_check()
+        
         print("\n" + "="*60)
         print("[Orchestrator] 节点: build_flow")
         print("="*60)
@@ -91,6 +104,16 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         step = state["current_step"]
         plan = state["plan"]
         agent_type = "build_agent"
+        
+        if message_context:
+            send_message = message_context.get("send_message")
+            if send_message:
+                metadata = {
+                    "state": "build",
+                    "step": step + 1,
+                    "total": len(plan)
+                }
+                send_message("", SegmentType.STATE_CHANGE, metadata)
         
         if step >= len(plan):
             print("[Build] 所有任务已完成")
@@ -124,6 +147,10 @@ def create_build_flow(llm_service=None, token_callback: Optional[Callable[[str],
         if tool_result.get("error"):
             print(f"[Build] 执行失败: {tool_result['error']}")
             if tool_result.get("doom_loop_detected"):
+                if message_context:
+                    send_message = message_context.get("send_message")
+                    if send_message:
+                        send_message("DoomLoop detected: repeated tool calls", SegmentType.ERROR, {"source": "doom_loop"})
                 return {"plan_failed": True}
             result = f"任务 {task['id']} 失败: {tool_result['error']}"
         else:
@@ -202,11 +229,15 @@ def run_graph(
     memory_mode: str = "accumulate",
     window_size: int = 3,
     settings_service=None,
-    message_context: dict = None
+    message_context: dict = None,
+    parent_chain_messages: List[dict] = None,
+    current_conversation_messages: List[dict] = None
 ) -> dict:
     print("\n" + "="*60)
     print("[Orchestrator] 主编排图启动")
     print(f"[Orchestrator] 记忆模式: {memory_mode}, 窗口大小: {window_size}")
+    print(f"[Orchestrator] 父节点链消息数量: {len(parent_chain_messages) if parent_chain_messages else 0}")
+    print(f"[Orchestrator] 当前对话内消息数量: {len(current_conversation_messages) if current_conversation_messages else 0}")
     print("="*60)
     
     saved_state = persistence.load(workspace_id)
@@ -215,6 +246,10 @@ def run_graph(
         print(f"[Orchestrator] 恢复已保存的状态")
         initial_state = saved_state
         initial_state["messages"] = initial_state.get("messages", []) + [user_message]
+        if parent_chain_messages:
+            initial_state["parent_chain_messages"] = parent_chain_messages
+        if current_conversation_messages:
+            initial_state["current_conversation_messages"] = current_conversation_messages
     else:
         initial_state: AgentState = {
             "messages": [user_message],
@@ -227,6 +262,8 @@ def run_graph(
             "tool_history": [],
             "replan_count": 0,
             "agent_type": None,
+            "parent_chain_messages": parent_chain_messages or [],
+            "current_conversation_messages": current_conversation_messages or [],
         }
     
     graph = create_orchestrator_graph(llm_service, token_callback, memory_mode, window_size, settings_service, message_context)
