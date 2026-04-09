@@ -1,1 +1,28 @@
-{}
+{
+  "name": "workbranch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkBranch - AI-powered workspace application",
+  "scripts": {
+    "dev": "pnpm --filter './packages/*' run dev",
+    "build": "pnpm --filter './packages/*' run build",
+    "test": "pnpm --filter './packages/*' run test",
+    "lint": "eslint packages/**/src/**/*.{ts,tsx}",
+    "format": "prettier --write \"packages/**/src/**/*.{ts,tsx}\"",
+    "clean": "pnpm --filter './packages/*' run clean",
+    "dev:frontend": "pnpm --filter @workbranch/frontend run dev",
+    "build:frontend": "pnpm --filter @workbranch/frontend run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.0",
+    "eslint": "^8.55.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "prettier": "^3.1.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
