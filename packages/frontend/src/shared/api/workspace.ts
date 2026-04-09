@@ -1,5 +1,6 @@
 import { get, post, put, del } from './http'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
+import type { ContentBlock, CanonicalMessage } from '@workbranch/shared'
 
 function toConversationPosition(payload: Record<string, unknown>): ConversationNode['position'] {
   const x = typeof payload.position_x === 'number' ? payload.position_x : undefined
@@ -165,31 +166,6 @@ export async function updateConversationPositions(
 export async function fetchWorkspaceDetail(workspaceId: string) {
   const data = await get<Record<string, unknown>>(`/api/workspaces/${workspaceId}`)
   return toWorkspaceDetail(data)
-}
-
-export type SegmentType =
-  | 'thinking_start' | 'thinking_delta' | 'thinking_end'
-  | 'text_start' | 'text_delta' | 'text_end'
-  | 'plan_start' | 'plan_delta' | 'plan_end'
-  | 'state_change' | 'tool_call' | 'tool_res'
-  | 'error' | 'done'
-
-export type ContentBlock = {
-  type: SegmentType
-  content: string
-  metadata?: Record<string, unknown>
-}
-
-export type CanonicalMessage = {
-  role: string
-  message_id: string
-  conversation_id: string
-  session_id: string
-  workspace_id: string
-  content_blocks: ContentBlock[]
-  content: string
-  timestamp: string
-  metadata?: Record<string, unknown>
 }
 
 export type SimpleEvent = {

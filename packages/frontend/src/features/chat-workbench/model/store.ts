@@ -17,7 +17,7 @@ import {
 import { settingsConfig } from '../../../shared/config/settings'
 import { frontendLogger } from '../../../shared/logging/logger'
 import type { ChatStreamEvent } from '../../../shared/api'
-import type { ContentBlock } from '../../../shared/api/workspace'
+import type { ContentBlock } from '@workbranch/shared'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
 import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'

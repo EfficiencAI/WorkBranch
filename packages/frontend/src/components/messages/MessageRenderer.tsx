@@ -1,5 +1,5 @@
 import React from 'react';
-import type { ContentBlock } from '../../shared/api/workspace';
+import type { ContentBlock } from '@workbranch/shared';
 import type { MergedSegment } from './types';
 import { MergedSegmentType } from './types';
 import { mergeSegments } from './SegmentMerger';

@@ -17,3 +17,11 @@ export interface WorkspaceInfo {
   status: string;
   created_at: string | null;
 }
+
+export interface WorkspaceDetail {
+  id: string;
+  sessionId: string | number;
+  status?: string | null;
+  createdAt?: string | null;
+  dir?: string | null;
+}

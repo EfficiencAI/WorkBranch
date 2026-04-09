@@ -1,5 +1,5 @@
 import { mergeSegments } from '../SegmentMerger';
-import type { ContentBlock } from '../../../shared/api/workspace';
+import type { ContentBlock } from '@workbranch/shared';
 import { MergedSegmentType } from '../types';
 
 const makeBlock = (overrides: Partial<ContentBlock>): ContentBlock => ({

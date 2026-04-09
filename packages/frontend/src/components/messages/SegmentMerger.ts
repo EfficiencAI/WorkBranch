@@ -1,4 +1,4 @@
-﻿import type { ContentBlock, SegmentType } from '../../shared/api/workspace';
+import type { ContentBlock, SegmentType } from '@workbranch/shared';
 import type { MergedSegment } from './types';
 import { MergedSegmentType } from './types';
 
