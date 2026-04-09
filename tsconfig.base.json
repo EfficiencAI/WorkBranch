@@ -30,6 +30,7 @@
     "sourceMap": true,
     "composite": true,
     "incremental": true,
+    "baseUrl": ".",
     "paths": {
       "@shared/*": ["packages/shared/src/*"],
       "@backend/*": ["packages/backend/src/*"],

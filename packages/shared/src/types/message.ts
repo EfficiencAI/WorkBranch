@@ -18,6 +18,7 @@ export enum SegmentType {
   PLAN_DELTA = 'plan_delta',
   PLAN_END = 'plan_end',
   STATE_CHANGE = 'state_change',
+  DONE = 'done',
 }
 
 export interface Segment {
@@ -35,4 +36,22 @@ export interface Message {
   role: 'user' | 'assistant' | 'system';
   content: string;
   createdAt: number;
+}
+
+export interface ContentBlock {
+  type: SegmentType;
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CanonicalMessage {
+  role: string;
+  message_id: string;
+  conversation_id: string;
+  session_id: string;
+  workspace_id: string;
+  content_blocks: ContentBlock[];
+  content: string;
+  timestamp: string;
+  metadata?: Record<string, unknown>;
 }

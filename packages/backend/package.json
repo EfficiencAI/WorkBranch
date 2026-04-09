@@ -1,0 +1,36 @@
+{
+  "name": "@workbranch/backend",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/server.js",
+    "clean": "rimraf dist"
+  },
+  "dependencies": {
+    "@workbranch/shared": "file:../shared",
+    "@fastify/cors": "^8.4.1",
+    "@fastify/sensible": "^5.2.0",
+    "@langchain/openai": "^0.0.19",
+    "@langchain/core": "^0.1.5",
+    "@langchain/langgraph": "^0.0.25",
+    "fastify": "^4.24.3",
+    "better-sqlite3": "^9.2.2",
+    "pino": "^8.16.2",
+    "pino-pretty": "^10.3.0",
+    "zod": "^3.22.4",
+    "uuid": "^9.0.1",
+    "axios": "^1.6.2"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.8",
+    "@types/node": "^20.10.0",
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.0",
+    "tsx": "^4.6.2",
+    "rimraf": "^5.0.5"
+  }
+}

@@ -11,7 +11,10 @@
     "format": "prettier --write \"packages/**/src/**/*.{ts,tsx}\"",
     "clean": "pnpm --filter './packages/*' run clean",
     "dev:frontend": "pnpm --filter @workbranch/frontend run dev",
-    "build:frontend": "pnpm --filter @workbranch/frontend run build"
+    "dev:backend": "pnpm --filter @workbranch/backend run dev",
+    "build:frontend": "pnpm --filter @workbranch/frontend run build",
+    "build:backend": "pnpm --filter @workbranch/backend run build",
+    "start:backend": "pnpm --filter @workbranch/backend run start"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",

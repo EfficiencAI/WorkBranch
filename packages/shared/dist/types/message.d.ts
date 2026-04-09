@@ -17,7 +17,8 @@ export declare enum SegmentType {
     PLAN_START = "plan_start",
     PLAN_DELTA = "plan_delta",
     PLAN_END = "plan_end",
-    STATE_CHANGE = "state_change"
+    STATE_CHANGE = "state_change",
+    DONE = "done"
 }
 export interface Segment {
     cid: string;
@@ -33,5 +34,21 @@ export interface Message {
     role: 'user' | 'assistant' | 'system';
     content: string;
     createdAt: number;
+}
+export interface ContentBlock {
+    type: SegmentType;
+    content: string;
+    metadata?: Record<string, unknown>;
+}
+export interface CanonicalMessage {
+    role: string;
+    message_id: string;
+    conversation_id: string;
+    session_id: string;
+    workspace_id: string;
+    content_blocks: ContentBlock[];
+    content: string;
+    timestamp: string;
+    metadata?: Record<string, unknown>;
 }
 //# sourceMappingURL=message.d.ts.map

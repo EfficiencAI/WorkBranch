@@ -19,5 +19,6 @@ export var SegmentType;
     SegmentType["PLAN_DELTA"] = "plan_delta";
     SegmentType["PLAN_END"] = "plan_end";
     SegmentType["STATE_CHANGE"] = "state_change";
+    SegmentType["DONE"] = "done";
 })(SegmentType || (SegmentType = {}));
 //# sourceMappingURL=message.js.map
