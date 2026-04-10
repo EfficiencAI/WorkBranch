@@ -84,6 +84,24 @@ const DEFAULT_SETTINGS = {
         consistency_check: false,
     },
 };
+const DEFAULT_SETTINGS_METADATA = {
+    ui: {
+        scale: {
+            type: 'number',
+            control: 'slider',
+            min: 0.7,
+            max: 1.3,
+            step: 0.1,
+        },
+        diagram_double_click_delay_ms: {
+            type: 'number',
+            control: 'slider',
+            min: 150,
+            max: 600,
+            step: 10,
+        },
+    },
+};
 function mergeMissingDefaults(defaults, current) {
     if (typeof defaults !== 'object' || defaults === null) {
         return [current, false];
@@ -140,6 +158,9 @@ class SettingsService {
     }
     getAll() {
         return { ...this.data };
+    }
+    getMetadata() {
+        return { ...DEFAULT_SETTINGS_METADATA };
     }
     updateSetting(key, value) {
         this.data[key] = value;

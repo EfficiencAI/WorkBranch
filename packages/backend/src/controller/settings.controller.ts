@@ -8,6 +8,11 @@ export class SettingsController {
     return reply.send(success(settings));
   }
 
+  async getMetadata(_request: FastifyRequest, reply: FastifyReply) {
+    const metadata = settingsService.getMetadata();
+    return reply.send(success(metadata));
+  }
+
   async getSetting(request: FastifyRequest<{ Params: { key: string } }>, reply: FastifyReply) {
     const { key } = request.params;
     try {

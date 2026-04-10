@@ -5,6 +5,7 @@ export declare class SettingsService {
     private persist;
     get(key: string): unknown;
     getAll(): Record<string, unknown>;
+    getMetadata(): Record<string, unknown>;
     updateSetting(key: string, value: unknown): boolean;
     updateSettings(updates: Record<string, unknown>): boolean;
     forceReload(): void;

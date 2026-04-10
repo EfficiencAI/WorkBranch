@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 export declare class SettingsController {
     getAllSettings(_request: FastifyRequest, reply: FastifyReply): Promise<never>;
+    getMetadata(_request: FastifyRequest, reply: FastifyReply): Promise<never>;
     getSetting(request: FastifyRequest<{
         Params: {
             key: string;

@@ -16,7 +16,8 @@ node_modules/
 
 .temp/
 
-*.db
+packages/backend/data/*
 logs/
 .test/
 tests/
+dist/

@@ -8,6 +8,10 @@ class SettingsController {
         const settings = service_1.settingsService.getAll();
         return reply.send((0, result_1.success)(settings));
     }
+    async getMetadata(_request, reply) {
+        const metadata = service_1.settingsService.getMetadata();
+        return reply.send((0, result_1.success)(metadata));
+    }
     async getSetting(request, reply) {
         const { key } = request.params;
         try {
