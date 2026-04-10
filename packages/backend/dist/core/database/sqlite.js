@@ -122,6 +122,8 @@ class SQLiteDatabase {
     `;
         this.db.exec(createTables);
         logging_1.logger.info('Database tables created');
+        const insertDefaultUser = this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)');
+        insertDefaultUser.run(1, 'Default User');
     }
     prepare(sql) {
         return this.db.prepare(sql);
