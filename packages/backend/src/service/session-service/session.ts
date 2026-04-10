@@ -1,5 +1,6 @@
 import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
+import { agentService } from '../agent-service/agent';
 
 export enum ConversationState {
   PENDING = 'pending',
@@ -137,6 +138,18 @@ export class SessionService {
       state: ConversationState.RUNNING,
       message_count: convInfo.message_count,
       error: null,
+    });
+
+    setImmediate(() => {
+      agentService.runAgent(
+        convInfo!.workspace_id,
+        conversationId,
+        String(convInfo!.session_id),
+        messageId,
+        message
+      ).catch((err) => {
+        console.error('[SessionService] Agent run failed:', err);
+      });
     });
 
     return {

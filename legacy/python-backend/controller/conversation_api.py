@@ -72,6 +72,9 @@ async def send_conversation_message(
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation not found")
 
+    await mq.start_consumer()
+    subscriber = mq.subscribe(conversation_id)
+
     try:
         result = await service.send_message_to_conversation(
             conversation_id=conversation_id,
@@ -81,8 +84,10 @@ async def send_conversation_message(
         message_id = result["message_id"]
         target_conversation_id = result["conversation_id"]
     except ValueError as e:
+        mq.unsubscribe(conversation_id, subscriber)
         raise HTTPException(status_code=404, detail=str(e))
     except RuntimeError as e:
+        mq.unsubscribe(conversation_id, subscriber)
         raise HTTPException(status_code=400, detail=str(e))
 
     logger = get_logging_runtime().get_logger("api")
@@ -97,8 +102,6 @@ async def send_conversation_message(
         timeout_counter = 0
         max_timeout = STREAM_MAX_TIMEOUT_TICKS
 
-        subscriber = None
-
         with bind_ctx(**request_ctx):
             logger.info(
                 event="stream.started",
@@ -109,9 +112,6 @@ async def send_conversation_message(
             yield f"data: {json.dumps({'type': 'message_created', 'message_id': message_id, 'conversation_id': target_conversation_id, 'user_content': body.message}, ensure_ascii=False)}\n\n"
 
             try:
-                await mq.start_consumer()
-                subscriber = mq.subscribe(target_conversation_id)
-
                 while not done_received and timeout_counter < max_timeout:
                     try:
                         message: CanonicalMessage = await asyncio.wait_for(
@@ -231,8 +231,7 @@ async def send_conversation_message(
                 )
                 yield f"data: {json.dumps({'type': 'error', 'message_id': message_id, 'content': str(e)}, ensure_ascii=False)}\n\n"
             finally:
-                if subscriber is not None:
-                    mq.unsubscribe(target_conversation_id, subscriber)
+                mq.unsubscribe(target_conversation_id, subscriber)
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
