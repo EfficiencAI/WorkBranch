@@ -45,7 +45,7 @@ export function DiagramPage() {
   }
 
   if (chatError || sessionError || userError) {
-    return <Alert type="error" showIcon message={chatError ?? sessionError ?? userError ?? '图数据加载失败'} />
+    return <Alert type="error" showIcon title={chatError ?? sessionError ?? userError ?? '图数据加载失败'} />
   }
 
   const isSettingsView = location.pathname === '/settings'

@@ -969,8 +969,8 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
       {loading ? <LoadingState tip="正在读取后端设置..." /> : null}
 
-      {error ? <Alert type="error" message="设置读取失败" description={error} showIcon /> : null}
-      {saveError ? <Alert type="error" message="设置保存失败" description={saveError} showIcon /> : null}
+      {error ? <Alert type="error" title="设置读取失败" description={error} showIcon /> : null}
+      {saveError ? <Alert type="error" title="设置保存失败" description={saveError} showIcon /> : null}
 
       {!loading && !error ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
