@@ -3,6 +3,7 @@ import { createMessage, createContentBlock, SegmentType, type ContentBlock } fro
 import { logger } from '../../core/logging';
 import { runOrchestrator, type MessageContext } from './graph/orchestrator-v2';
 import { registerFileTools } from './tools/file-tools';
+import { sessionService } from '../session-service';
 
 export class AgentService {
   private initialized = false;
@@ -74,21 +75,26 @@ export class AgentService {
       }
       sendMessage('', SegmentType.DONE);
 
+      await sessionService.endConversation(conversationId);
+
       logger.info({
         event: 'agent.run.completed',
         conversation_id: conversationId,
         message_id: messageId,
       });
     } catch (err) {
+      const errorMessage = String(err);
       logger.error({
         event: 'agent.run.failed',
         conversation_id: conversationId,
         message_id: messageId,
-        error: String(err),
+        error: errorMessage,
       });
 
-      sendMessage(String(err), SegmentType.ERROR);
+      sendMessage(errorMessage, SegmentType.ERROR);
       sendMessage('', SegmentType.DONE);
+
+      await sessionService.failConversation(conversationId, errorMessage);
     }
   }
 }

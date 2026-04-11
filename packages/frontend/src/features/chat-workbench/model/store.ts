@@ -447,7 +447,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                         ...lastMessage,
                         status: 'completed'
                       }
-                      return updateConversationMessagesCache(state, conversationId, updatedMessages)
+                      const updatedNodes = state.conversationNodes.map(node =>
+                        node.conversationId === conversationId
+                          ? { ...node, state: 'completed' }
+                          : node
+                      )
+                      return {
+                        ...updateConversationMessagesCache(state, conversationId, updatedMessages),
+                        conversationNodes: updatedNodes
+                      }
                     }
                     return state
                   })
@@ -463,7 +471,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                         ...lastMessage,
                         status: 'error'
                       }
-                      return updateConversationMessagesCache(state, conversationId, updatedMessages)
+                      const updatedNodes = state.conversationNodes.map(node =>
+                        node.conversationId === conversationId
+                          ? { ...node, state: 'failed' }
+                          : node
+                      )
+                      return {
+                        ...updateConversationMessagesCache(state, conversationId, updatedMessages),
+                        conversationNodes: updatedNodes
+                      }
                     }
                     return state
                   })
@@ -482,7 +498,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                       ...lastMessage,
                       status: 'completed'
                     }
-                    return updateConversationMessagesCache(state, conversationId, updatedMessages)
+                    const updatedNodes = state.conversationNodes.map(node =>
+                      node.conversationId === conversationId
+                        ? { ...node, state: 'completed' }
+                        : node
+                    )
+                    return {
+                      ...updateConversationMessagesCache(state, conversationId, updatedMessages),
+                      conversationNodes: updatedNodes
+                    }
                   }
                   return state
                 })
@@ -498,7 +522,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                       ...lastMessage,
                       status: 'error'
                     }
-                    return updateConversationMessagesCache(state, conversationId, updatedMessages)
+                    const updatedNodes = state.conversationNodes.map(node =>
+                      node.conversationId === conversationId
+                        ? { ...node, state: 'failed' }
+                        : node
+                    )
+                    return {
+                      ...updateConversationMessagesCache(state, conversationId, updatedMessages),
+                      conversationNodes: updatedNodes
+                    }
                   }
                   return state
                 })

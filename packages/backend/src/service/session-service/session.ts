@@ -200,6 +200,24 @@ export class SessionService {
     return true;
   }
 
+  async failConversation(conversationId: string, error: string): Promise<void> {
+    const convInfo = this.conversations.get(conversationId);
+    if (!convInfo) {
+      const persisted = conversationDAO.getConversationById(conversationId);
+      if (!persisted) return;
+    }
+
+    if (convInfo) {
+      convInfo.state = ConversationState.FAILED;
+      convInfo.error = error;
+      conversationDAO.updateConversation(conversationId, {
+        state: ConversationState.FAILED,
+        error: error,
+        ended_at: new Date().toISOString(),
+      });
+    }
+  }
+
   async deleteConversation(conversationId: string): Promise<boolean> {
     const persisted = conversationDAO.getConversationById(conversationId);
     if (!persisted && !this.conversations.has(conversationId)) {
