@@ -10,6 +10,7 @@ import {
 import { runToolExecution } from './subgraphs/tool-execution-graph';
 import { SegmentType } from '../../session-service/canonical';
 import { logger } from '../../../core/logging';
+import { getSubagent, hasSubagent } from '../subagents';
 
 export interface MessageContext {
   send_message: (content: string, type: SegmentType) => void;
@@ -300,28 +301,28 @@ async function runSubagentMode(
   suggestedAgent: string | null,
   context: MessageContext
 ): Promise<void> {
-  context.send_message(`委托给 ${suggestedAgent || '通用'} Agent 处理...`, SegmentType.TEXT_DELTA);
+  const agentName = suggestedAgent || 'explore_agent';
 
-  const agentPrompt = suggestedAgent === 'explore'
-    ? '你是一个代码探索专家。请分析代码库结构，找出相关文件和依赖关系。用中文回答。'
-    : suggestedAgent === 'review'
-    ? '你是一个代码审查专家。请审查代码质量，提出改进建议。用中文回答。'
-    : '你是一个有帮助的AI助手。请用中文回答用户的问题。';
-
-  const messages = [{ role: 'user', content: userMessage }];
-
-  let textStarted = false;
-
-  for await (const chunk of llmService.chatStream(messages, agentPrompt)) {
-    if (!textStarted) {
-      context.send_message('', SegmentType.TEXT_START);
-      textStarted = true;
-    }
-    context.send_message(chunk, SegmentType.TEXT_DELTA);
+  if (!hasSubagent(agentName)) {
+    context.send_message(`未知的子Agent: ${agentName}，使用默认模式处理`, SegmentType.TEXT_DELTA);
+    await runDirectMode(userMessage, context);
+    return;
   }
 
-  if (textStarted) {
-    context.send_message('', SegmentType.TEXT_END);
+  context.send_message(`委托给 ${agentName} 处理...`, SegmentType.TEXT_DELTA);
+
+  const agent = getSubagent(agentName, context.send_message);
+
+  const agentContext = {
+    workspace_id: context.workspace_id,
+    conversation_id: context.conversation_id,
+    message_id: context.message_id,
+  };
+
+  const result = await agent.execute(userMessage, agentContext);
+
+  if (result.error) {
+    context.send_message(`子Agent执行失败: ${result.error}`, SegmentType.ERROR);
   }
 }
 
