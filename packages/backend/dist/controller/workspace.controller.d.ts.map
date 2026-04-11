@@ -1,1 +1,0 @@
-{"version":3,"file":"workspace.controller.d.ts","sourceRoot":"","sources":["../../src/controller/workspace.controller.ts"],"names":[],"mappings":"AAAA,OAAO,EAAE,cAAc,EAAE,YAAY,EAAE,MAAM,SAAS,CAAC;AAIvD,qBAAa,mBAAmB;IACxB,YAAY,CAChB,OAAO,EAAE,cAAc,CAAC;QAAE,MAAM,EAAE;YAAE,WAAW,EAAE,MAAM,CAAA;SAAE,CAAA;KAAE,CAAC,EAC5D,KAAK,EAAE,YAAY;CAqBtB"}
