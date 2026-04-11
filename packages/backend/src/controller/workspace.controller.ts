@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import type { MultipartFile } from '@fastify/multipart';
 import { workspaceService } from '../service/agent-service';
+import { conversationDAO } from '../data';
 import { success } from './result';
 
 export class WorkspaceController {
@@ -25,7 +26,15 @@ export class WorkspaceController {
     reply: FastifyReply
   ) {
     const { workspaceId } = request.params;
-    const info = workspaceService.getWorkspaceInfo(workspaceId);
+    let info = workspaceService.getWorkspaceInfo(workspaceId);
+
+    if (!info) {
+      const conversation = conversationDAO.getConversationById(workspaceId);
+      if (conversation) {
+        workspaceService.register(workspaceId, String(conversation.session_id));
+        info = workspaceService.getWorkspaceInfo(workspaceId);
+      }
+    }
 
     if (!info) {
       return reply.status(404).send({

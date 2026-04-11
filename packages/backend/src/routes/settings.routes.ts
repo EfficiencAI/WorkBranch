@@ -8,5 +8,7 @@ export default async function settingsRoutes(app: FastifyInstance) {
   app.get('/metadata', controller.getMetadata.bind(controller));
   app.get('/:key', controller.getSetting.bind(controller));
   app.put('/:key', controller.updateSetting.bind(controller));
-  app.put('/', controller.updateSettings.bind(controller));
+  app.put('/', controller.updateSingleSetting.bind(controller));
+  app.patch('/', controller.updateSettings.bind(controller));
+  app.post('/reload', controller.reloadSettings.bind(controller));
 }

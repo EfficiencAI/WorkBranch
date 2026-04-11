@@ -3,8 +3,11 @@ import { sessionService } from '../service/session-service';
 import { success } from './result';
 
 export class SessionController {
-  async createSession(request: FastifyRequest<{ Body: { title?: string } }>, reply: FastifyReply) {
-    const title = request.body?.title || '新会话';
+  async createSession(
+    request: FastifyRequest<{ Querystring: { title?: string }; Body: { title?: string } }>,
+    reply: FastifyReply
+  ) {
+    const title = request.query.title || request.body?.title || '新会话';
     const session = sessionService.createSession(title);
     return reply.status(201).send(success({
       id: session.id,
