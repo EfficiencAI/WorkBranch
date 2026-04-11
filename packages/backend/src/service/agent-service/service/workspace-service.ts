@@ -138,6 +138,83 @@ class WorkspaceServiceImpl {
     }
     return sessions;
   }
+
+  private _getUniqueFilename(dir: string, filename: string): string {
+    if (!fs.existsSync(path.join(dir, filename))) {
+      return filename;
+    }
+
+    const ext = path.extname(filename);
+    const base = path.basename(filename, ext);
+    let counter = 1;
+
+    while (fs.existsSync(path.join(dir, `${base}_${counter}${ext}`))) {
+      counter++;
+    }
+
+    return `${base}_${counter}${ext}`;
+  }
+
+  async saveUploadedFiles(
+    workspaceId: string,
+    files: Array<{ filename: string; content: Buffer }>,
+    subDir?: string
+  ): Promise<{ success: boolean; files: Array<{ original_filename: string; saved_as: string; path: string; size: number }>; error: string }> {
+    const workspaceDir = this.getWorkspaceDir(workspaceId);
+    if (!workspaceDir) {
+      return {
+        success: false,
+        files: [],
+        error: `工作区不存在: ${workspaceId}`,
+      };
+    }
+
+    let targetDir = workspaceDir;
+    if (subDir) {
+      const resolved = this.resolvePath(workspaceId, subDir);
+      if (!resolved.valid) {
+        return {
+          success: false,
+          files: [],
+          error: `无效的子目录路径: ${subDir}`,
+        };
+      }
+      targetDir = resolved.path!;
+      if (!fs.existsSync(targetDir)) {
+        fs.mkdirSync(targetDir, { recursive: true });
+      }
+    }
+
+    const savedFiles: Array<{ original_filename: string; saved_as: string; path: string; size: number }> = [];
+
+    try {
+      for (const file of files) {
+        const uniqueFilename = this._getUniqueFilename(targetDir, file.filename);
+        const filePath = path.join(targetDir, uniqueFilename);
+
+        fs.writeFileSync(filePath, file.content);
+
+        savedFiles.push({
+          original_filename: file.filename,
+          saved_as: uniqueFilename,
+          path: filePath,
+          size: file.content.length,
+        });
+      }
+
+      return {
+        success: true,
+        files: savedFiles,
+        error: '',
+      };
+    } catch (err) {
+      return {
+        success: false,
+        files: savedFiles,
+        error: String(err),
+      };
+    }
+  }
 }
 
 export const workspaceService = new WorkspaceServiceImpl();

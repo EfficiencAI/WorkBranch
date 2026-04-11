@@ -1,9 +1,19 @@
-import { llmService } from './service/llm-service';
 import { messageQueue } from '../session-service/mq';
-import { createMessage, createContentBlock, SegmentType, type Message, type ContentBlock } from '../session-service/canonical';
+import { createMessage, createContentBlock, SegmentType, type ContentBlock } from '../session-service/canonical';
 import { logger } from '../../core/logging';
+import { runOrchestrator, type MessageContext } from './graph/orchestrator-v2';
+import { registerFileTools } from './tools/file-tools';
 
 export class AgentService {
+  private initialized = false;
+
+  private initialize(): void {
+    if (!this.initialized) {
+      registerFileTools();
+      this.initialized = true;
+    }
+  }
+
   async runAgent(
     workspaceId: string,
     conversationId: string,
@@ -11,6 +21,8 @@ export class AgentService {
     messageId: string,
     userMessage: string
   ): Promise<void> {
+    this.initialize();
+
     logger.info({
       event: 'agent.run.started',
       conversation_id: conversationId,
@@ -46,13 +58,16 @@ export class AgentService {
       messageQueue.publish(msg);
     };
 
-    try {
-      const systemPrompt = '你是一个有帮助的AI助手。请用中文回答用户的问题。';
-      const messages = [{ role: 'user', content: userMessage }];
+    const context: MessageContext = {
+      send_message: sendMessage,
+      session_id: sessionId,
+      conversation_id: conversationId,
+      workspace_id: workspaceId,
+      message_id: messageId,
+    };
 
-      for await (const chunk of llmService.chatStream(messages, systemPrompt)) {
-        sendMessage(chunk, SegmentType.TEXT_DELTA);
-      }
+    try {
+      await runOrchestrator(userMessage, workspaceId, context);
 
       if (textStarted) {
         sendMessage('', SegmentType.TEXT_END);

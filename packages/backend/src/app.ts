@@ -1,6 +1,7 @@
 import fastify from 'fastify';
 import cors from '@fastify/cors';
 import sensible from '@fastify/sensible';
+import multipart from '@fastify/multipart';
 import { errorHandler } from './middleware/error-handler';
 import { requestLogger } from './middleware/request-logger';
 import routes from './routes';
@@ -26,6 +27,7 @@ export async function buildApp() {
   });
 
   await app.register(sensible);
+  await app.register(multipart);
 
   app.addHook('onRequest', requestLogger);
   app.setErrorHandler(errorHandler);
