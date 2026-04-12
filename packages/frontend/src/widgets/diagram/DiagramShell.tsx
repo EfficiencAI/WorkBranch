@@ -104,7 +104,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? null
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
-  const isStreamingViewedConversation = streamingConversationIds.has(viewedConversationId)
+  const isStreamingViewedConversation = viewedConversationId !== null && streamingConversationIds.has(viewedConversationId)
 
   useEffect(() => {
     void syncConversationContext(viewedConversationId)

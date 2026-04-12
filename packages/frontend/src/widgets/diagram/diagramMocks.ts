@@ -1,4 +1,3 @@
-import type { MessageNode } from '../../entities/message-node/model/types'
 import type { SessionSummary } from '../../entities/session/model/types'
 import type { UserProfile } from '../../entities/user/model/types'
 
@@ -15,9 +14,15 @@ export type SessionListItem = SessionSummary & {
   tone: StaticTone
 }
 
-export type CanvasMessage = MessageNode & {
+export type CanvasMessage = {
+  id: string
+  parentId: string | null
+  role: 'user' | 'assistant' | 'system'
   title: string
   summary: string
+  content: string
+  createdAt: string
+  status: 'streaming' | 'completed' | 'error'
   statusLabel: string
   tone: StaticTone
   position: CanvasPosition

@@ -1,6 +1,6 @@
 import { get, post, put, del } from './http'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
-import type { ContentBlock, CanonicalMessage } from '@workbranch/shared'
+import type { CanonicalMessage } from '@workbranch/shared'
 
 function toConversationPosition(payload: Record<string, unknown>): ConversationNode['position'] {
   const x = typeof payload.position_x === 'number' ? payload.position_x : undefined
@@ -8,7 +8,7 @@ function toConversationPosition(payload: Record<string, unknown>): ConversationN
   if (x !== undefined && y !== undefined) {
     return { x, y }
   }
-  return undefined
+  return null
 }
 
 function toSessionSummary(payload: Record<string, unknown>): SessionSummary {

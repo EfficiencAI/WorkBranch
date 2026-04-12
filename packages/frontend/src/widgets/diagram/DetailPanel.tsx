@@ -1,7 +1,8 @@
 import { Button, Card, Descriptions, Space, Typography } from 'antd'
-import type { ConversationDetail, MessageNode, SessionDetail, WorkspaceDetail } from '../../entities'
+import type { ConversationDetail, SessionDetail, WorkspaceDetail } from '../../entities'
 import { getStatusLabel, toStatusTone, type AsyncStatus } from '../../shared/lib/status'
 import { StatusTag } from '../../shared/ui'
+import type { CanvasMessage } from './diagramMocks'
 
 const systemStatus: Array<{ label: string; status: AsyncStatus; value: string }> = [
   {
@@ -23,7 +24,7 @@ const systemStatus: Array<{ label: string; status: AsyncStatus; value: string }>
 
 type DetailPanelProps = {
   nodeId: string
-  nodes: MessageNode[]
+  nodes: CanvasMessage[]
   conversationDetail: ConversationDetail
   sessionDetail: SessionDetail
   workspaceDetail: WorkspaceDetail | null
