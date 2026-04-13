@@ -11,6 +11,7 @@ import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
 import { MessageRenderer } from '../../components/messages'
+import { useLongPress } from './useLongPress'
 
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
@@ -251,6 +252,31 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
     previewBodyHeight,
   } = data
 
+  const { setContextMenu } = useContextMenu()
+
+  const handleLongPress = useCallback(
+    (event: React.TouchEvent | React.MouseEvent) => {
+      const clientX = 'touches' in event ? event.touches[0]?.clientX ?? 0 : event.clientX
+      const clientY = 'touches' in event ? event.touches[0]?.clientY ?? 0 : event.clientY
+
+      setContextMenu({
+        type: 'node',
+        conversationId: conversation.conversationId,
+        position: { x: clientX, y: clientY },
+      })
+    },
+    [conversation.conversationId, setContextMenu]
+  )
+
+  const longPressHandlers = useLongPress(handleLongPress, {
+    threshold: 500,
+    onStart: () => {
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+    },
+  })
+
   const width = focused ? focusCardWidth : halfPreview ? previewCardWidth : undefined
   const bodyHeight = focused ? focusBodyHeight : halfPreview ? previewBodyHeight : undefined
   const nodeClassName = [
@@ -288,6 +314,7 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
       style={width ? { width: `${width}px` } : undefined}
+      {...longPressHandlers}
     >
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
       <div className={focusShellClassName}>
@@ -480,6 +507,8 @@ function FlowViewport({
   const setHalfPreviewConversationId = useTreeStore((state) => state.setHalfPreviewConversationId)
   const clearHalfPreviewConversationId = useTreeStore((state) => state.clearHalfPreviewConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
+  const dragModeEnabled = useTreeStore((state) => state.dragModeEnabled)
+  const toggleDragMode = useTreeStore((state) => state.toggleDragMode)
   const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
@@ -786,7 +815,18 @@ function FlowViewport({
             退出聚焦
           </button>
         </div>
-      ) : null}
+      ) : (
+        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
+          <button
+            type="button"
+            className={dragModeEnabled ? 'conversation-canvas__drag-mode-button conversation-canvas__drag-mode-button--active' : 'conversation-canvas__drag-mode-button'}
+            onClick={toggleDragMode}
+            aria-pressed={dragModeEnabled}
+          >
+            {dragModeEnabled ? '拖拽模式已开启' : '开启拖拽模式'}
+          </button>
+        </div>
+      )}
 
       <ReactFlow
         className={focusedConversation ? 'conversation-canvas__flow conversation-canvas__flow--focused' : 'conversation-canvas__flow'}
@@ -794,8 +834,8 @@ function FlowViewport({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
-        nodesDraggable={!focusedConversation && !halfPreviewConversation}
-        panOnDrag={!focusedConversation}
+        nodesDraggable={!focusedConversation && !halfPreviewConversation && dragModeEnabled}
+        panOnDrag={!focusedConversation && !dragModeEnabled}
         zoomOnScroll={!focusedConversation}
         zoomOnPinch={!focusedConversation}
         zoomOnDoubleClick={false}
@@ -856,8 +896,12 @@ function FlowViewport({
           if (halfPreviewConversation) {
             clearHalfPreviewConversationId()
           }
-          // Close context menu when clicking on pane
           setContextMenu(null)
+        }}
+        onDoubleClick={() => {
+          if (!focusedConversation) {
+            reactFlow.fitView({ duration: 400, padding: 0.2 })
+          }
         }}
         proOptions={{ hideAttribution: true }}
       >

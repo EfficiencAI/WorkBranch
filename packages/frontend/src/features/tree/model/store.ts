@@ -6,6 +6,7 @@ export const useTreeStore = create<TreeStore>((set) => ({
   halfPreviewConversationId: null,
   selectedConversationId: null,
   lockedSendConversationId: null,
+  dragModeEnabled: false,
 
   setFocusedConversationId(conversationId) {
     if (conversationId) {
@@ -51,5 +52,13 @@ export const useTreeStore = create<TreeStore>((set) => ({
 
   resetTreeUiState() {
     set({ focusedConversationId: null, halfPreviewConversationId: null, selectedConversationId: null, lockedSendConversationId: null })
+  },
+
+  setDragModeEnabled(enabled) {
+    set({ dragModeEnabled: enabled })
+  },
+
+  toggleDragMode() {
+    set((state) => ({ dragModeEnabled: !state.dragModeEnabled }))
   },
 }))
