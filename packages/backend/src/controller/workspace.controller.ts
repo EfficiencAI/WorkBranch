@@ -29,10 +29,43 @@ export class WorkspaceController {
     let info = workspaceService.getWorkspaceInfo(workspaceId);
 
     if (!info) {
+      const session = conversationDAO.getSessionById(Number(workspaceId));
+      if (session && session.workspace_id) {
+        workspaceService.register(session.workspace_id, String(session.id));
+        info = workspaceService.getWorkspaceInfo(session.workspace_id);
+        if (info) {
+          return reply.send(
+            success({
+              id: session.workspace_id,
+              session_id: info.session_id,
+              status: info.status,
+              created_at: info.created_at,
+              dir: workspaceService.getWorkspaceDir(session.workspace_id),
+            })
+          );
+        }
+      }
+    }
+
+    if (!info) {
       const conversation = conversationDAO.getConversationById(workspaceId);
       if (conversation) {
-        workspaceService.register(workspaceId, String(conversation.session_id));
-        info = workspaceService.getWorkspaceInfo(workspaceId);
+        const session = conversationDAO.getSessionById(conversation.session_id);
+        if (session && session.workspace_id) {
+          workspaceService.register(session.workspace_id, String(session.id));
+          info = workspaceService.getWorkspaceInfo(session.workspace_id);
+          if (info) {
+            return reply.send(
+              success({
+                id: session.workspace_id,
+                session_id: info.session_id,
+                status: info.status,
+                created_at: info.created_at,
+                dir: workspaceService.getWorkspaceDir(session.workspace_id),
+              })
+            );
+          }
+        }
       }
     }
 

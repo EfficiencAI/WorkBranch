@@ -114,11 +114,9 @@ export async function fetchSessionDetail(sessionId: string | number) {
 
 export async function createConversation(
   sessionId: string | number,
-  workspaceId?: string | null,
   parentConversationId?: string | null,
 ) {
-  const data = await post<Record<string, unknown>, { workspace_id?: string | null; parent_conversation_id?: string | null }>(`/api/session/sessions/${sessionId}/conversations`, {
-    workspace_id: workspaceId,
+  const data = await post<Record<string, unknown>, { parent_conversation_id?: string | null }>(`/api/session/sessions/${sessionId}/conversations`, {
     parent_conversation_id: parentConversationId,
   })
 

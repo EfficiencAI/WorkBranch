@@ -8,6 +8,7 @@ export interface SessionRow {
   id: number;
   user_id: number | null;
   title: string;
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -79,6 +80,7 @@ export class SQLiteDatabase {
         id INTEGER PRIMARY KEY,
         user_id INTEGER,
         title TEXT,
+        workspace_id TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
@@ -131,8 +133,23 @@ export class SQLiteDatabase {
     this.db.exec(createTables);
     logger.info('Database tables created');
 
+    this.migrateAddWorkspaceId();
+
     const insertDefaultUser = this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)');
     insertDefaultUser.run(1, 'Default User');
+  }
+
+  private migrateAddWorkspaceId() {
+    const tableInfo = this.db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
+    const hasWorkspaceId = tableInfo.some(col => col.name === 'workspace_id');
+    
+    if (!hasWorkspaceId) {
+      this.db.exec('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
+      this.db.exec('DELETE FROM messages');
+      this.db.exec('DELETE FROM conversations');
+      this.db.exec('DELETE FROM sessions');
+      logger.info('Migrated sessions table: added workspace_id column, cleared existing data');
+    }
   }
 
   prepare(sql: string): Database.Statement {

@@ -1,6 +1,7 @@
 import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
 import { agentService } from '../agent-service/agent';
+import { workspaceService } from '../agent-service/service/workspace-service';
 
 export enum ConversationState {
   PENDING = 'pending',
@@ -27,8 +28,16 @@ export class SessionService {
 
   createSession(title: string = '新会话') {
     const userId = 1;
-    const sessionId = conversationDAO.createSession(userId, title);
+    const workspaceId = this.generateWorkspaceId();
+    const sessionId = conversationDAO.createSession(userId, title, workspaceId);
+    workspaceService.register(workspaceId, String(sessionId));
     return conversationDAO.getSessionById(sessionId)!;
+  }
+
+  private generateWorkspaceId(): string {
+    const timestamp = Date.now();
+    const random = Math.random().toString(36).substring(2, 8);
+    return `ws-${timestamp}-${random}`;
   }
 
   deleteSession(sessionId: number): boolean {
@@ -51,7 +60,6 @@ export class SessionService {
 
   async createConversation(
     sessionId: number,
-    workspaceId?: string,
     parentConversationId?: string
   ): Promise<{ conversation_id: string; session_id: number; parent_conversation_id: string | null }> {
     const session = this.getSession(sessionId);
@@ -70,12 +78,16 @@ export class SessionService {
     }
 
     const conversationId = this.generateConversationId();
-    const resolvedWorkspaceId = workspaceId || conversationId;
+    const workspaceId = session.workspace_id || conversationId;
+
+    if (session.workspace_id) {
+      workspaceService.register(session.workspace_id, String(sessionId));
+    }
 
     conversationDAO.createConversation(
       conversationId,
       sessionId,
-      resolvedWorkspaceId,
+      workspaceId,
       ConversationState.PENDING,
       parentConversationId || null
     );
@@ -83,7 +95,7 @@ export class SessionService {
     this.conversations.set(conversationId, {
       conversation_id: conversationId,
       session_id: sessionId,
-      workspace_id: resolvedWorkspaceId,
+      workspace_id: workspaceId,
       parent_conversation_id: parentConversationId || null,
       title: null,
       state: ConversationState.PENDING,

@@ -4,6 +4,7 @@ export interface Session {
   id: number;
   user_id: number | null;
   title: string;
+  workspace_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -37,12 +38,12 @@ export interface Message {
 }
 
 export class ConversationDAO {
-  createSession(userId: number, title: string): number {
+  createSession(userId: number, title: string, workspaceId: string): number {
     const stmt = db.prepare(`
-      INSERT INTO sessions (user_id, title)
-      VALUES (?, ?)
+      INSERT INTO sessions (user_id, title, workspace_id)
+      VALUES (?, ?, ?)
     `);
-    const result = stmt.run(userId, title);
+    const result = stmt.run(userId, title, workspaceId);
     return result.lastInsertRowid as number;
   }
 
@@ -337,7 +338,7 @@ export class ConversationDAO {
 
   getSessionById(sessionId: number): Session | null {
     const stmt = db.prepare(`
-      SELECT id, user_id, title, created_at, updated_at
+      SELECT id, user_id, title, workspace_id, created_at, updated_at
       FROM sessions
       WHERE id = ?
     `);
@@ -394,6 +395,7 @@ export class ConversationDAO {
       id: row.id,
       user_id: row.user_id,
       title: row.title,
+      workspace_id: row.workspace_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
     };

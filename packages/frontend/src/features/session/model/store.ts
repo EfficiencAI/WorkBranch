@@ -177,7 +177,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       return null
     }
 
-    const created = await createConversation(currentSessionId, undefined, options.parentConversationId ?? null)
+    const created = await createConversation(currentSessionId, options.parentConversationId ?? null)
     const detail = await get().loadSessionDetail(currentSessionId)
     set({ currentSessionDetail: detail })
 

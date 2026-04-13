@@ -7,5 +7,5 @@ export async function createConversationForCurrentSession(parentConversationId: 
     return null
   }
 
-  return await createConversation(currentSessionId, undefined, parentConversationId)
+  return await createConversation(currentSessionId, parentConversationId)
 }

@@ -83,12 +83,12 @@ export class SessionController {
   async createConversation(
     request: FastifyRequest<{
       Params: { sessionId: string };
-      Body: { workspace_id?: string; parent_conversation_id?: string };
+      Body: { parent_conversation_id?: string };
     }>,
     reply: FastifyReply
   ) {
     const { sessionId } = request.params;
-    const { workspace_id, parent_conversation_id } = request.body || {};
+    const { parent_conversation_id } = request.body || {};
     const session = sessionService.getSession(Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
@@ -97,7 +97,6 @@ export class SessionController {
     try {
       const result = await sessionService.createConversation(
         Number(sessionId),
-        workspace_id,
         parent_conversation_id
       );
       return reply.status(201).send(success(result));

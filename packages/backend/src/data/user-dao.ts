@@ -21,7 +21,7 @@ export class UserDAO {
 
   listSessions(userId: number): Session[] {
     const stmt = db.prepare(`
-      SELECT id, user_id, title, created_at, updated_at
+      SELECT id, user_id, title, workspace_id, created_at, updated_at
       FROM sessions
       WHERE user_id = ?
       ORDER BY updated_at DESC
@@ -31,6 +31,7 @@ export class UserDAO {
       id: row.id,
       user_id: row.user_id,
       title: row.title,
+      workspace_id: row.workspace_id,
       created_at: row.created_at,
       updated_at: row.updated_at,
     }));

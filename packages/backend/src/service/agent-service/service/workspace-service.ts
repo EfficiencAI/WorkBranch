@@ -159,6 +159,15 @@ class WorkspaceServiceImpl {
     return this.workspaces.get(workspaceId) || null;
   }
 
+  getWorkspaceBySessionId(sessionId: string): WorkspaceInfo | null {
+    for (const info of this.workspaces.values()) {
+      if (info.session_id === sessionId) {
+        return info;
+      }
+    }
+    return null;
+  }
+
   getWorkspaceDir(workspaceId: string): string | null {
     const info = this.workspaces.get(workspaceId);
     if (!info) return null;
