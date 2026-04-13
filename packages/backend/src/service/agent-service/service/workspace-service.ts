@@ -9,6 +9,107 @@ interface WorkspaceInfo {
   created_at: string | null;
 }
 
+export interface FileInfo {
+  name: string;
+  path: string;
+  absolutePath: string;
+  size: number;
+  type: string;
+  modifiedAt: string;
+  isDirectory: boolean;
+}
+
+export interface FileTreeNode {
+  name: string;
+  path: string;
+  isDirectory: boolean;
+  size?: number;
+  type?: string;
+  modifiedAt?: string;
+  children?: FileTreeNode[];
+}
+
+const MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB
+
+function getMimeType(filePath: string): string {
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeTypes: Record<string, string> = {
+    '.txt': 'text/plain',
+    '.md': 'text/markdown',
+    '.json': 'application/json',
+    '.js': 'application/javascript',
+    '.ts': 'application/typescript',
+    '.tsx': 'application/typescript',
+    '.jsx': 'application/javascript',
+    '.html': 'text/html',
+    '.css': 'text/css',
+    '.xml': 'application/xml',
+    '.yaml': 'application/x-yaml',
+    '.yml': 'application/x-yaml',
+    '.csv': 'text/csv',
+    '.pdf': 'application/pdf',
+    '.doc': 'application/msword',
+    '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.ppt': 'application/vnd.ms-powerpoint',
+    '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    '.zip': 'application/zip',
+    '.tar': 'application/x-tar',
+    '.gz': 'application/gzip',
+    '.rar': 'application/vnd.rar',
+    '.7z': 'application/x-7z-compressed',
+    '.png': 'image/png',
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.gif': 'image/gif',
+    '.svg': 'image/svg+xml',
+    '.webp': 'image/webp',
+    '.ico': 'image/x-icon',
+    '.mp3': 'audio/mpeg',
+    '.wav': 'audio/wav',
+    '.mp4': 'video/mp4',
+    '.webm': 'video/webm',
+    '.avi': 'video/x-msvideo',
+    '.py': 'text/x-python',
+    '.java': 'text/x-java-source',
+    '.c': 'text/x-c',
+    '.cpp': 'text/x-c++src',
+    '.h': 'text/x-c',
+    '.hpp': 'text/x-c++hdr',
+    '.rs': 'text/x-rust',
+    '.go': 'text/x-go',
+    '.rb': 'text/x-ruby',
+    '.php': 'text/x-php',
+    '.swift': 'text/x-swift',
+    '.kt': 'text/x-kotlin',
+    '.scala': 'text/x-scala',
+    '.sh': 'application/x-sh',
+    '.bash': 'application/x-sh',
+    '.ps1': 'application/x-powershell',
+    '.sql': 'application/x-sql',
+    '.db': 'application/x-sqlite3',
+    '.sqlite': 'application/x-sqlite3',
+  };
+  return mimeTypes[ext] || 'application/octet-stream';
+}
+
+function isHiddenFile(filename: string): boolean {
+  return filename.startsWith('.');
+}
+
+function isBinaryFile(filePath: string): boolean {
+  const ext = path.extname(filePath).toLowerCase();
+  const textExtensions = [
+    '.txt', '.md', '.json', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.xml',
+    '.yaml', '.yml', '.csv', '.py', '.java', '.c', '.cpp', '.h', '.hpp', '.rs',
+    '.go', '.rb', '.php', '.swift', '.kt', '.scala', '.sh', '.bash', '.ps1', '.sql',
+    '.log', '.ini', '.cfg', '.conf', '.env', '.gitignore', '.dockerignore',
+    '.editorconfig', '.eslintrc', '.prettierrc', '.babelrc', '.tsconfig',
+  ];
+  return !textExtensions.includes(ext);
+}
+
 class WorkspaceServiceImpl {
   private baseDir: string;
   private workspaces: Map<string, WorkspaceInfo> = new Map();
@@ -213,6 +314,163 @@ class WorkspaceServiceImpl {
         files: savedFiles,
         error: String(err),
       };
+    }
+  }
+
+  getFileTree(workspaceId: string): { success: boolean; tree?: FileTreeNode; error?: string } {
+    const workspaceDir = this.getWorkspaceDir(workspaceId);
+    if (!workspaceDir) {
+      return { success: false, error: `工作区不存在: ${workspaceId}` };
+    }
+
+    if (!fs.existsSync(workspaceDir)) {
+      return { success: false, error: `工作区目录不存在` };
+    }
+
+    const buildTree = (dir: string, relativePath: string): FileTreeNode | null => {
+      const items = fs.readdirSync(dir);
+      const filteredItems = items.filter(item => !isHiddenFile(item));
+
+      const children: FileTreeNode[] = [];
+
+      for (const item of filteredItems) {
+        const itemPath = path.join(dir, item);
+        const itemRelativePath = relativePath ? `${relativePath}/${item}` : item;
+        const stats = fs.statSync(itemPath);
+
+        if (stats.isDirectory()) {
+          const childNode = buildTree(itemPath, itemRelativePath);
+          if (childNode) {
+            children.push(childNode);
+          }
+        } else {
+          children.push({
+            name: item,
+            path: itemRelativePath,
+            isDirectory: false,
+            size: stats.size,
+            type: getMimeType(itemPath),
+            modifiedAt: stats.mtime.toISOString(),
+          });
+        }
+      }
+
+      children.sort((a, b) => {
+        if (a.isDirectory !== b.isDirectory) {
+          return a.isDirectory ? -1 : 1;
+        }
+        return a.name.localeCompare(b.name);
+      });
+
+      return {
+        name: path.basename(dir),
+        path: relativePath,
+        isDirectory: true,
+        children,
+      };
+    };
+
+    const tree = buildTree(workspaceDir, '');
+    return { success: true, tree: tree || undefined };
+  }
+
+  getFileInfo(workspaceId: string, relativePath: string): { success: boolean; info?: FileInfo; error?: string } {
+    const resolved = this.resolvePath(workspaceId, relativePath);
+    if (!resolved.valid) {
+      return { success: false, error: resolved.error };
+    }
+
+    const absolutePath = resolved.path!;
+    if (!fs.existsSync(absolutePath)) {
+      return { success: false, error: `文件不存在: ${relativePath}` };
+    }
+
+    const stats = fs.statSync(absolutePath);
+    const workspaceDir = this.getWorkspaceDir(workspaceId)!;
+    const normalizedRelativePath = path.relative(workspaceDir, absolutePath).replace(/\\/g, '/');
+
+    return {
+      success: true,
+      info: {
+        name: path.basename(absolutePath),
+        path: normalizedRelativePath,
+        absolutePath,
+        size: stats.isDirectory() ? 0 : stats.size,
+        type: stats.isDirectory() ? 'directory' : getMimeType(absolutePath),
+        modifiedAt: stats.mtime.toISOString(),
+        isDirectory: stats.isDirectory(),
+      },
+    };
+  }
+
+  getFileContent(workspaceId: string, relativePath: string): { success: boolean; content?: string; encoding?: string; size?: number; error?: string } {
+    const resolved = this.resolvePath(workspaceId, relativePath);
+    if (!resolved.valid) {
+      return { success: false, error: resolved.error };
+    }
+
+    const absolutePath = resolved.path!;
+
+    if (!fs.existsSync(absolutePath)) {
+      return { success: false, error: `文件不存在: ${relativePath}` };
+    }
+
+    const stats = fs.statSync(absolutePath);
+    if (stats.isDirectory()) {
+      return { success: false, error: `不能读取目录内容: ${relativePath}` };
+    }
+
+    if (stats.size > MAX_FILE_SIZE) {
+      return { success: false, error: `文件过大，超过 1GB 限制: ${relativePath}` };
+    }
+
+    const isBinary = isBinaryFile(absolutePath);
+
+    try {
+      if (isBinary) {
+        const buffer = fs.readFileSync(absolutePath);
+        return {
+          success: true,
+          content: buffer.toString('base64'),
+          encoding: 'base64',
+          size: stats.size,
+        };
+      } else {
+        const content = fs.readFileSync(absolutePath, 'utf-8');
+        return {
+          success: true,
+          content,
+          encoding: 'utf-8',
+          size: stats.size,
+        };
+      }
+    } catch (err) {
+      return { success: false, error: `读取文件失败: ${err}` };
+    }
+  }
+
+  deleteFile(workspaceId: string, relativePath: string): { success: boolean; deleted?: boolean; path?: string; error?: string } {
+    const resolved = this.resolvePath(workspaceId, relativePath);
+    if (!resolved.valid) {
+      return { success: false, error: resolved.error };
+    }
+
+    const absolutePath = resolved.path!;
+
+    if (!fs.existsSync(absolutePath)) {
+      return { success: false, error: `文件不存在: ${relativePath}` };
+    }
+
+    try {
+      const stats = fs.statSync(absolutePath);
+      if (stats.isDirectory()) {
+        fs.rmSync(absolutePath, { recursive: true, force: true });
+      } else {
+        fs.unlinkSync(absolutePath);
+      }
+      return { success: true, deleted: true, path: relativePath };
+    } catch (err) {
+      return { success: false, error: `删除失败: ${err}` };
     }
   }
 }

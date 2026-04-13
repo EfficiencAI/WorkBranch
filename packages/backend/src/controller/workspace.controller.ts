@@ -55,6 +55,132 @@ export class WorkspaceController {
     );
   }
 
+  async getFileTree(
+    request: FastifyRequest<{ Params: { workspaceId: string } }>,
+    reply: FastifyReply
+  ) {
+    const { workspaceId } = request.params;
+
+    const info = workspaceService.getWorkspaceInfo(workspaceId);
+    if (!info) {
+      return reply.status(404).send({
+        code: 404,
+        message: `Workspace not found: ${workspaceId}`,
+        data: null,
+      });
+    }
+
+    const result = workspaceService.getFileTree(workspaceId);
+    if (!result.success) {
+      return reply.status(400).send({
+        code: 400,
+        message: result.error,
+        data: null,
+      });
+    }
+
+    return reply.send(success(result.tree));
+  }
+
+  async getFile(
+    request: FastifyRequest<{
+      Params: { workspaceId: string; '*': string };
+      Querystring: { action?: 'content' | 'info' };
+    }>,
+    reply: FastifyReply
+  ) {
+    const { workspaceId } = request.params;
+    const filePath = request.params['*'];
+    const action = request.query.action || 'info';
+
+    const info = workspaceService.getWorkspaceInfo(workspaceId);
+    if (!info) {
+      return reply.status(404).send({
+        code: 404,
+        message: `Workspace not found: ${workspaceId}`,
+        data: null,
+      });
+    }
+
+    if (!filePath) {
+      return reply.status(400).send({
+        code: 400,
+        message: '文件路径不能为空',
+        data: null,
+      });
+    }
+
+    if (action === 'content') {
+      const result = workspaceService.getFileContent(workspaceId, filePath);
+      if (!result.success) {
+        return reply.status(400).send({
+          code: 400,
+          message: result.error,
+          data: null,
+        });
+      }
+      return reply.send(
+        success({
+          content: result.content,
+          encoding: result.encoding,
+          size: result.size,
+          path: filePath,
+        })
+      );
+    } else {
+      const result = workspaceService.getFileInfo(workspaceId, filePath);
+      if (!result.success) {
+        return reply.status(400).send({
+          code: 400,
+          message: result.error,
+          data: null,
+        });
+      }
+      return reply.send(success(result.info));
+    }
+  }
+
+  async deleteFile(
+    request: FastifyRequest<{ Params: { workspaceId: string; '*': string } }>,
+    reply: FastifyReply
+  ) {
+    const { workspaceId } = request.params;
+    const filePath = request.params['*'];
+
+    const info = workspaceService.getWorkspaceInfo(workspaceId);
+    if (!info) {
+      return reply.status(404).send({
+        code: 404,
+        message: `Workspace not found: ${workspaceId}`,
+        data: null,
+      });
+    }
+
+    if (!filePath) {
+      return reply.status(400).send({
+        code: 400,
+        message: '文件路径不能为空',
+        data: null,
+      });
+    }
+
+    const result = workspaceService.deleteFile(workspaceId, filePath);
+    if (!result.success) {
+      return reply.status(400).send({
+        code: 400,
+        message: result.error,
+        data: null,
+      });
+    }
+
+    return reply.send(
+      success({
+        deleted: result.deleted,
+        path: result.path,
+      })
+    );
+  }
+
   async uploadFiles(
     request: FastifyRequest<{ Params: { workspaceId: string } }>,
     reply: FastifyReply
