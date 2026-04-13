@@ -1,15 +1,6 @@
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  params: string;
-  category: string;
-  executor: (args: Record<string, unknown>) => Promise<ToolResult>;
-}
+import type { ToolDefinition, ToolResult, ToolExecutionContext } from './types';
 
-export interface ToolResult {
-  result: unknown;
-  error: string | null;
-}
+export type { ToolDefinition, ToolResult, ToolExecutionContext };
 
 class ToolRegistryImpl {
   private tools: Map<string, ToolDefinition> = new Map();

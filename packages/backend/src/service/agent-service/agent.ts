@@ -3,6 +3,7 @@ import { createMessage, createContentBlock, SegmentType, type ContentBlock } fro
 import { logger } from '../../core/logging';
 import { runOrchestrator, type MessageContext } from './graph/orchestrator-v2';
 import { registerFileTools } from './tools/file-tools';
+import { registerWorkspaceTools } from './tools/workspace-tools';
 import { sessionService } from '../session-service';
 
 export class AgentService {
@@ -11,6 +12,7 @@ export class AgentService {
   private initialize(): void {
     if (!this.initialized) {
       registerFileTools();
+      registerWorkspaceTools();
       this.initialized = true;
     }
   }
