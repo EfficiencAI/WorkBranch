@@ -1,4 +1,5 @@
-import Database from 'better-sqlite3';
+import initSqlJs from 'sql.js';
+import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from '../logging';
@@ -46,30 +47,115 @@ export interface UserRow {
   name: string | null;
 }
 
-export class SQLiteDatabase {
-  private db: Database.Database;
-  private static instance: SQLiteDatabase;
+interface StatementResult {
+  changes: number;
+  lastInsertRowid: number;
+}
 
-  private constructor(dbPath: string) {
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
+class PreparedStatement {
+  private db: SqlJsDatabase;
+  private sql: string;
 
-    this.db = new Database(dbPath);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    this.initialize();
+  constructor(db: SqlJsDatabase, sql: string) {
+    this.db = db;
+    this.sql = sql;
   }
 
-  static getInstance(): SQLiteDatabase {
+  run(...params: unknown[]): StatementResult {
+    this.db.run(this.sql, params as never[]);
+    return {
+      changes: this.db.getRowsModified(),
+      lastInsertRowid: Number(this.db.exec("SELECT last_insert_rowid() as id")[0]?.values[0]?.[0] || 0)
+    };
+  }
+
+  get<T = unknown>(...params: unknown[]): T | undefined {
+    const stmt = this.db.prepare(this.sql, params as never[]);
+    if (stmt.step()) {
+      const row = stmt.getAsObject() as T;
+      stmt.free();
+      return row;
+    }
+    stmt.free();
+    return undefined;
+  }
+
+  all<T = unknown>(...params: unknown[]): T[] {
+    const results: T[] = [];
+    const stmt = this.db.prepare(this.sql, params as never[]);
+    while (stmt.step()) {
+      results.push(stmt.getAsObject() as T);
+    }
+    stmt.free();
+    return results;
+  }
+}
+
+export class SQLiteDatabase {
+  private db: SqlJsDatabase | null = null;
+  private SQL: SqlJsStatic | null = null;
+  private dbPath: string;
+  private static instance: SQLiteDatabase | null = null;
+  private initialized = false;
+
+  private constructor(dbPath: string) {
+    this.dbPath = dbPath;
+  }
+
+  static async getInstance(): Promise<SQLiteDatabase> {
     if (!SQLiteDatabase.instance) {
       SQLiteDatabase.instance = new SQLiteDatabase(appConfig.database.path);
+      await SQLiteDatabase.instance.init();
     }
     return SQLiteDatabase.instance;
   }
 
-  private initialize() {
+  static getInstanceSync(): SQLiteDatabase {
+    if (!SQLiteDatabase.instance) {
+      SQLiteDatabase.instance = new SQLiteDatabase(appConfig.database.path);
+      SQLiteDatabase.instance.initInBackground();
+    }
+    return SQLiteDatabase.instance;
+  }
+
+  private async init(): Promise<void> {
+    if (this.initialized) return;
+
+    const dir = path.dirname(this.dbPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    this.SQL = await initSqlJs({
+      locateFile: (file: string) => {
+        const wasmPath = path.join(__dirname, '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
+        if (fs.existsSync(wasmPath)) {
+          return wasmPath;
+        }
+        return file;
+      }
+    });
+
+    if (fs.existsSync(this.dbPath)) {
+      const buffer = fs.readFileSync(this.dbPath);
+      this.db = new this.SQL.Database(buffer);
+    } else {
+      this.db = new this.SQL.Database();
+    }
+
+    this.initialize();
+    this.initialized = true;
+  }
+
+  private initInBackground(): void {
+    this.init().catch(err => {
+      logger.error('Failed to initialize database:', err);
+    });
+  }
+
+  private initialize(): void {
+    if (!this.db) return;
+
     const createTables = `
       CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY,
@@ -130,43 +216,83 @@ export class SQLiteDatabase {
       CREATE INDEX IF NOT EXISTS idx_conversations_parent_conversation_id ON conversations(parent_conversation_id);
     `;
 
-    this.db.exec(createTables);
+    this.db.run(createTables);
+    this.save();
     logger.info('Database tables created');
 
     this.migrateAddWorkspaceId();
 
-    const insertDefaultUser = this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)');
-    insertDefaultUser.run(1, 'Default User');
+    this.db.run('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)', [1, 'Default User']);
+    this.save();
   }
 
-  private migrateAddWorkspaceId() {
-    const tableInfo = this.db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>;
-    const hasWorkspaceId = tableInfo.some(col => col.name === 'workspace_id');
-    
+  private migrateAddWorkspaceId(): void {
+    if (!this.db) return;
+
+    const result = this.db.exec("PRAGMA table_info(sessions)");
+    const columns = result[0]?.values.map((v: unknown[]) => v[1] as string) || [];
+    const hasWorkspaceId = columns.includes('workspace_id');
+
     if (!hasWorkspaceId) {
-      this.db.exec('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
-      this.db.exec('DELETE FROM messages');
-      this.db.exec('DELETE FROM conversations');
-      this.db.exec('DELETE FROM sessions');
+      this.db.run('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
+      this.db.run('DELETE FROM messages');
+      this.db.run('DELETE FROM conversations');
+      this.db.run('DELETE FROM sessions');
+      this.save();
       logger.info('Migrated sessions table: added workspace_id column, cleared existing data');
     }
   }
 
-  prepare(sql: string): Database.Statement {
-    return this.db.prepare(sql);
+  private save(): void {
+    if (!this.db) return;
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(this.dbPath, buffer);
+  }
+
+  prepare(sql: string): PreparedStatement {
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    return new PreparedStatement(this.db, sql);
   }
 
   transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    this.db.run('BEGIN TRANSACTION');
+    try {
+      const result = fn();
+      this.db.run('COMMIT');
+      this.save();
+      return result;
+    } catch (err) {
+      this.db.run('ROLLBACK');
+      throw err;
+    }
   }
 
   exec(sql: string): void {
-    this.db.exec(sql);
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    this.db.run(sql);
+    this.save();
   }
 
   close(): void {
-    this.db.close();
+    if (this.db) {
+      this.save();
+      this.db.close();
+      this.db = null;
+    }
+  }
+
+  isReady(): boolean {
+    return this.initialized && this.db !== null;
   }
 }
 
-export const db = SQLiteDatabase.getInstance();
+export const dbPromise = SQLiteDatabase.getInstance();
+export const db = SQLiteDatabase.getInstanceSync();
