@@ -1,10 +1,12 @@
 import pino, { Logger } from 'pino';
 
 const isDev = process.env.NODE_ENV !== 'production';
+const cwd = process.cwd();
+const isAndroid = cwd === '/' || cwd === '/system';
 
 export const logger: Logger = pino({
   level: process.env.LOG_LEVEL || 'info',
-  transport: isDev
+  transport: isDev && !isAndroid
     ? {
         target: 'pino-pretty',
         options: {

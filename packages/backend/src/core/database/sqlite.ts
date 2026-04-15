@@ -126,11 +126,29 @@ export class SQLiteDatabase {
       fs.mkdirSync(dir, { recursive: true });
     }
 
+    const cwd = process.cwd();
+    const isAndroid = cwd === '/' || cwd === '/system';
+    const filesDir = process.env.FILES_DIR || '/data/data/com.workbranch.app/files';
+
     this.SQL = await initSqlJs({
       locateFile: (file: string) => {
-        const wasmPath = path.join(__dirname, '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
-        if (fs.existsSync(wasmPath)) {
-          return wasmPath;
+        if (isAndroid) {
+          const androidPath = path.join(filesDir, 'www', 'nodejs-project', file);
+          if (fs.existsSync(androidPath)) {
+            return androidPath;
+          }
+        }
+        const devPath = path.join(__dirname, '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
+        if (fs.existsSync(devPath)) {
+          return devPath;
+        }
+        const bundlePath = path.join(__dirname, file);
+        if (fs.existsSync(bundlePath)) {
+          return bundlePath;
+        }
+        const androidPath = path.join(__dirname, '..', '..', 'sql-wasm.wasm');
+        if (fs.existsSync(androidPath)) {
+          return androidPath;
         }
         return file;
       }

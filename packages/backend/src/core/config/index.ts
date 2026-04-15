@@ -1,4 +1,15 @@
 import { z } from 'zod';
+import * as path from 'path';
+
+function getDataDir(): string {
+  const cwd = process.cwd();
+  if (cwd === '/' || cwd === '/system') {
+    return process.env.FILES_DIR || '/data/data/com.workbranch.app/files';
+  }
+  return cwd;
+}
+
+const dataDir = getDataDir();
 
 const configSchema = z.object({
   port: z.number().default(3000),
@@ -29,11 +40,15 @@ const configSchema = z.object({
 export type AppConfig = z.infer<typeof configSchema>;
 
 function loadConfig(): AppConfig {
+  const dbPath = process.env.DATABASE_PATH 
+    ? path.resolve(process.env.DATABASE_PATH)
+    : path.join(dataDir, 'data', 'workbranch.db');
+    
   return configSchema.parse({
     port: Number(process.env.PORT) || 3000,
     host: process.env.HOST || '127.0.0.1',
     database: {
-      path: process.env.DATABASE_PATH || './data/workbranch.db',
+      path: dbPath,
     },
     ai: {
       openaiApiKey: process.env.OPENAI_API_KEY,

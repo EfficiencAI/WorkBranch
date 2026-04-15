@@ -2,7 +2,16 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { appConfig } from '../core/config';
 
-const BASE_DIR = path.resolve(process.cwd());
+function getDataDir(): string {
+  const cwd = process.cwd();
+  if (cwd === '/' || cwd === '/system') {
+    const filesDir = process.env.FILES_DIR || '/data/data/com.workbranch.app/files';
+    return filesDir;
+  }
+  return cwd;
+}
+
+const BASE_DIR = getDataDir();
 const SETTING_FILE_PATH = path.join(BASE_DIR, 'setting.json');
 
 export class FileStorage {

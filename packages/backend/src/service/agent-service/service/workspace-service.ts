@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { fileStorage } from '../../../data/file-storage';
 
 interface WorkspaceInfo {
   id: string;
@@ -115,7 +116,7 @@ class WorkspaceServiceImpl {
   private workspaces: Map<string, WorkspaceInfo> = new Map();
 
   constructor() {
-    this.baseDir = path.resolve('workspaces');
+    this.baseDir = path.join(fileStorage.getStorageRoot(), 'workspaces');
     this.ensureBaseDir();
   }
 
