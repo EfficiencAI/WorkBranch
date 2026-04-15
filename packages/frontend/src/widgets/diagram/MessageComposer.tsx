@@ -3,6 +3,7 @@ import { SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
+import { useResponsive } from '../../shared/lib'
 
 type MessageComposerProps = {
   selectedConversationId: string | null
@@ -28,6 +29,7 @@ export function MessageComposer({
   onSwitchToSendTarget,
 }: MessageComposerProps) {
   const { settings } = useSettings()
+  const responsive = useResponsive()
   const { message: messageApi } = App.useApp()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
@@ -88,10 +90,10 @@ export function MessageComposer({
   }
 
   return (
-    <div className="message-composer">
+    <div className={responsive.isMobile ? 'message-composer message-composer--mobile' : 'message-composer'}>
       <Space direction="vertical" size={10} style={{ width: '100%' }}>
         <Input.TextArea
-          rows={3}
+          rows={responsive.composerConfig.textareaRows}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
@@ -99,51 +101,136 @@ export function MessageComposer({
         />
 
         <div className="message-composer__bottom-row">
-          <Space className="message-composer__target" align="center" size={8}>
-            <Typography.Text strong>当前目标对话</Typography.Text>
-            {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
-          </Space>
+          {responsive.isMobile ? (
+            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+              <Space className="message-composer__target" align="center" size={8}>
+                <Typography.Text strong>当前目标对话</Typography.Text>
+                {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
+              </Space>
 
-          <Space className="message-composer__footer" wrap>
-            <Checkbox
-              checked={enableContext}
-              onChange={(e) => setEnableContext(e.target.checked)}
-            >
-              上下文组织
-            </Checkbox>
-            <Button size="small" onClick={() => setCollapsed(true)}>
-              折叠
-            </Button>
-            {sending ? (
-              <Button
-                danger
-                icon={<StopOutlined />}
-                onClick={() => void onStop?.()}
-              >
-                停止
-              </Button>
-            ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
-              <Tooltip
-                title={
-                  <Space direction="vertical" size={4}>
-                    <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
-                    <Typography.Text type="secondary">
-                      发送目标: {selectedConversationLabel ?? selectedConversationId}
-                    </Typography.Text>
-                    <Typography.Text type="secondary">
-                      聚焦节点: {focusedConversationLabel ?? focusedConversationId}
-                    </Typography.Text>
-                    <Button
-                      size="small"
-                      type="primary"
-                      onClick={() => onSwitchToSendTarget(focusedConversationId)}
-                    >
-                      切换到聚焦节点
-                    </Button>
-                  </Space>
-                }
-              >
-                <span>
+              <Space className="message-composer__footer" wrap>
+                <Checkbox
+                  checked={enableContext}
+                  onChange={(e) => setEnableContext(e.target.checked)}
+                >
+                  上下文组织
+                </Checkbox>
+                <Button size={responsive.composerConfig.buttonSize} onClick={() => setCollapsed(true)}>
+                  折叠
+                </Button>
+                {sending ? (
+                  <Button
+                    danger
+                    size={responsive.composerConfig.buttonSize}
+                    icon={<StopOutlined />}
+                    onClick={() => void onStop?.()}
+                  >
+                    停止
+                  </Button>
+                ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
+                  <Tooltip
+                    title={
+                      <Space direction="vertical" size={4}>
+                        <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
+                        <Typography.Text type="secondary">
+                          发送目标: {selectedConversationLabel ?? selectedConversationId}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          聚焦节点: {focusedConversationLabel ?? focusedConversationId}
+                        </Typography.Text>
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() => onSwitchToSendTarget(focusedConversationId)}
+                        >
+                          切换到聚焦节点
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    <span>
+                      <Button
+                        type="primary"
+                        size={responsive.composerConfig.buttonSize}
+                        icon={<SendOutlined />}
+                        disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
+                        onClick={() => void handleSend()}
+                      >
+                        发送
+                      </Button>
+                    </span>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    type="primary"
+                    size={responsive.composerConfig.buttonSize}
+                    icon={<SendOutlined />}
+                    disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
+                    onClick={() => void handleSend()}
+                  >
+                    发送
+                  </Button>
+                )}
+              </Space>
+            </Space>
+          ) : (
+            <>
+              <Space className="message-composer__target" align="center" size={8}>
+                <Typography.Text strong>当前目标对话</Typography.Text>
+                {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}
+              </Space>
+
+              <Space className="message-composer__footer" wrap>
+                <Checkbox
+                  checked={enableContext}
+                  onChange={(e) => setEnableContext(e.target.checked)}
+                >
+                  上下文组织
+                </Checkbox>
+                <Button size="small" onClick={() => setCollapsed(true)}>
+                  折叠
+                </Button>
+                {sending ? (
+                  <Button
+                    danger
+                    icon={<StopOutlined />}
+                    onClick={() => void onStop?.()}
+                  >
+                    停止
+                  </Button>
+                ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
+                  <Tooltip
+                    title={
+                      <Space direction="vertical" size={4}>
+                        <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
+                        <Typography.Text type="secondary">
+                          发送目标: {selectedConversationLabel ?? selectedConversationId}
+                        </Typography.Text>
+                        <Typography.Text type="secondary">
+                          聚焦节点: {focusedConversationLabel ?? focusedConversationId}
+                        </Typography.Text>
+                        <Button
+                          size="small"
+                          type="primary"
+                          onClick={() => onSwitchToSendTarget(focusedConversationId)}
+                        >
+                          切换到聚焦节点
+                        </Button>
+                      </Space>
+                    }
+                  >
+                    <span>
+                      <Button
+                        type="primary"
+                        icon={<SendOutlined />}
+                        disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
+                        onClick={() => void handleSend()}
+                      >
+                        发送
+                      </Button>
+                    </span>
+                  </Tooltip>
+                ) : (
                   <Button
                     type="primary"
                     icon={<SendOutlined />}
@@ -152,19 +239,10 @@ export function MessageComposer({
                   >
                     发送
                   </Button>
-                </span>
-              </Tooltip>
-            ) : (
-              <Button
-                type="primary"
-                icon={<SendOutlined />}
-                disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
-                onClick={() => void handleSend()}
-              >
-                发送
-              </Button>
-            )}
-          </Space>
+                )}
+              </Space>
+            </>
+          )}
         </div>
       </Space>
     </div>

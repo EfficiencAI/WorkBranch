@@ -1,4 +1,4 @@
-import { Button, Checkbox, Modal, Space, Typography } from 'antd'
+import { Button, Checkbox, Drawer, Modal, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -26,6 +26,7 @@ import {
   useUserStore,
 } from '../../features'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
+import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
 import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
@@ -43,6 +44,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const responsive = useResponsive()
   const sessions = useSessionStore(selectSessionList)
   const selectedSessionId = useSessionStore(selectCurrentSessionId)
   const sessionDetail = useSessionStore(selectCurrentSessionDetail)
@@ -77,12 +79,14 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
-  const navExpanded = peekNav || activeSidebar !== null
-  const navClassName = activeSidebar
-    ? 'diagram-shell__nav diagram-shell__nav--open'
-    : navExpanded
-      ? 'diagram-shell__nav diagram-shell__nav--peek'
-      : 'diagram-shell__nav'
+  const navExpanded = !responsive.isMobile && (peekNav || activeSidebar !== null)
+  const navClassName = responsive.isMobile
+    ? 'diagram-shell__nav diagram-shell__nav--mobile'
+    : activeSidebar
+      ? 'diagram-shell__nav diagram-shell__nav--open'
+      : navExpanded
+        ? 'diagram-shell__nav diagram-shell__nav--peek'
+        : 'diagram-shell__nav'
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
@@ -399,74 +403,139 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           onAutoArrange={handleAutoArrange}
         />
 
-        <div
-          className={navClassName}
-          onMouseEnter={() => {
-            if (!activeSidebar) {
-              setPeekNav(true)
-            }
-          }}
-          onMouseLeave={() => {
-            if (!activeSidebar) {
-              setPeekNav(false)
-            }
-          }}
-        >
-          <div className="diagram-shell__nav-head">
-            <div className="diagram-shell__nav-trigger-slot">
-              <Button
-                type="text"
-                shape="round"
-                className="diagram-shell__nav-trigger"
-                aria-label="展开或收起图侧边栏"
-                aria-expanded={navExpanded}
-                onClick={collapseNav}
-              >
-                WB
-              </Button>
+        {responsive.isMobile ? (
+          <>
+            <div className={navClassName}>
+              <div className="diagram-shell__nav-head">
+                <div className="diagram-shell__nav-trigger-slot">
+                  <Button
+                    type="text"
+                    shape="round"
+                    className="diagram-shell__nav-trigger"
+                    aria-label="打开侧边栏"
+                    onClick={() => setActiveSidebar('history')}
+                  >
+                    WB
+                  </Button>
+                </div>
+              </div>
             </div>
 
-            <div className="diagram-shell__nav-actions-slot">
-              <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
+            <Drawer
+              open={activeSidebar !== null}
+              placement="left"
+              width={responsive.navWidth.open}
+              onClose={collapseNav}
+              title={
+                <Space>
+                  <Button
+                    className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                    onClick={() => openSidebar('history')}
+                  >
+                    会话历史
+                  </Button>
+                  <Button
+                    className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                    onClick={() => openSidebar('settings')}
+                  >
+                    设置
+                  </Button>
+                </Space>
+              }
+              className="diagram-shell__drawer"
+            >
+              <div className="diagram-shell__drawer-content">
+                {activeSidebar === 'history' && user ? (
+                  <SessionSidebar
+                    user={user}
+                    sessions={sessions}
+                    selectedSessionId={selectedSessionId}
+                    creatingSession={creatingSession}
+                    deletingSessionId={deletingSessionId}
+                    onCreateSession={handleCreateSession}
+                    onDeleteSession={handleDeleteSession}
+                    onSelectSession={handleSelectSession}
+                  />
+                ) : null}
+
+                {activeSidebar === 'settings' ? (
+                  <div className="diagram-shell__settings">
+                    <SettingsPage embedded />
+                  </div>
+                ) : null}
+              </div>
+            </Drawer>
+          </>
+        ) : (
+          <div
+            className={navClassName}
+            onMouseEnter={() => {
+              if (!activeSidebar) {
+                setPeekNav(true)
+              }
+            }}
+            onMouseLeave={() => {
+              if (!activeSidebar) {
+                setPeekNav(false)
+              }
+            }}
+          >
+            <div className="diagram-shell__nav-head">
+              <div className="diagram-shell__nav-trigger-slot">
                 <Button
-                  className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                  onClick={() => openSidebar('history')}
+                  type="text"
+                  shape="round"
+                  className="diagram-shell__nav-trigger"
+                  aria-label="展开或收起图侧边栏"
+                  aria-expanded={navExpanded}
+                  onClick={collapseNav}
                 >
-                  会话历史
+                  WB
                 </Button>
-                <Button
-                  className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                  onClick={() => openSidebar('settings')}
-                >
-                  设置
-                </Button>
+              </div>
+
+              <div className="diagram-shell__nav-actions-slot">
+                <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
+                  <Button
+                    className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                    onClick={() => openSidebar('history')}
+                  >
+                    会话历史
+                  </Button>
+                  <Button
+                    className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                    onClick={() => openSidebar('settings')}
+                  >
+                    设置
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
+              <div className="diagram-shell__nav-panel">
+                {activeSidebar === 'history' && user ? (
+                  <SessionSidebar
+                    user={user}
+                    sessions={sessions}
+                    selectedSessionId={selectedSessionId}
+                    creatingSession={creatingSession}
+                    deletingSessionId={deletingSessionId}
+                    onCreateSession={handleCreateSession}
+                    onDeleteSession={handleDeleteSession}
+                    onSelectSession={handleSelectSession}
+                  />
+                ) : null}
+
+                {activeSidebar === 'settings' ? (
+                  <div className="diagram-shell__settings">
+                    <SettingsPage embedded />
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>
-
-          <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
-            <div className="diagram-shell__nav-panel">
-              {activeSidebar === 'history' && user ? (
-                <SessionSidebar
-                  user={user}
-                  sessions={sessions}
-                  selectedSessionId={selectedSessionId}
-                  creatingSession={creatingSession}
-                  deletingSessionId={deletingSessionId}
-                  onCreateSession={handleCreateSession}
-                  onDeleteSession={handleDeleteSession}
-                  onSelectSession={handleSelectSession}
-                />
-              ) : null}
-
-              {activeSidebar === 'settings' ? (
-                <div className="diagram-shell__settings">
-                  <SettingsPage embedded />
-                </div>
-              ) : null}
-            </div>
-          </div>
-        </div>
+        )}
 
         {showWorkspaceHud ? (
           <div className="diagram-shell__hud">
