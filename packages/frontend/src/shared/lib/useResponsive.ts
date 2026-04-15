@@ -37,16 +37,32 @@ function calculateNavWidth(screenWidth: number, state: NavState): number {
     }
   }
 
-  return RESPONSIVE_CONFIG.NAV_WIDTH[state]
+  const stateKey = state.toUpperCase() as keyof typeof RESPONSIVE_CONFIG.NAV_WIDTH
+  return RESPONSIVE_CONFIG.NAV_WIDTH[stateKey]
 }
 
 function calculateComposerHeight(screenWidth: number): ComposerConfig {
   if (screenWidth < RESPONSIVE_CONFIG.BREAKPOINTS.MOBILE) {
-    return RESPONSIVE_CONFIG.COMPOSER.MOBILE
+    const config = RESPONSIVE_CONFIG.COMPOSER.MOBILE
+    return {
+      textareaRows: config.TEXTAREA_ROWS,
+      minHeight: config.MIN_HEIGHT,
+      buttonSize: config.BUTTON_SIZE,
+    }
   } else if (screenWidth < RESPONSIVE_CONFIG.BREAKPOINTS.TABLET) {
-    return RESPONSIVE_CONFIG.COMPOSER.TABLET
+    const config = RESPONSIVE_CONFIG.COMPOSER.TABLET
+    return {
+      textareaRows: config.TEXTAREA_ROWS,
+      minHeight: config.MIN_HEIGHT,
+      buttonSize: config.BUTTON_SIZE,
+    }
   }
-  return RESPONSIVE_CONFIG.COMPOSER.DESKTOP
+  const config = RESPONSIVE_CONFIG.COMPOSER.DESKTOP
+  return {
+    textareaRows: config.TEXTAREA_ROWS,
+    minHeight: config.MIN_HEIGHT,
+    buttonSize: config.BUTTON_SIZE,
+  }
 }
 
 function calculateControlHeight(screenWidth: number): ControlHeight {
