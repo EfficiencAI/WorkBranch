@@ -1,4 +1,5 @@
 export { ApiError, getErrorMessage, isApiError } from './error'
+export { apiBaseUrl, getApiUrl } from './config'
 export { connectSse } from './sse'
 export { del, get, patch, post, put, request } from './http'
 export {

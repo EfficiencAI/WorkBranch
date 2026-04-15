@@ -1,4 +1,5 @@
 import { get, post, put, del } from './http'
+import { getApiUrl } from './config'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 import type { CanonicalMessage } from '@workbranch/shared'
 
@@ -188,7 +189,7 @@ export async function streamConversationMessage(
     signal?: AbortSignal
   } = {},
 ) {
-  const response = await fetch(`/api/session/conversations/${conversationId}/messages`, {
+  const response = await fetch(getApiUrl(`/api/session/conversations/${conversationId}/messages`), {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',

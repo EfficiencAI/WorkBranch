@@ -1,4 +1,5 @@
 import { ApiError } from './error'
+import { getApiUrl } from './config'
 import type { SseEventMessage } from './types'
 
 export type SseConnectionOptions = {
@@ -36,7 +37,7 @@ function parsePayload<TData>(eventName: string, raw: string): SseEventMessage<TD
 }
 
 export function connectSse<TData = unknown>(url: string, handlers: SseHandlers<TData>, options: SseConnectionOptions = {}) {
-  const eventSource = new EventSource(url, { withCredentials: options.withCredentials })
+  const eventSource = new EventSource(getApiUrl(url), { withCredentials: options.withCredentials })
   const eventNames = ['data', 'done', 'error', 'heartbeat'] as const
 
   eventSource.onopen = () => {

@@ -1,4 +1,5 @@
 import { getClientId } from './clientId'
+import { getApiUrl } from '../api/config'
 
 type FrontendLogLevel = 'INFO' | 'WARNING' | 'ERROR'
 type FrontendLogEvent =
@@ -47,7 +48,7 @@ async function emit(level: FrontendLogLevel, event: FrontendLogEvent, payload: F
   }
 
   try {
-    const response = await fetch('/api/logs', {
+    const response = await fetch(getApiUrl('/api/logs'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

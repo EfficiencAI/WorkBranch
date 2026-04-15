@@ -21,7 +21,7 @@ export function useLongPress(
   options: LongPressOptions = {}
 ): LongPressHandlers {
   const { threshold = 500, onStart, onCancel, onFinish } = options
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLongPressActive = useRef(false)
 
   const start = useCallback(

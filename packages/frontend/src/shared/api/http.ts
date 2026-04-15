@@ -1,5 +1,6 @@
 import { getClientId } from '../logging/clientId'
 import { ApiError } from './error'
+import { getApiUrl } from './config'
 import type { ApiEnvelope, HttpRequestOptions } from './types'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -58,7 +59,7 @@ export async function request<TData = unknown, TBody = unknown>(
 
   let response: Response
   try {
-    response = await fetch(url, {
+    response = await fetch(getApiUrl(url), {
       method,
       headers: requestHeaders,
       body: requestBody,
