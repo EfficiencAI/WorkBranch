@@ -1,5 +1,5 @@
-import sqlite3 from 'sqlite3';
-import { open, Database } from 'sqlite';
+import initSqlJs from 'sql.js';
+import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -17,7 +17,8 @@ export interface CacheEntry {
 
 export class SQLiteCacheBackend {
   private dbPath: string;
-  private db: Database | null = null;
+  private db: SqlJsDatabase | null = null;
+  private SQL: SqlJsStatic | null = null;
   private initPromise: Promise<void>;
 
   constructor(dbPath: string = 'data/compression_cache.db') {
@@ -31,12 +32,28 @@ export class SQLiteCacheBackend {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    this.db = await open({
-      filename: this.dbPath,
-      driver: sqlite3.Database,
+    this.SQL = await initSqlJs({
+      locateFile: (file: string) => {
+        const devPath = path.join(__dirname, '..', '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
+        if (fs.existsSync(devPath)) {
+          return devPath;
+        }
+        const bundlePath = path.join(__dirname, file);
+        if (fs.existsSync(bundlePath)) {
+          return bundlePath;
+        }
+        return file;
+      }
     });
 
-    await this.db.exec(`
+    if (fs.existsSync(this.dbPath)) {
+      const buffer = fs.readFileSync(this.dbPath);
+      this.db = new this.SQL.Database(buffer);
+    } else {
+      this.db = new this.SQL.Database();
+    }
+
+    this.db.run(`
       CREATE TABLE IF NOT EXISTS compression_cache (
         cache_key TEXT PRIMARY KEY,
         original_hash TEXT NOT NULL,
@@ -50,15 +67,24 @@ export class SQLiteCacheBackend {
       )
     `);
 
-    await this.db.exec(`
+    this.db.run(`
       CREATE INDEX IF NOT EXISTS idx_expires_at 
       ON compression_cache(expires_at)
     `);
 
-    await this.db.exec(`
+    this.db.run(`
       CREATE INDEX IF NOT EXISTS idx_original_hash 
       ON compression_cache(original_hash)
     `);
+
+    this.save();
+  }
+
+  private save(): void {
+    if (!this.db) return;
+    const data = this.db.export();
+    const buffer = Buffer.from(data);
+    fs.writeFileSync(this.dbPath, buffer);
   }
 
   async get(key: string): Promise<Record<string, unknown> | null> {
@@ -68,30 +94,36 @@ export class SQLiteCacheBackend {
       return null;
     }
 
-    const row = await this.db.get<CacheEntry>(
+    const stmt = this.db.prepare(
       `SELECT compressed_result, expires_at, access_count
        FROM compression_cache
        WHERE cache_key = ?`,
       [key]
     );
 
-    if (!row) {
+    if (!stmt.step()) {
+      stmt.free();
       return null;
     }
+
+    const row = stmt.getAsObject() as CacheEntry;
+    stmt.free();
 
     const expiresAt = new Date(row.expires_at);
     if (new Date() > expiresAt) {
-      await this.db.run(
+      this.db.run(
         `DELETE FROM compression_cache WHERE cache_key = ?`,
         [key]
       );
+      this.save();
       return null;
     }
 
-    await this.db.run(
+    this.db.run(
       `UPDATE compression_cache SET access_count = access_count + 1 WHERE cache_key = ?`,
       [key]
     );
+    this.save();
 
     return JSON.parse(row.compressed_result);
   }
@@ -114,7 +146,7 @@ export class SQLiteCacheBackend {
     const now = new Date();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000);
 
-    await this.db.run(
+    this.db.run(
       `INSERT OR REPLACE INTO compression_cache
        (cache_key, original_hash, compressed_result, target_ratio, 
         original_tokens, compressed_tokens, created_at, expires_at, access_count)
@@ -130,6 +162,8 @@ export class SQLiteCacheBackend {
         expiresAt.toISOString(),
       ]
     );
+
+    this.save();
   }
 
   async cleanupExpired(): Promise<void> {
@@ -139,10 +173,11 @@ export class SQLiteCacheBackend {
       return;
     }
 
-    await this.db.run(
+    this.db.run(
       `DELETE FROM compression_cache WHERE expires_at < ?`,
       [new Date().toISOString()]
     );
+    this.save();
   }
 
   async getStats(): Promise<{
@@ -160,11 +195,7 @@ export class SQLiteCacheBackend {
       };
     }
 
-    const row = await this.db.get<{
-      total_entries: number;
-      total_access: number;
-      avg_ratio: number | null;
-    }>(
+    const stmt = this.db.prepare(
       `SELECT 
         COUNT(*) as total_entries,
         SUM(access_count) as total_access,
@@ -173,6 +204,22 @@ export class SQLiteCacheBackend {
        WHERE expires_at > ?`,
       [new Date().toISOString()]
     );
+
+    if (!stmt.step()) {
+      stmt.free();
+      return {
+        totalEntries: 0,
+        totalAccess: 0,
+        avgCompressionRatio: 'N/A',
+      };
+    }
+
+    const row = stmt.getAsObject() as {
+      total_entries: number;
+      total_access: number;
+      avg_ratio: number | null;
+    };
+    stmt.free();
 
     return {
       totalEntries: row?.total_entries || 0,
@@ -185,7 +232,8 @@ export class SQLiteCacheBackend {
 
   async close(): Promise<void> {
     if (this.db) {
-      await this.db.close();
+      this.save();
+      this.db.close();
       this.db = null;
     }
   }

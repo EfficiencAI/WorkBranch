@@ -632,18 +632,18 @@ export function createExecuteNode(messageContext?: MessageContext) {
       if (toolSuccess && toolName === 'switch_execution_mode') {
         const toolResultData = toolResult.result;
         const modeValue = typeof toolResultData === 'string' ? toolResultData : '';
-        if (modeValue === 'PLAN') {
-          directUpdate.execution_mode = 'PLAN';
-          directUpdate.mode_reason = 'agent 主动切换到 PLAN';
+        if (modeValue === 'plan') {
+          directUpdate.execution_mode = 'plan';
+          directUpdate.mode_reason = 'agent 主动切换到 plan';
           directUpdate.pending_tools = [];
           directUpdate.has_tool_use = false;
           directUpdate.next_action = {
             kind: 'enter_plan',
-            task_description: '切换到 PLAN',
+            task_description: '切换到 plan',
           };
-        } else if (modeValue === 'DIRECT') {
-          directUpdate.execution_mode = 'DIRECT';
-          directUpdate.mode_reason = 'agent 主动切换到 DIRECT';
+        } else if (modeValue === 'direct') {
+          directUpdate.execution_mode = 'direct';
+          directUpdate.mode_reason = 'agent 主动切换到 direct';
         }
       }
 
