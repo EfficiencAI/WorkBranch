@@ -2,6 +2,8 @@ import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { settingsService } from '../../settings-service';
 import { logger } from '../../../core/logging';
+import { compressionCache } from '../cache';
+import { CacheKeyGenerator } from '../cache/key-generator';
 
 interface Message {
   role: string;
@@ -94,6 +96,21 @@ class LLMServiceImpl {
   }
 
   async chat(messages: Message[], systemPrompt?: string): Promise<string> {
+    const cacheKey = CacheKeyGenerator.generate(
+      { role: 'user', content: JSON.stringify({ messages, systemPrompt }) },
+      1.0,
+      'v1'
+    );
+
+    const cached = await compressionCache.get(cacheKey);
+    if (cached && typeof cached.result === 'string') {
+      logger.info({
+        event: 'llm.cache.hit',
+        operation: 'chat',
+      });
+      return cached.result;
+    }
+
     const llm = this.getLLM();
     const lcMessages = this.buildLLMMessages(messages, systemPrompt);
 
@@ -107,6 +124,17 @@ class LLMServiceImpl {
     try {
       const response = await llm.invoke(lcMessages);
       const usage = this.extractUsage(response);
+      const result = response.content as string;
+
+      await compressionCache.set(
+        cacheKey,
+        CacheKeyGenerator.generateHash(JSON.stringify({ messages, systemPrompt })),
+        { result },
+        1.0,
+        usage.prompt_tokens || 0,
+        usage.completion_tokens || 0,
+        3600
+      );
 
       logger.info({
         event: 'llm.call.completed',
@@ -115,7 +143,7 @@ class LLMServiceImpl {
         ...usage,
       });
 
-      return response.content as string;
+      return result;
     } catch (err) {
       logger.error({
         event: 'llm.call.failed',

@@ -121,6 +121,7 @@ export interface AgentState {
   todo_max_iterations?: number;
   todo_status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'continue' | 'blocked' | 'step_done';
   next_action?: NextAction;
+  invalid_tool_retry_count?: number;
 }
 
 export const MAX_DIRECT_ITERATIONS = 32;
@@ -177,5 +178,6 @@ export function createInitialState(
     todo_max_iterations: MAX_DIRECT_ITERATIONS,
     todo_status: undefined,
     next_action: undefined,
+    invalid_tool_retry_count: 0,
   };
 }

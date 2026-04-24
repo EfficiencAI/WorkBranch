@@ -24,6 +24,22 @@ class ToolRegistryImpl {
   has(name: string): boolean {
     return this.tools.has(name);
   }
+
+  generateToolPrompt(allowedTools: string[]): string {
+    if (!allowedTools || allowedTools.length === 0) {
+      return '当前没有可用工具。';
+    }
+
+    const lines = ['## 工具列表'];
+    for (const name of allowedTools) {
+      const tool = this.tools.get(name);
+      if (tool && tool.params) {
+        lines.push(tool.params);
+      }
+    }
+
+    return lines.join('\n');
+  }
 }
 
 export const toolRegistry = new ToolRegistryImpl();

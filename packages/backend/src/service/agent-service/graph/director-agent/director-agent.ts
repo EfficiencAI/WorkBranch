@@ -1,11 +1,13 @@
 import { StateGraph, END, START } from '@langchain/langgraph';
 import type { AgentState, NextAction, ToolCall, TodoItem, IntentAnalysis } from '../../state/agent-state';
 import { ExecutionMode } from '../decision/complexity-analyzer';
-import { checkLoopOrStuck, shouldCheckLoop, CHECK_INTERVAL } from './loop-detection';
+import { checkLoopOrStuck, shouldCheckLoop } from './loop-detection';
 import { runToolExecution } from '../subgraphs/tool-execution-graph';
 import { llmService } from '../../service/llm-service';
 import { SegmentType } from '../../../session-service/canonical';
 import { logger } from '../../../../core/logging';
+import { toolRegistry } from '../../tools/registry';
+import type { ToolExecutionContext } from '../../tools/types';
 
 export interface MessageContext {
   send_message?: (content: string, type: SegmentType, metadata?: Record<string, unknown>) => void;
@@ -520,53 +522,6 @@ export function createStepReviewNode() {
   };
 }
 
-async function executeChatTool(
-  taskDescription: string,
-  state: AgentState,
-  messageContext?: MessageContext,
-): Promise<{ result: string; error: string | null }> {
-  try {
-    const parentChainMessages = state.parent_chain_messages || [];
-    const currentConversationMessages = state.current_conversation_messages || [];
-
-    const fullPrompt = buildContextPrompt(
-      parentChainMessages as Array<Record<string, unknown>>,
-      currentConversationMessages as Array<Record<string, unknown>>,
-      taskDescription,
-    );
-
-    if (messageContext?.send_message) {
-      messageContext.send_message('', SegmentType.CHAT_START, {
-        task_description: taskDescription,
-        is_start: true,
-      });
-    }
-
-    let result = '';
-    for await (const chunk of llmService.chatStream([{ role: 'user', content: fullPrompt }])) {
-      result += chunk;
-      if (messageContext?.send_message) {
-        messageContext.send_message(chunk, SegmentType.CHAT_DELTA, {
-          task_description: taskDescription,
-          is_delta: true,
-        });
-      }
-    }
-
-    if (messageContext?.send_message) {
-      messageContext.send_message('', SegmentType.CHAT_END, {
-        task_description: taskDescription,
-        is_end: true,
-        result,
-      });
-    }
-
-    return { result, error: null };
-  } catch (err) {
-    return { result: '', error: String(err) };
-  }
-}
-
 export function createExecuteNode(messageContext?: MessageContext) {
   return async (state: AgentState): Promise<Partial<AgentState>> => {
     if (messageContext?.cancel_check) {
@@ -600,7 +555,25 @@ export function createExecuteNode(messageContext?: MessageContext) {
     let toolResult: { result: unknown; error: string | null };
 
     if (toolName === 'chat') {
-      toolResult = await executeChatTool(taskDescription, state, messageContext);
+      const chatContext = {
+        workspace_id: workspaceId,
+        conversation_id: messageContext?.conversation_id || '',
+        message_id: messageContext?.message_id || '',
+        agent_type: currentAgentType,
+        parent_chain_messages: state.parent_chain_messages || [],
+        current_conversation_messages: state.current_conversation_messages || [],
+        send_message: messageContext?.send_message,
+      };
+      
+      const tool = toolRegistry.get('chat');
+      if (tool) {
+        toolResult = await tool.executor(
+          { task_description: taskDescription },
+          chatContext as ToolExecutionContext
+        );
+      } else {
+        toolResult = { result: null, error: 'Chat tool not found' };
+      }
     } else {
       toolResult = await runToolExecution({
         toolName,
@@ -616,7 +589,7 @@ export function createExecuteNode(messageContext?: MessageContext) {
 
     const newToolHistory: ToolCall[] = [
       ...state.tool_history,
-      { tool: toolName, args: toolArgs, result: toolResult.result },
+      { tool: toolName, args: toolArgs, result: resultStr },
     ];
 
     const newCurrentConvMsgs = [...currentConversationMessages];
@@ -657,10 +630,10 @@ export function createExecuteNode(messageContext?: MessageContext) {
       }
 
       if (toolSuccess && toolName === 'switch_execution_mode') {
-        const toolResultData = toolResult.result as Record<string, unknown> | null;
-        const modeValue = toolResultData as string || '';
+        const toolResultData = toolResult.result;
+        const modeValue = typeof toolResultData === 'string' ? toolResultData : '';
         if (modeValue === 'PLAN') {
-          directUpdate.execution_mode = ExecutionMode.PLAN;
+          directUpdate.execution_mode = 'PLAN';
           directUpdate.mode_reason = 'agent 主动切换到 PLAN';
           directUpdate.pending_tools = [];
           directUpdate.has_tool_use = false;
@@ -669,7 +642,7 @@ export function createExecuteNode(messageContext?: MessageContext) {
             task_description: '切换到 PLAN',
           };
         } else if (modeValue === 'DIRECT') {
-          directUpdate.execution_mode = ExecutionMode.DIRECT;
+          directUpdate.execution_mode = 'DIRECT';
           directUpdate.mode_reason = 'agent 主动切换到 DIRECT';
         }
       }

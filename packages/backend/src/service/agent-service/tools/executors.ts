@@ -92,7 +92,7 @@ export function checkPermission(
   toolName: string,
   toolArgs: Record<string, unknown>,
   workspaceId: string,
-  agentType?: string,
+  _agentType?: string,
   autoApprove?: boolean
 ): { permission: 'allow' | 'deny' | 'ask'; error?: string } {
   if (PLAN_MODE_TOOLS.has(toolName) || AGENT_TOOLS.has(toolName) || TODO_TOOLS.has(toolName) || MODE_SWITCH_TOOLS.has(toolName)) {
@@ -183,7 +183,7 @@ export class ToolExecutor {
     }
   }
 
-  private resolveToolArgs(toolName: string, args: Record<string, unknown>, context: ToolExecutionContext): Record<string, unknown> {
+  private resolveToolArgs(_toolName: string, args: Record<string, unknown>, context: ToolExecutionContext): Record<string, unknown> {
     const resolved = { ...args };
 
     if ('file_name' in resolved && !('file_path' in resolved) && !('path' in resolved)) {
