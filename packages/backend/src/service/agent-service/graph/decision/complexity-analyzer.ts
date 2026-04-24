@@ -23,23 +23,6 @@ export interface IntentAnalysis {
 export function evaluateTaskComplexity(userMessage: string): string {
   const messageLength = userMessage.length;
 
-  const simpleKeywords = [
-    '读取',
-    '查看',
-    '检查',
-    '查询',
-    '获取',
-    '显示',
-    '列出',
-    'read',
-    'view',
-    'check',
-    'query',
-    'get',
-    'show',
-    'list',
-  ];
-
   const complexKeywords = [
     '实现',
     '开发',
@@ -57,13 +40,24 @@ export function evaluateTaskComplexity(userMessage: string): string {
     'fix',
   ];
 
-  const lowerMessage = userMessage.toLowerCase();
+  const simpleKeywords = [
+    '读取',
+    '查看',
+    '检查',
+    '查询',
+    '获取',
+    '显示',
+    '列出',
+    'read',
+    'view',
+    'check',
+    'query',
+    'get',
+    'show',
+    'list',
+  ];
 
-  for (const keyword of simpleKeywords) {
-    if (lowerMessage.includes(keyword)) {
-      return 'simple';
-    }
-  }
+  const lowerMessage = userMessage.toLowerCase();
 
   for (const keyword of complexKeywords) {
     if (lowerMessage.includes(keyword)) {
@@ -71,13 +65,21 @@ export function evaluateTaskComplexity(userMessage: string): string {
     }
   }
 
-  if (messageLength < 50) {
-    return 'simple';
-  } else if (messageLength > 200) {
-    return 'complex';
-  } else {
-    return 'medium';
+  for (const keyword of simpleKeywords) {
+    if (lowerMessage.includes(keyword)) {
+      return 'simple';
+    }
   }
+
+  if (messageLength < 20) {
+    return 'simple';
+  }
+
+  if (messageLength > 200) {
+    return 'complex';
+  }
+
+  return 'medium';
 }
 
 export function analyzeTaskComplexity(
@@ -101,7 +103,7 @@ export function analyzeTaskComplexity(
     return {
       mode: ExecutionMode.SUBAGENT,
       reason: '探索任务，委托给 Explore Agent',
-      suggested_tools: [],
+      suggested_tools: suggestedTools,
       suggested_agent: 'explore',
     };
   }
@@ -110,7 +112,7 @@ export function analyzeTaskComplexity(
     return {
       mode: ExecutionMode.SUBAGENT,
       reason: '审查任务，委托给 Review Agent',
-      suggested_tools: [],
+      suggested_tools: suggestedTools,
       suggested_agent: 'review',
     };
   }
@@ -119,7 +121,7 @@ export function analyzeTaskComplexity(
     return {
       mode: ExecutionMode.PLAN,
       reason: '复杂开发任务，建议进入规划模式',
-      suggested_tools: ['enter_plan_mode'],
+      suggested_tools: ['enter_plan_mode', ...suggestedTools],
       suggested_agent: null,
     };
   }
