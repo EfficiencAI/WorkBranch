@@ -51,7 +51,7 @@ export class SessionService {
 
   listSessions() {
     const user = { id: 1 };
-    return conversationDAO.getSessionById(user.id) ? [conversationDAO.getSessionById(user.id)!] : [];
+    return conversationDAO.listSessionsByUserId(user.id);
   }
 
   getSession(sessionId: number) {

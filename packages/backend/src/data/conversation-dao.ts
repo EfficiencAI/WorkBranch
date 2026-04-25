@@ -346,6 +346,17 @@ export class ConversationDAO {
     return row ? this.rowToSession(row) : null;
   }
 
+  listSessionsByUserId(userId: number): Session[] {
+    const stmt = db.prepare(`
+      SELECT id, user_id, title, workspace_id, created_at, updated_at
+      FROM sessions
+      WHERE user_id = ?
+      ORDER BY updated_at DESC, id DESC
+    `);
+    const rows = stmt.all(userId) as SessionRow[];
+    return rows.map((row) => this.rowToSession(row));
+  }
+
   getParentChainConversationIds(conversationId: string): string[] {
     const chain: string[] = [];
     let currentId: string | null = conversationId;
