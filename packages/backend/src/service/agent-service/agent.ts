@@ -58,7 +58,7 @@ export class AgentService {
         content
       );
 
-      messageQueue.publish(msg);
+      messageQueue.publishSync(msg);
     };
 
     const context: MessageContext = {

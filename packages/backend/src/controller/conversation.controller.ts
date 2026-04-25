@@ -48,12 +48,12 @@ export class ConversationController {
   async sendMessage(
     request: FastifyRequest<{
       Params: { conversationId: string };
-      Body: { message: string; enable_context?: boolean };
+      Body: { message: string; enable_context?: boolean; last_seq?: number };
     }>,
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const { message, enable_context } = request.body;
+    const { message, enable_context, last_seq } = request.body;
 
     const conversation = await sessionService.getConversationDetail(conversationId);
     if (!conversation) {
@@ -71,9 +71,10 @@ export class ConversationController {
     let messageId: string = '';
     let targetConversationId: string = '';
 
-    const unsubscribe = messageQueue.subscribe(conversationId, (msg) => {
+    const unsubscribe = messageQueue.subscribe(conversationId, (msg, seq) => {
       const eventData = messageToDict(msg);
       eventData.message_id = messageId;
+      eventData.seq = seq;
 
       reply.raw.write(`data: ${JSON.stringify(eventData)}\n\n`);
 
@@ -81,7 +82,7 @@ export class ConversationController {
       if (hasDoneSegment) {
         doneReceived = true;
       }
-    });
+    }, { lastSeq: last_seq });
 
     let result;
     try {
