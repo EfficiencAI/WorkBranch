@@ -1,4 +1,5 @@
 import { Button, Checkbox, Drawer, Modal, Space, Typography } from 'antd'
+import { CloseOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -80,13 +81,17 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const navExpanded = !responsive.isMobile && (peekNav || activeSidebar !== null)
+  const isFocused = focusedConversationId !== null
+  const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const navClassName = responsive.isMobile
     ? 'diagram-shell__nav diagram-shell__nav--mobile'
-    : activeSidebar
-      ? 'diagram-shell__nav diagram-shell__nav--open'
-      : navExpanded
-        ? 'diagram-shell__nav diagram-shell__nav--peek'
-        : 'diagram-shell__nav'
+    : isFocused
+      ? 'diagram-shell__nav diagram-shell__nav--focused'
+      : activeSidebar
+        ? 'diagram-shell__nav diagram-shell__nav--open'
+        : navExpanded
+          ? 'diagram-shell__nav diagram-shell__nav--peek'
+          : 'diagram-shell__nav'
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
@@ -470,70 +475,85 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           <div
             className={navClassName}
             onMouseEnter={() => {
-              if (!activeSidebar) {
+              if (!activeSidebar && !isFocused) {
                 setPeekNav(true)
               }
             }}
             onMouseLeave={() => {
-              if (!activeSidebar) {
+              if (!activeSidebar && !isFocused) {
                 setPeekNav(false)
               }
             }}
           >
-            <div className="diagram-shell__nav-head">
-              <div className="diagram-shell__nav-trigger-slot">
+            {isFocused ? (
+              <div className="diagram-shell__nav-head">
                 <Button
                   type="text"
                   shape="round"
-                  className="diagram-shell__nav-trigger"
-                  aria-label="展开或收起图侧边栏"
-                  aria-expanded={navExpanded}
-                  onClick={collapseNav}
-                >
-                  WB
-                </Button>
+                  className="diagram-shell__exit-focus-trigger"
+                  aria-label="退出聚焦"
+                  icon={<CloseOutlined />}
+                  onClick={() => setFocusedConversationId(null)}
+                />
               </div>
-
-              <div className="diagram-shell__nav-actions-slot">
-                <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
-                  <Button
-                    className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                    onClick={() => openSidebar('history')}
-                  >
-                    会话历史
-                  </Button>
-                  <Button
-                    className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                    onClick={() => openSidebar('settings')}
-                  >
-                    设置
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
-              <div className="diagram-shell__nav-panel">
-                {activeSidebar === 'history' && user ? (
-                  <SessionSidebar
-                    user={user}
-                    sessions={sessions}
-                    selectedSessionId={selectedSessionId}
-                    creatingSession={creatingSession}
-                    deletingSessionId={deletingSessionId}
-                    onCreateSession={handleCreateSession}
-                    onDeleteSession={handleDeleteSession}
-                    onSelectSession={handleSelectSession}
-                  />
-                ) : null}
-
-                {activeSidebar === 'settings' ? (
-                  <div className="diagram-shell__settings">
-                    <SettingsPage embedded />
+            ) : (
+              <>
+                <div className="diagram-shell__nav-head">
+                  <div className="diagram-shell__nav-trigger-slot">
+                    <Button
+                      type="text"
+                      shape="round"
+                      className="diagram-shell__nav-trigger"
+                      aria-label="展开或收起图侧边栏"
+                      aria-expanded={navExpanded}
+                      onClick={collapseNav}
+                    >
+                      WB
+                    </Button>
                   </div>
-                ) : null}
-              </div>
-            </div>
+
+                  <div className="diagram-shell__nav-actions-slot">
+                    <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
+                      <Button
+                        className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                        onClick={() => openSidebar('history')}
+                      >
+                        会话历史
+                      </Button>
+                      <Button
+                        className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                        onClick={() => openSidebar('settings')}
+                      >
+                        设置
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
+                  <div className="diagram-shell__nav-panel">
+                    {activeSidebar === 'history' && user ? (
+                      <SessionSidebar
+                        user={user}
+                        sessions={sessions}
+                        selectedSessionId={selectedSessionId}
+                        creatingSession={creatingSession}
+                        deletingSessionId={deletingSessionId}
+                        onCreateSession={handleCreateSession}
+                        onDeleteSession={handleDeleteSession}
+                        onSelectSession={handleSelectSession}
+                      />
+                    ) : null}
+
+                    {activeSidebar === 'settings' ? (
+                      <div className="diagram-shell__settings">
+                        <SettingsPage embedded />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )}
 

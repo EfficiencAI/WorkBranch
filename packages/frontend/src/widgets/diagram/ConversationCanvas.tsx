@@ -53,6 +53,17 @@ type FlowNodeData = {
 
 const DEFAULT_HALF_PREVIEW_INTERACTION_DELAY = 300
 const DIAGRAM_POINTER_TOLERANCE_PX = 4
+const FOCUS_OVERLAY_DURATION_MS = 500
+
+type OverlayPhase = 'idle' | 'entering' | 'active' | 'exiting'
+
+type FocusOverlayRect = {
+  x: number
+  y: number
+  width: number
+  height: number
+  borderRadius: number
+}
 
 function summarizeConversation(conversation: ConversationNode) {
   if (conversation.title?.trim()) {
@@ -365,6 +376,117 @@ const nodeTypes = {
   conversation: FlowConversationNode,
 } as const
 
+function FocusOverlay({
+  phase,
+  originRect,
+  conversation,
+  conversationMessages,
+  messagesLoading,
+  messagesError,
+  conversationError,
+  sending,
+  selectedConversationId,
+  selectedConversationLabel,
+  onSend,
+  onStop,
+  onSwitchToSendTarget,
+}: {
+  phase: OverlayPhase
+  originRect: FocusOverlayRect | null
+  conversation: ConversationNode | null
+  conversationMessages: MessageNode[]
+  messagesLoading: boolean
+  messagesError: string | null
+  conversationError: string | null
+  sending: boolean
+  selectedConversationId: string | null
+  selectedConversationLabel: string | null
+  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onStop: () => Promise<void>
+  onSwitchToSendTarget: (conversationId: string) => void
+}) {
+  const responsive = useResponsive()
+
+  if (phase === 'idle' || !originRect || !conversation) {
+    return null
+  }
+
+  const isActive = phase === 'active' || phase === 'exiting'
+  const isEntering = phase === 'entering'
+  const isExiting = phase === 'exiting'
+
+  const viewportWidth = window.innerWidth
+  const viewportHeight = window.innerHeight
+
+  const initialTransform = `translate(${originRect.x}px, ${originRect.y}px) scale(${originRect.width / viewportWidth}, ${originRect.height / viewportHeight})`
+  const activeTransform = 'translate(0.5%, 0.5%) scale(1, 1)'
+
+  return (
+    <div
+      className={`focus-overlay ${isEntering ? 'focus-overlay--entering' : ''} ${isActive ? 'focus-overlay--active' : ''} ${isExiting ? 'focus-overlay--exiting' : ''}`}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 100,
+        pointerEvents: isActive ? 'auto' : 'none',
+      }}
+    >
+      <div
+        className="focus-overlay__background"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: isActive ? 'var(--app-radius-lg)' : originRect.borderRadius,
+          background: 'var(--app-card-bg)',
+          backdropFilter: 'blur(20px)',
+          transform: isEntering ? initialTransform : activeTransform,
+          transformOrigin: 'top left',
+          transition: isEntering ? 'none' : `transform ${FOCUS_OVERLAY_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1), border-radius ${FOCUS_OVERLAY_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
+        }}
+      />
+      <div
+        className="focus-overlay__content"
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          height: '100%',
+          padding: '24px',
+          opacity: isActive && !isExiting ? 1 : 0,
+          transition: `opacity ${FOCUS_OVERLAY_DURATION_MS / 2}ms ease ${FOCUS_OVERLAY_DURATION_MS / 2}ms`,
+        }}
+      >
+        <div className="focus-overlay__header">
+          <Space direction="vertical" size={4}>
+            <Typography.Title level={4} style={{ margin: 0 }}>
+              {summarizeConversation(conversation)}
+            </Typography.Title>
+            <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
+          </Space>
+        </div>
+
+        <div className="focus-overlay__messages">
+          {renderMessageList(conversationMessages, messagesLoading, messagesError, conversationError, 'focus-overlay__messages-list')}
+        </div>
+
+        <div className="focus-overlay__composer">
+          <MessageComposer
+            selectedConversationId={selectedConversationId}
+            selectedConversationLabel={selectedConversationLabel}
+            focusedConversationId={conversation.conversationId}
+            focusedConversationLabel={summarizeConversation(conversation)}
+            sending={sending}
+            onSend={onSend}
+            onStop={onStop}
+            onSwitchToSendTarget={onSwitchToSendTarget}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const NODE_WIDTH = 320
 const MIN_HORIZONTAL_GAP = 60
 const VERTICAL_GAP = 240
@@ -525,6 +647,11 @@ function FlowViewport({
   const isRefreshingRef = useRef(false)
   const zoomDebounceTimerRef = useRef<number | null>(null)
 
+  const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>('idle')
+  const [focusOriginRect, setFocusOriginRect] = useState<FocusOverlayRect | null>(null)
+  const [composerSlideOut, setComposerSlideOut] = useState(false)
+  const previousFocusedIdRef = useRef<string | null>(null)
+
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
     [conversationNodes, lockedSendConversationId],
@@ -577,6 +704,60 @@ function FlowViewport({
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
   }, [])
+
+  const getNodeScreenRect = useCallback((conversationId: string): FocusOverlayRect | null => {
+    const nodeElement = document.querySelector(`[data-conversation-id="${conversationId}"]`)
+    if (!nodeElement) return null
+
+    const rect = nodeElement.getBoundingClientRect()
+    const cardElement = nodeElement.querySelector('.conversation-node__card')
+    const borderRadius = cardElement ? parseFloat(window.getComputedStyle(cardElement).borderRadius) || 20 : 20
+
+    return {
+      x: rect.left,
+      y: rect.top,
+      width: rect.width,
+      height: rect.height,
+      borderRadius,
+    }
+  }, [])
+
+  useEffect(() => {
+    const wasFocused = previousFocusedIdRef.current
+    const isNowFocused = focusedConversationId
+
+    if (!wasFocused && isNowFocused) {
+      const rect = getNodeScreenRect(isNowFocused)
+      if (rect) {
+        setFocusOriginRect(rect)
+        setOverlayPhase('entering')
+        setComposerSlideOut(true)
+
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setOverlayPhase('active')
+          })
+        })
+      }
+    } else if (wasFocused && !isNowFocused) {
+      setOverlayPhase('exiting')
+      setComposerSlideOut(false)
+
+      const timer = window.setTimeout(() => {
+        setOverlayPhase('idle')
+        setFocusOriginRect(null)
+      }, FOCUS_OVERLAY_DURATION_MS)
+
+      return () => window.clearTimeout(timer)
+    } else if (wasFocused && isNowFocused && wasFocused !== isNowFocused) {
+      const rect = getNodeScreenRect(isNowFocused)
+      if (rect) {
+        setFocusOriginRect(rect)
+      }
+    }
+
+    previousFocusedIdRef.current = isNowFocused
+  }, [focusedConversationId, getNodeScreenRect])
 
   const focusMetrics = useMemo(() => {
     if (!focusedConversation) {
@@ -805,19 +986,31 @@ function FlowViewport({
     refreshMaskVisible ? 'conversation-canvas__viewport--refreshing' : null,
   ].filter(Boolean).join(' ')
 
+  const composerShellClassName = [
+    'conversation-canvas__composer-shell',
+    focusedConversation ? 'conversation-canvas__composer-shell--focused' : null,
+    composerSlideOut ? 'conversation-canvas__composer-shell--slide-out' : null,
+  ].filter(Boolean).join(' ')
+
   return (
     <div className={viewportClassName} onContextMenu={handleContextMenu} ref={viewportRef}>
-      {focusedConversation ? (
-        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
-          <button
-            type="button"
-            className="conversation-canvas__exit-focus-button"
-            onClick={() => setFocusedConversationId(null)}
-          >
-            退出聚焦
-          </button>
-        </div>
-      ) : (
+      <FocusOverlay
+        phase={overlayPhase}
+        originRect={focusOriginRect}
+        conversation={focusedConversation}
+        conversationMessages={conversationMessages}
+        messagesLoading={messagesLoading}
+        messagesError={messagesError}
+        conversationError={conversationDetail?.error ?? null}
+        sending={sending}
+        selectedConversationId={selectedConversation?.conversationId ?? null}
+        selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
+        onSend={onSendMessage}
+        onStop={onStopMessage}
+        onSwitchToSendTarget={setLockedSendConversationId}
+      />
+
+      {focusedConversation ? null : (
         <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
           <button
             type="button"
@@ -933,7 +1126,7 @@ function FlowViewport({
         </div>
       ) : null}
 
-      <div className={focusedConversation ? 'conversation-canvas__composer-shell conversation-canvas__composer-shell--focused' : 'conversation-canvas__composer-shell'} ref={composerRef}>
+      <div className={composerShellClassName} ref={composerRef}>
         <div className={focusedConversation ? 'conversation-node conversation-node--composer conversation-node--composer-focused' : 'conversation-node conversation-node--composer'}>
           <Card size="small" className="conversation-node__card conversation-node__card--composer">
             <MessageComposer

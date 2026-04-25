@@ -206,6 +206,35 @@ button {
   box-shadow: var(--app-shadow-lg);
 }
 
+.diagram-shell__nav--focused {
+  left: auto;
+  right: 18px;
+  width: 58px;
+  min-height: 58px;
+  padding: var(--app-space-1);
+}
+
+.diagram-shell__nav--focused .diagram-shell__nav-head {
+  justify-content: center;
+}
+
+.diagram-shell__exit-focus-trigger {
+  width: var(--app-control-height-lg);
+  height: var(--app-control-height-lg);
+  padding: 0 !important;
+  border: none !important;
+  border-radius: calc(12px * var(--app-ui-scale)) !important;
+  background: transparent !important;
+  color: var(--app-text-muted) !important;
+  box-shadow: none !important;
+}
+
+.diagram-shell__exit-focus-trigger:hover,
+.diagram-shell__exit-focus-trigger:focus-visible {
+  color: var(--app-text) !important;
+  background: var(--app-hover-bg) !important;
+}
+
 .diagram-shell__nav-head {
   display: flex;
   align-items: center;
@@ -1659,4 +1688,94 @@ button {
   .ant-input-textarea textarea {
     font-size: 16px;
   }
+}
+
+.focus-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  pointer-events: none;
+}
+
+.focus-overlay--active {
+  pointer-events: auto;
+}
+
+.focus-overlay__background {
+  position: absolute;
+  inset: 0;
+  background: var(--app-card-bg);
+  backdrop-filter: blur(20px);
+  transform-origin: top left;
+}
+
+.focus-overlay--active .focus-overlay__background {
+  border-radius: var(--app-radius-lg);
+}
+
+.focus-overlay--exiting .focus-overlay__background {
+  transition: 
+    transform 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-radius 500ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.focus-overlay__content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 24px;
+  opacity: 0;
+  transition: opacity 250ms ease 250ms;
+}
+
+.focus-overlay--active .focus-overlay__content {
+  opacity: 1;
+}
+
+.focus-overlay--exiting .focus-overlay__content {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+
+.focus-overlay__header {
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.focus-overlay__messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 8px;
+}
+
+.focus-overlay__messages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.focus-overlay__composer {
+  flex-shrink: 0;
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: var(--app-radius-lg);
+  background: var(--app-panel-bg-soft);
+}
+
+.focus-overlay__composer .message-composer {
+  background: transparent;
+}
+
+.conversation-canvas__composer-shell--slide-out {
+  transform: translateX(-50%) translateY(calc(100% + 48px));
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.conversation-canvas__composer-shell:not(.conversation-canvas__composer-shell--slide-out) {
+  transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1);
 }
