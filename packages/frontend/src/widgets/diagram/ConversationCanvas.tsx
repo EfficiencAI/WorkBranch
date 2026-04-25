@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
 import { selectFocusedConversationId, selectHalfPreviewConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
+import { useResponsive } from '../../shared/lib/useResponsive'
 import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
@@ -496,6 +497,7 @@ function FlowViewport({
 }: ConversationCanvasProps) {
   const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
+  const responsive = useResponsive()
   const halfPreviewInteractionDelay =
     settings?.ui &&
     typeof settings.ui === 'object' &&
@@ -846,6 +848,13 @@ function FlowViewport({
         paneClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         onNodeClick={(_, node) => {
           if (focusedConversationId === node.id) {
+            return
+          }
+
+          if (responsive.isMobile) {
+            clearInteractionGate()
+            setHalfPreviewConversationId(null)
+            setFocusedConversationId(node.id)
             return
           }
 

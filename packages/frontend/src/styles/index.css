@@ -1165,9 +1165,13 @@ button {
   }
 }
 
-@media (max-width: 991px) {
+@media screen and (max-width: 1023px) {
   .app-content {
     padding: 16px;
+  }
+
+  .app-content--diagram {
+    padding: 0;
   }
 
   .diagram-shell__nav--peek,
@@ -1235,7 +1239,7 @@ button {
   }
 }
 
-@media (max-width: 640px) {
+@media screen and (max-width: 767px) {
   .diagram-shell__nav {
     top: 14px;
     left: 14px;
@@ -1323,6 +1327,8 @@ button {
   }
 
   .conversation-canvas__composer-shell {
+    left: 50%;
+    transform: translateX(-50%);
     width: min(460px, calc(100vw - 32px));
   }
 
@@ -1427,17 +1433,6 @@ button {
   }
 }
 
-@media (max-width: 640px) {
-  .conversation-canvas__controls {
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .conversation-canvas__drag-mode-button {
-    width: 100%;
-  }
-}
-
 .diagram-shell__nav--mobile {
   position: fixed;
   top: 14px;
@@ -1517,6 +1512,11 @@ button {
 .message-composer--mobile .message-composer__footer {
   justify-content: flex-end;
   gap: 8px;
+  flex-wrap: wrap;
+}
+
+.message-composer--mobile .message-composer__footer .ant-space-item:first-child {
+  margin-right: auto;
 }
 
 .message-composer--mobile .ant-checkbox-wrapper {
@@ -1524,6 +1524,18 @@ button {
   min-height: 44px;
   display: flex;
   align-items: center;
+  padding: 12px;
+  margin: -12px;
+}
+
+.message-composer--mobile .ant-checkbox-inner {
+  width: 24px;
+  height: 24px;
+}
+
+.message-composer--mobile .ant-checkbox-input {
+  width: 44px !important;
+  height: 44px !important;
 }
 
 .message-composer--mobile .ant-btn {
@@ -1561,11 +1573,10 @@ button {
   }
 
   .conversation-canvas__composer-shell {
-    left: 16px;
-    right: 16px;
+    left: 50%;
+    transform: translateX(-50%);
     width: calc(100vw - 32px);
     max-width: 460px;
-    transform: none;
   }
 
   .conversation-canvas__composer-shell--focused {

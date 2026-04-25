@@ -1,0 +1,192 @@
+{
+  "viewport": {
+    "width": 360,
+    "height": 780
+  },
+  "layout": {
+    "nav": {
+      "exists": true,
+      "width": 58,
+      "height": 60,
+      "top": 14,
+      "left": 14
+    },
+    "composerShell": {
+      "exists": true,
+      "className": "conversation-canvas__composer-shell",
+      "width": 328,
+      "height": 297.40625,
+      "bottom": 756,
+      "left": 16,
+      "offsetLeft": 180,
+      "computedLeft": "180px",
+      "computedTransform": "matrix(1, 0, 0, 1, -164, 0)",
+      "computedMarginLeft": "0px",
+      "computedBorderLeft": "0px",
+      "parentClassName": "conversation-canvas__viewport",
+      "parentPaddingLeft": "0px",
+      "parentBoundingClientRect": {
+        "left": 0,
+        "width": 360
+      },
+      "grandParentClassName": "conversation-canvas",
+      "grandParentPaddingLeft": "0px",
+      "grandParentMarginLeft": "0px",
+      "grandParentBoundingClientRect": {
+        "left": 0,
+        "width": 360
+      },
+      "greatGrandParentClassName": "diagram-shell__canvas-layer",
+      "greatGrandParentPadding": "0px",
+      "greatGrandParentBoundingClientRect": {
+        "left": 0,
+        "width": 360
+      },
+      "greatGreatGrandParentClassName": "diagram-shell",
+      "greatGreatGrandParentPadding": "0px",
+      "greatGreatGrandParentBoundingClientRect": {
+        "left": 0,
+        "width": 360
+      },
+      "rootParentClassName": "ant-layout-content app-content app-content--diagram css-dev-only-do-not-override-ch9ese",
+      "rootParentPadding": "0px",
+      "rootParentBoundingClientRect": {
+        "left": 0,
+        "width": 360
+      }
+    },
+    "composer": {
+      "exists": true,
+      "className": "message-composer message-composer--mobile",
+      "width": 302,
+      "height": 271.40625,
+      "bottom": 743,
+      "left": 29
+    },
+    "canvas": {
+      "exists": true,
+      "width": 360,
+      "height": 780
+    }
+  },
+  "overlaps": [
+    {
+      "element1": "conversation-node",
+      "element2": "ant-card ant-card-bordered ant-card-small conversation-node__card conversation-node__card--assistant css-dev-only-do-not-override-ch9ese css-var-_r_0_",
+      "overlapArea": 40422,
+      "overlapX": 328,
+      "overlapY": 123
+    },
+    {
+      "element1": "conversation-node conversation-node--composer",
+      "element2": "ant-card ant-card-bordered ant-card-small conversation-node__card conversation-node__card--composer css-dev-only-do-not-override-ch9ese css-var-_r_0_",
+      "overlapArea": 97549,
+      "overlapX": 328,
+      "overlapY": 297
+    },
+    {
+      "element1": "conversation-node conversation-node--composer",
+      "element2": "message-composer message-composer--mobile",
+      "overlapArea": 81965,
+      "overlapX": 302,
+      "overlapY": 271
+    },
+    {
+      "element1": "conversation-node conversation-node--composer",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-lg",
+      "overlapArea": 3097,
+      "overlapX": 70,
+      "overlapY": 44
+    },
+    {
+      "element1": "conversation-node conversation-node--composer",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid ant-btn-lg",
+      "overlapArea": 3960,
+      "overlapX": 90,
+      "overlapY": 44
+    },
+    {
+      "element1": "ant-card ant-card-bordered ant-card-small conversation-node__card conversation-node__card--composer css-dev-only-do-not-override-ch9ese css-var-_r_0_",
+      "element2": "message-composer message-composer--mobile",
+      "overlapArea": 81965,
+      "overlapX": 302,
+      "overlapY": 271
+    },
+    {
+      "element1": "ant-card ant-card-bordered ant-card-small conversation-node__card conversation-node__card--composer css-dev-only-do-not-override-ch9ese css-var-_r_0_",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-lg",
+      "overlapArea": 3097,
+      "overlapX": 70,
+      "overlapY": 44
+    },
+    {
+      "element1": "ant-card ant-card-bordered ant-card-small conversation-node__card conversation-node__card--composer css-dev-only-do-not-override-ch9ese css-var-_r_0_",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid ant-btn-lg",
+      "overlapArea": 3960,
+      "overlapX": 90,
+      "overlapY": 44
+    },
+    {
+      "element1": "message-composer message-composer--mobile",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-default ant-btn-color-default ant-btn-variant-outlined ant-btn-lg",
+      "overlapArea": 3097,
+      "overlapX": 70,
+      "overlapY": 44
+    },
+    {
+      "element1": "message-composer message-composer--mobile",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-primary ant-btn-color-primary ant-btn-variant-solid ant-btn-lg",
+      "overlapArea": 3960,
+      "overlapX": 90,
+      "overlapY": 44
+    },
+    {
+      "element1": "diagram-shell__nav diagram-shell__nav--mobile",
+      "element2": "ant-btn css-dev-only-do-not-override-ch9ese css-var-_r_0_ ant-btn-round ant-btn-text ant-btn-color-default ant-btn-variant-text diagram-shell__nav-trigger",
+      "overlapArea": 2304,
+      "overlapX": 48,
+      "overlapY": 48
+    }
+  ],
+  "touchTargets": [],
+  "textOverflow": [
+    {
+      "element": "ant-checkbox ant-wave-target css-dev-only-do-not-override-ch9ese",
+      "text": "",
+      "scrollWidth": 43,
+      "clientWidth": 14
+    }
+  ],
+  "centering": [],
+  "spacing": [
+    {
+      "type": "negative-vertical-gap",
+      "container": "conversation-canvas",
+      "gap": -780,
+      "element1": "conversation-canvas__backdrop",
+      "element2": "conversation-canvas__viewport"
+    },
+    {
+      "type": "negative-vertical-gap",
+      "container": "ant-space css-dev-only-do-not-override-ch9ese ant-space-horizontal ant-space-align-start ant-space-gap-row-small ant-space-gap-col-small css-var-_r_0_",
+      "gap": -50,
+      "element1": "ant-space-item",
+      "element2": "ant-space-item"
+    },
+    {
+      "type": "negative-vertical-gap",
+      "container": "ant-space css-dev-only-do-not-override-ch9ese ant-space-horizontal ant-space-align-center ant-space-gap-row-small ant-space-gap-col-small css-var-_r_0_",
+      "gap": -28,
+      "element1": "ant-space-item",
+      "element2": "ant-space-item"
+    },
+    {
+      "type": "negative-vertical-gap",
+      "container": "ant-space css-dev-only-do-not-override-ch9ese ant-space-horizontal ant-space-align-center ant-space-gap-row-small ant-space-gap-col-small message-composer__footer css-var-_r_0_",
+      "gap": -35,
+      "element1": "ant-space-item",
+      "element2": "ant-space-item"
+    }
+  ],
+  "proportions": []
+}
