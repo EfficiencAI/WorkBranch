@@ -2,8 +2,7 @@ import { messageQueue } from '../session-service/mq';
 import { createMessage, createContentBlock, SegmentType, type ContentBlock } from '../session-service/canonical';
 import { logger } from '../../core/logging';
 import { runOrchestrator, type MessageContext } from './graph/orchestrator-v2';
-import { registerFileTools } from './tools/file-tools';
-import { registerWorkspaceTools } from './tools/workspace-tools';
+import { initializeTools } from './tools';
 import { sessionService } from '../session-service';
 
 export class AgentService {
@@ -11,8 +10,7 @@ export class AgentService {
 
   private initialize(): void {
     if (!this.initialized) {
-      registerFileTools();
-      registerWorkspaceTools();
+      initializeTools();
       this.initialized = true;
     }
   }
