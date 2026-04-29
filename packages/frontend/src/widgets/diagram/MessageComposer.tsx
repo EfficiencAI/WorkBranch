@@ -1,7 +1,7 @@
-import { App, Button, Checkbox, Input, Space, Tooltip, Typography } from 'antd'
-import { SendOutlined, StopOutlined } from '@ant-design/icons'
-import { useEffect, useState } from 'react'
-import type { KeyboardEvent } from 'react'
+import { App, Button, Checkbox, Input, Space, Typography } from 'antd'
+import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CSSProperties, KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
 import { useResponsive } from '../../shared/lib'
 
@@ -34,10 +34,47 @@ export function MessageComposer({
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [enableContext, setEnableContext] = useState(false)
+  const [thinkMode, setThinkMode] = useState(false)
+  const [netMode, setNetMode] = useState(false)
+  const [btnStyle, setBtnStyle] = useState<CSSProperties>({})
+  const isFocused = focusedConversationId !== null
+  const toolbarRef = useRef<HTMLDivElement>(null)
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
       ? settings.ui.message_send_shortcuts_reversed === true
       : false
+
+  const calcBtnSize = useCallback(() => {
+    const el = toolbarRef.current
+    if (!el || !isFocused) return
+    const containerWidth = el.clientWidth
+    const btnCount = 6
+    const gapCount = 5
+    const baseGap = Math.max(4, containerWidth * 0.008)
+    const totalGaps = baseGap * gapCount
+    const availableWidth = containerWidth - totalGaps
+    
+    const height = Math.max(24, Math.min(30, containerWidth * 0.035))
+    const aspectRatio = 2.5
+    const minBtnWidth = height * aspectRatio
+    const maxBtnWidth = 72
+    const btnWidth = Math.min(maxBtnWidth, Math.max(minBtnWidth, availableWidth / btnCount))
+    
+    const fontSize = Math.max(10, Math.min(12, containerWidth * 0.014))
+    setBtnStyle({
+      width: `${btnWidth}px`,
+      height: `${height}px`,
+      fontSize: `${fontSize}px`,
+    })
+  }, [isFocused])
+
+  useEffect(() => {
+    if (!isFocused) return
+    calcBtnSize()
+    const observer = new ResizeObserver(calcBtnSize)
+    if (toolbarRef.current) observer.observe(toolbarRef.current)
+    return () => observer.disconnect()
+  }, [isFocused, calcBtnSize])
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -85,6 +122,92 @@ export function MessageComposer({
             展开
           </Button>
         </Space>
+      </div>
+    )
+  }
+
+  if (isFocused) {
+    return (
+      <div className="message-composer message-composer--focused">
+        <Input.TextArea
+          rows={3}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
+          autoSize={{ minRows: 3, maxRows: 8 }}
+        />
+
+        <div className="message-composer__focused-toolbar" ref={toolbarRef}>
+          <div className="message-composer__toolbar-left">
+            <Space size={8} align="center" wrap={false}>
+              <Button
+                type="text"
+                shape="round"
+                className="message-composer__tool-btn"
+                style={btnStyle}
+                icon={<PlusOutlined />}
+              />
+
+              <Button
+                shape="round"
+                className="message-composer__tool-btn"
+                style={btnStyle}
+              >
+                模式
+              </Button>
+
+              <Button
+                type="text"
+                shape="round"
+                className={`message-composer__tool-btn ${thinkMode ? 'message-composer__tool-btn--active' : ''}`}
+                style={btnStyle}
+                icon={<BulbOutlined />}
+                onClick={() => setThinkMode(!thinkMode)}
+              >
+                思考
+              </Button>
+
+              <Button
+                type="text"
+                shape="round"
+                className={`message-composer__tool-btn ${netMode ? 'message-composer__tool-btn--active' : ''}`}
+                style={btnStyle}
+                icon={<GlobalOutlined />}
+                onClick={() => setNetMode(!netMode)}
+              >
+                联网
+              </Button>
+            </Space>
+          </div>
+
+          <div className="message-composer__toolbar-right">
+            {sending ? (
+              <Button
+                danger
+                shape="round"
+                className="message-composer__send-btn"
+                style={btnStyle}
+                icon={<StopOutlined />}
+                onClick={() => void onStop?.()}
+              >
+                停止
+              </Button>
+            ) : (
+              <Button
+                type="primary"
+                shape="round"
+                className="message-composer__send-btn"
+                style={btnStyle}
+                icon={<SendOutlined />}
+                disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
+                onClick={() => void handleSend()}
+              >
+                发送
+              </Button>
+            )}
+          </div>
+        </div>
       </div>
     )
   }

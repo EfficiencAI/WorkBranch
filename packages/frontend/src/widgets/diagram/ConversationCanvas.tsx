@@ -247,7 +247,7 @@ function FocusNodePage({
   )
 }
 
-function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
+function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
     focused,
@@ -265,29 +265,74 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   } = data
 
   const { setContextMenu } = useContextMenu()
+  const draggingNodeId = useTreeStore((state) => state.draggingNodeId)
+  const setDraggingNodeId = useTreeStore((state) => state.setDraggingNodeId)
+  const clearDraggingNodeId = useTreeStore((state) => state.clearDraggingNodeId)
+  const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
+  const reactFlow = useReactFlow()
+
+  const isDragging = draggingNodeId === conversation.conversationId
+  const dragStartPosRef = useRef<{ x: number; y: number; nodeX: number; nodeY: number } | null>(null)
 
   const handleLongPress = useCallback(
     (event: React.TouchEvent | React.MouseEvent) => {
+      setDraggingNodeId(conversation.conversationId)
+      if (navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+      
       const clientX = 'touches' in event ? event.touches[0]?.clientX ?? 0 : event.clientX
       const clientY = 'touches' in event ? event.touches[0]?.clientY ?? 0 : event.clientY
-
-      setContextMenu({
-        type: 'node',
-        conversationId: conversation.conversationId,
-        position: { x: clientX, y: clientY },
-      })
+      
+      const node = reactFlow.getNode(conversation.conversationId)
+      if (node) {
+        dragStartPosRef.current = {
+          x: clientX,
+          y: clientY,
+          nodeX: node.position.x,
+          nodeY: node.position.y,
+        }
+      }
     },
-    [conversation.conversationId, setContextMenu]
+    [conversation.conversationId, setDraggingNodeId, reactFlow]
   )
 
   const longPressHandlers = useLongPress(handleLongPress, {
     threshold: 500,
-    onStart: () => {
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
-      }
-    },
+    moveThreshold: 10,
   })
+
+  useEffect(() => {
+    if (!isDragging) {
+      dragStartPosRef.current = null
+      return
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragStartPosRef.current) return
+
+      const { x: startX, y: startY, nodeX, nodeY } = dragStartPosRef.current
+      const deltaX = (event.clientX - startX) / reactFlow.getZoom()
+      const deltaY = (event.clientY - startY) / reactFlow.getZoom()
+
+      const newX = nodeX + deltaX
+      const newY = nodeY + deltaY
+
+      updateConversationNodePosition(conversation.conversationId, { x: newX, y: newY })
+    }
+
+    const handlePointerUp = () => {
+      clearDraggingNodeId()
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', handlePointerUp)
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', handlePointerUp)
+    }
+  }, [isDragging, conversation.conversationId, reactFlow, updateConversationNodePosition, clearDraggingNodeId])
 
   const width = focused ? focusCardWidth : halfPreview ? previewCardWidth : undefined
   const bodyHeight = focused ? focusBodyHeight : halfPreview ? previewBodyHeight : undefined
@@ -297,6 +342,7 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
     halfPreview ? 'conversation-node--half-preview' : null,
     selected && !focused && !halfPreview ? 'conversation-node--selected' : null,
     interactionGateActive ? 'conversation-node--interaction-gated' : null,
+    isDragging ? 'conversation-node--dragging' : null,
   ].filter(Boolean).join(' ')
   const focusShellClassName = [
     'conversation-node__focus-shell',
@@ -631,10 +677,6 @@ function FlowViewport({
   const setHalfPreviewConversationId = useTreeStore((state) => state.setHalfPreviewConversationId)
   const clearHalfPreviewConversationId = useTreeStore((state) => state.clearHalfPreviewConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
-  const dragModeEnabled = useTreeStore((state) => state.dragModeEnabled)
-  const toggleDragMode = useTreeStore((state) => state.toggleDragMode)
-  const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
-  const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const storeHalfPreviewConversationId = useTreeStore(selectHalfPreviewConversationId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -826,7 +868,7 @@ function FlowViewport({
           halfPreview ? 'conversation-flow-node--half-preview' : null,
           faded ? 'conversation-flow-node--dimmed' : null,
         ].filter(Boolean).join(' '),
-        draggable: !focused && !halfPreview,
+        draggable: false,
       }
     })
   }, [
@@ -1010,33 +1052,18 @@ function FlowViewport({
         onSwitchToSendTarget={setLockedSendConversationId}
       />
 
-      {focusedConversation ? null : (
-        <div className="conversation-canvas__controls" role="toolbar" aria-label="画布控制">
-          <button
-            type="button"
-            className={dragModeEnabled ? 'conversation-canvas__drag-mode-button conversation-canvas__drag-mode-button--active' : 'conversation-canvas__drag-mode-button'}
-            onClick={toggleDragMode}
-            aria-pressed={dragModeEnabled}
-          >
-            {dragModeEnabled ? '拖拽模式已开启' : '开启拖拽模式'}
-          </button>
-        </div>
-      )}
-
       <ReactFlow
         className={focusedConversation ? 'conversation-canvas__flow conversation-canvas__flow--focused' : 'conversation-canvas__flow'}
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView
-        nodesDraggable={!focusedConversation && !halfPreviewConversation && dragModeEnabled}
-        panOnDrag={!focusedConversation && !dragModeEnabled}
+        panOnDrag={true}
         zoomOnScroll={!focusedConversation}
         zoomOnPinch={!focusedConversation}
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
-        nodeDragThreshold={DIAGRAM_POINTER_TOLERANCE_PX}
         nodeClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         paneClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         onNodeClick={(_, node) => {
@@ -1068,30 +1095,6 @@ function FlowViewport({
           clearInteractionGate()
           setHalfPreviewConversationId(null)
           setFocusedConversationId(node.id)
-        }}
-        onNodeDrag={(_, node) => {
-          if (focusedConversation || halfPreviewConversation) {
-            return
-          }
-
-          updateConversationNodePosition(node.id, { x: node.position.x, y: node.position.y })
-        }}
-        onNodeDragStop={(_, node) => {
-          if (!currentSessionId || focusedConversation || halfPreviewConversation) {
-            return
-          }
-
-          const position = { x: node.position.x, y: node.position.y }
-          updateConversationNodePosition(node.id, position)
-          frontendLogger.info('move_conversation_node', {
-            extra: {
-              conversation_id: node.id,
-              session_id: currentSessionId,
-              x: position.x,
-              y: position.y,
-            },
-          })
-          void persistConversationPositions(currentSessionId, [{ conversationId: node.id, position }])
         }}
         onPaneClick={() => {
           clearInteractionGate()

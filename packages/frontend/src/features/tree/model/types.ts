@@ -3,7 +3,7 @@ export type TreeState = {
   halfPreviewConversationId: string | null
   selectedConversationId: string | null
   lockedSendConversationId: string | null
-  dragModeEnabled: boolean
+  draggingNodeId: string | null
 }
 
 export type TreeActions = {
@@ -16,8 +16,8 @@ export type TreeActions = {
   setLockedSendConversationId: (conversationId: string | null) => void
   clearLockedSendConversationId: () => void
   resetTreeUiState: () => void
-  setDragModeEnabled: (enabled: boolean) => void
-  toggleDragMode: () => void
+  setDraggingNodeId: (nodeId: string | null) => void
+  clearDraggingNodeId: () => void
 }
 
 export type TreeStore = TreeState & TreeActions
