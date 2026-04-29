@@ -4,6 +4,9 @@ import { MergedSegmentType } from './types';
 
 // Maps each raw API SegmentType (lowercase) to its merged base type
 const DELTA_TYPE_MAP: Partial<Record<SegmentType, MergedSegmentType>> = {
+  chat_start: MergedSegmentType.TEXT,
+  chat_delta: MergedSegmentType.TEXT,
+  chat_end: MergedSegmentType.TEXT,
   text_start: MergedSegmentType.TEXT,
   text_delta: MergedSegmentType.TEXT,
   text_end: MergedSegmentType.TEXT,
