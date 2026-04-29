@@ -173,6 +173,8 @@ export type SimpleEvent = {
   conversation_id?: string
   user_content?: string
   content: string
+  seq?: number
+  last_seq?: number
 }
 
 export type ChatStreamEvent = CanonicalMessage | SimpleEvent
@@ -183,7 +185,7 @@ export async function cancelConversation(conversationId: string) {
 
 export async function streamConversationMessage(
   conversationId: string,
-  body: { message: string; enable_context?: boolean },
+  body: { message: string; enable_context?: boolean; last_seq?: number },
   handlers: {
     onEvent?: (event: ChatStreamEvent) => void
     signal?: AbortSignal

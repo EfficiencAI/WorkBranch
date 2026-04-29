@@ -128,6 +128,19 @@ function isAbortError(caughtError: unknown) {
 }
 
 let activeStreamAbortController: AbortController | null = null
+const streamSeqState: Map<string, number> = new Map()
+
+function getLastSavedSeq(conversationId: string): number {
+  return streamSeqState.get(conversationId) || 0
+}
+
+function saveLastSeq(conversationId: string, seq: number): void {
+  streamSeqState.set(conversationId, seq)
+}
+
+function clearLastSavedSeq(conversationId: string): void {
+  streamSeqState.delete(conversationId)
+}
 
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   conversationDetail: null,
@@ -371,6 +384,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     activeStreamAbortController = abortController
     let streamingMessageId: string | null = null
     const streamingContentBlocks: ContentBlock[] = []
+    const lastSeq = getLastSavedSeq(conversationId)
 
     try {
       set(state => ({ ...state, streaming: true, streamingConversationIds: new Set([...state.streamingConversationIds, conversationId]) }))
@@ -379,6 +393,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           conversation_id: conversationId,
           message_length: messageText.length,
           enable_context: enableContext,
+          last_seq: lastSeq,
         },
       })
 
@@ -387,10 +402,15 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           message: messageText,
           enable_context: enableContext,
+          last_seq: lastSeq,
         },
         {
           signal: abortController.signal,
           onEvent(event: ChatStreamEvent) {
+            if ('seq' in event && typeof event.seq === 'number') {
+              saveLastSeq(conversationId, event.seq)
+            }
+
             onEvent?.(event)
 
             if ('type' in event && event.type === 'message_created') {
@@ -598,6 +618,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
       if (activeStreamAbortController === abortController) {
         activeStreamAbortController = null
       }
+      clearLastSavedSeq(conversationId)
       set(state => { const newSet = new Set(state.streamingConversationIds); newSet.delete(conversationId); return { ...state, streaming: newSet.size > 0, streamingConversationIds: newSet } })
     }
   },

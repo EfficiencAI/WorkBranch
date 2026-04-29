@@ -48,6 +48,7 @@ export interface CanonicalMessage {
   content_blocks: ContentBlock[];
   content: string;
   timestamp: string;
+  seq?: number;
   metadata?: Record<string, unknown>;
 }
 

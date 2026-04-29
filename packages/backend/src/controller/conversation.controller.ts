@@ -66,6 +66,22 @@ export class ConversationController {
       'Connection': 'keep-alive',
     });
 
+    const streamState = messageQueue.getStreamState(conversationId);
+
+    if (streamState.is_completed && last_seq > 0) {
+      const missedMessages = messageQueue.getMessagesAfter(conversationId, last_seq);
+      if (missedMessages.length > 0) {
+        for (const { message: msg, seq } of missedMessages) {
+          const eventData = messageToDict(msg);
+          eventData.seq = seq;
+          reply.raw.write(`data: ${JSON.stringify(eventData)}\n\n`);
+        }
+      }
+      reply.raw.write(`data: ${JSON.stringify({ type: 'done', last_seq: streamState.last_seq })}\n\n`);
+      reply.raw.end();
+      return;
+    }
+
     let doneReceived = false;
     let timeoutCounter = 0;
     let messageId: string = '';
