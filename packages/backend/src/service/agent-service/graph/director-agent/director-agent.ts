@@ -10,7 +10,7 @@ import { toolRegistry } from '../../tools/registry';
 import type { ToolExecutionContext } from '../../tools/types';
 
 export interface MessageContext {
-  send_message?: (content: string, type: SegmentType, metadata?: Record<string, unknown>) => void;
+  send_message?: (content: string, type: SegmentType, metadata?: Record<string, unknown>) => Promise<void>;
   session_id?: string;
   conversation_id?: string;
   workspace_id?: string;
@@ -162,7 +162,7 @@ export function routeAfterTodoReview(_state: AgentState): 'decide' {
 }
 
 export function createAnalyzeNode(messageContext?: MessageContext) {
-  return (state: AgentState): Partial<AgentState> => {
+  return async (state: AgentState): Promise<Partial<AgentState>> => {
     const userMessage = getLastUserMessageText(state);
     const currentAgentType = state.agent_type || 'director_agent';
     const forcedExecutionMode = state.forced_execution_mode;
@@ -221,7 +221,7 @@ export function createAnalyzeNode(messageContext?: MessageContext) {
     });
 
     if (messageContext?.send_message) {
-      messageContext.send_message('', SegmentType.STATE_CHANGE, {
+      await messageContext.send_message('', SegmentType.STATE_CHANGE, {
         execution_mode: modeName(modeDecision.mode),
       });
     }
@@ -582,6 +582,24 @@ export function createExecuteNode(messageContext?: MessageContext) {
         agentType: currentAgentType,
         previousCalls: state.tool_history,
       });
+
+      let duplicateCount = 0;
+      for (const call of state.tool_history) {
+        if (call.tool === toolName && JSON.stringify(call.args) === JSON.stringify(toolArgs)) {
+          duplicateCount++;
+        }
+      }
+      if (duplicateCount >= 3 && toolResult.error === null) {
+        logger.warn({
+          event: 'doom_loop.detected',
+          tool_name: toolName,
+          duplicate_count: duplicateCount,
+        });
+        toolResult = { result: null, error: 'DoomLoop detected: repeated tool calls with identical args' };
+        if (messageContext?.send_message) {
+          await messageContext.send_message('DoomLoop detected: repeated tool calls', SegmentType.ERROR, { source: 'doom_loop' });
+        }
+      }
     }
 
     const resultStr = toolResult.result ? String(toolResult.result) : '';
@@ -824,7 +842,7 @@ export async function runDirectorGraph(
   };
 
   const graph = createOrchestratorGraph(messageContext);
-  const finalState = await graph.invoke(initialState);
+  const finalState = await graph.invoke(initialState, { recursionLimit: 50 });
 
   logger.info({
     event: 'director_graph.completed',

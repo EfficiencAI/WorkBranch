@@ -33,17 +33,18 @@ export class AgentService {
 
     let textStarted = false;
 
-    const sendMessage = (content: string = '', blockType: SegmentType = SegmentType.TEXT_DELTA) => {
+    const sendMessage = async (content: string = '', blockType: SegmentType = SegmentType.TEXT_DELTA, metadata?: Record<string, unknown>) => {
       const blocks: ContentBlock[] = [];
+      const baseMeta = { message_id: messageId, ...metadata };
 
       if (blockType === SegmentType.TEXT_DELTA) {
         if (!textStarted) {
-          blocks.push(createContentBlock(SegmentType.TEXT_START, '', { message_id: messageId }));
+          blocks.push(createContentBlock(SegmentType.TEXT_START, '', baseMeta));
           textStarted = true;
         }
-        blocks.push(createContentBlock(blockType, content, { message_id: messageId }));
+        blocks.push(createContentBlock(blockType, content, baseMeta));
       } else {
-        blocks.push(createContentBlock(blockType, content, { message_id: messageId }));
+        blocks.push(createContentBlock(blockType, content, baseMeta));
       }
 
       const msg = createMessage(
@@ -56,7 +57,7 @@ export class AgentService {
         content
       );
 
-      messageQueue.publishSync(msg);
+      await messageQueue.publish(msg);
     };
 
     const context: MessageContext = {

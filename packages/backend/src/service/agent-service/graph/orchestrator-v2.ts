@@ -3,7 +3,7 @@ import { SegmentType } from '../../session-service/canonical';
 import { logger } from '../../../core/logging';
 
 export interface MessageContext {
-  send_message: (content: string, type: SegmentType) => void;
+  send_message: (content: string, type: SegmentType) => Promise<void>;
   session_id: string;
   conversation_id: string;
   workspace_id: string;
