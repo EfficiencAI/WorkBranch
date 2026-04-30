@@ -233,3 +233,65 @@ export function buildContextPrompt(
 
   return parts.join('\n');
 }
+
+export function formatTodoPromptBlock(todos: string[], currentTodoIndex: number): string {
+  if (!todos || todos.length === 0) {
+    return '';
+  }
+
+  const lines: string[] = ['当前 TODO 列表（完整状态）:'];
+  for (let idx = 0; idx < todos.length; idx++) {
+    const marker = idx === currentTodoIndex ? ' <= 当前执行项' : '';
+    lines.push(`- [${idx}] ${todos[idx]}${marker}`);
+  }
+  lines.push(`doingIdx=${currentTodoIndex}`);
+  lines.push('如果任务明显是多步骤、阶段化，或执行中发现当前任务过大/过难，应使用 update_todo 一次性写入或重写完整 todo 列表；如果任务本身是单步骤且简单，则不要使用 todo 工具。');
+  return lines.join('\n');
+}
+
+export function getPlanSystemPrompt(agentType: string = 'director_agent'): string {
+  return PLAN_SYSTEM_PROMPT_BASE;
+}
+
+export function buildIntentAnalysisMessages(
+  userMessage: string,
+  parentChainMessages: Array<Record<string, unknown>>,
+  currentConversationMessages: Array<Record<string, unknown>>,
+): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
+  const systemPrompt = INTENT_ANALYSIS_PROMPT.replace('{tool_prompt}', '');
+  const prompt = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
+  prompt += '\n请分析以上用户当前问题的意图。';
+  return { systemPrompt, messages: [{ role: 'user', content: prompt }] };
+}
+
+export function buildPlanGenerationMessages(
+  userMessage: string,
+  parentChainMessages: Array<Record<string, unknown>>,
+  currentConversationMessages: Array<Record<string, unknown>>,
+  intentAnalysis?: Record<string, unknown>,
+): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
+  const systemPrompt = getPlanSystemPrompt();
+
+  let intentContext = '';
+  if (intentAnalysis) {
+    intentContext = `
+## 意图分析结果
+- 意图类型: ${String(intentAnalysis.intent_type || 'unknown')}
+- 需求摘要: ${String(intentAnalysis.summary || '')}
+- 关键点: ${(Array.isArray(intentAnalysis.key_points) ? intentAnalysis.key_points : []).join(', ')}
+- 建议工具: ${(Array.isArray(intentAnalysis.suggested_tools) ? intentAnalysis.suggested_tools : []).join(', ')}
+- 复杂度: ${String(intentAnalysis.complexity || 'medium')}
+`;
+  }
+
+  const taskContent = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
+  const fullPrompt = `${taskContent}${intentContext}请根据以上用户当前问题生成执行计划，包含 2-5 个任务，严格按照 JSON 格式输出。`;
+  return { systemPrompt, messages: [{ role: 'user', content: fullPrompt }] };
+}
+
+export function buildDirectorPlanMessages(userMessage: string): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
+  return {
+    systemPrompt: DIRECTOR_PLAN_SYSTEM_PROMPT,
+    messages: [{ role: 'user', content: `请为以下任务生成高层执行计划：\n\n${userMessage}` }],
+  };
+}
