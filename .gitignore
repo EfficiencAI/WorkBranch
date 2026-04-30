@@ -43,5 +43,6 @@ platforms/android/app/
 platforms/android/capacitor.config.ts
 platforms/android/package.json
 platforms/android/scripts/
+packages/backend/workspaces
 
 dev-tools/
