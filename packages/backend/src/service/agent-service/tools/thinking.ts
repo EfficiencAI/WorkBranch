@@ -43,7 +43,7 @@ async function executeThinking(args: Record<string, unknown>, _context: ToolExec
 const THINKING_TOOL: ToolDefinition = {
   name: 'thinking',
   description: '思考工具，用于分析问题、梳理思路',
-  params: 'thinking:{"task_description":"(思考任务描述，例如：分析xxx的实现方案)"}',
+  params: 'thinking:{"next_task":"(思考任务描述，例如：分析xxx的实现方案)"}',
   category: 'reasoning',
   executor: executeThinking,
 };

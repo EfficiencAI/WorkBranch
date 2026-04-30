@@ -353,14 +353,14 @@ export function registerExploreTools(): void {
     {
       name: 'explore_code',
       description: '探索代码库，搜索文件、代码内容或目录结构',
-      params: 'query, search_type(file/code/structure), file_pattern, max_results, path',
+      params: 'explore_code:{"query":"(查询内容)","search_type":"(file/code/structure，本参数可不填)","file_pattern":"(文件匹配模式，本参数可不填)","max_results":"(最多返回多少条，本参数可不填)"}',
       category: 'explore',
       executor: executeExploreCode,
     },
     {
       name: 'explore_internet',
       description: '搜索互联网获取信息，使用 DuckDuckGo 搜索引擎',
-      params: 'query, max_results',
+      params: 'explore_internet:{"query":"(搜索内容)","max_results":"(最多返回多少条，本参数可不填)"}',
       category: 'explore',
       executor: executeExploreInternet,
     },

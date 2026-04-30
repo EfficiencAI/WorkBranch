@@ -97,7 +97,7 @@ async function executeChat(args: Record<string, unknown>, context: ToolExecution
 const CHAT_TOOL: ToolDefinition = {
   name: 'chat',
   description: '与用户对话工具，用于向用户输出回复',
-  params: 'chat:{"task_description":"(回复任务描述，例如：向用户总结xxx并说明xxx)"}',
+  params: 'chat:{"next_task":"(回复任务描述，例如：向用户总结xxx并说明xxx)"}',
   category: 'communication',
   executor: executeChat,
 };
