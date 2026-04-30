@@ -402,6 +402,7 @@ export function createDecideNode(messageContext?: MessageContext) {
     }
 
     const allowedTools = getAllowedTools(currentAgentType);
+    const toolSchemaPrompt = toolRegistry.generateToolPrompt(allowedTools);
 
     const historyLines = toolHistory.slice(-5).map((item, idx) => {
       const resultText = String(item.result || '');
@@ -423,7 +424,7 @@ export function createDecideNode(messageContext?: MessageContext) {
       `当前工作区ID: ${state.workspace_id}`,
       `已执行轮次: ${iterationCount}/${maxIterations}`,
       '',
-      `工具列表: ${allowedTools.join(', ')}`,
+      toolSchemaPrompt,
       todoIntro,
       `最近工具结果:`,
       lastResultBlock,
