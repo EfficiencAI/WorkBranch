@@ -130,6 +130,8 @@ async function _executeChatToolDirect(
   parentChainMessages: Array<Record<string, unknown>>,
   currentConversationMessages: Array<Record<string, unknown>>,
 ): Promise<string> {
+  const CHAT_SYSTEM_PROMPT = '你是一个专业的软件工程师助手。当前需要向用户输出回复。\n\n你会收到：\n1. 当前任务描述\n2. 之前任务的执行结果（如果有）\n\n请直接向用户输出回复内容：\n- 语言简洁清晰\n- 直接回答用户问题\n- 不要输出思考过程，只输出最终回复\n- 使用友好、专业的语气';
+
   const fullPrompt = buildContextPrompt(
     parentChainMessages,
     currentConversationMessages,
@@ -145,7 +147,7 @@ async function _executeChatToolDirect(
 
   let result = '';
   try {
-    for await (const chunk of llmService.chatStream([{ role: 'user', content: fullPrompt }])) {
+    for await (const chunk of llmService.chatStream([{ role: 'user', content: fullPrompt }], CHAT_SYSTEM_PROMPT)) {
       result += chunk;
       if (messageContext?.send_message) {
         await messageContext.send_message(chunk, SegmentType.CHAT_DELTA, {
@@ -173,8 +175,16 @@ async function _executeChatToolDirect(
 async function _executeThinkingToolDirect(
   taskDescription: string,
   messageContext: MessageContext | undefined,
+  parentChainMessages: Array<Record<string, unknown>> = [],
+  currentConversationMessages: Array<Record<string, unknown>> = [],
 ): Promise<string> {
   const THINKING_SYSTEM_PROMPT = '你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。\n\n你会收到：\n1. 当前任务描述\n2. 之前任务的执行结果（如果有）\n\n请针对当前任务进行思考：\n1. 分析任务目标\n2. 结合之前的执行结果（如果有）\n3. 给出你的思考过程和结论\n\n请简洁清晰地回答，不要过于冗长。';
+
+  const fullPrompt = buildContextPrompt(
+    parentChainMessages,
+    currentConversationMessages,
+    taskDescription,
+  );
 
   if (messageContext?.send_message) {
     await messageContext.send_message('', SegmentType.THINKING_START, {
@@ -186,7 +196,7 @@ async function _executeThinkingToolDirect(
   let result = '';
   try {
     for await (const chunk of llmService.chatStream(
-      [{ role: 'user', content: taskDescription }],
+      [{ role: 'user', content: fullPrompt }],
       THINKING_SYSTEM_PROMPT,
     )) {
       result += chunk;
@@ -783,6 +793,8 @@ export function createExecuteNode(messageContext?: MessageContext) {
       const thinkingResult = await _executeThinkingToolDirect(
         taskDescription || state.current_user_message_text || '',
         messageContext,
+        (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
+        (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
       );
 
       const newToolHistory: ToolCall[] = [
@@ -823,16 +835,23 @@ export function createExecuteNode(messageContext?: MessageContext) {
       let subResult: string;
       let subError: string | null = null;
 
+      const SUBAGENT_TIMEOUT_MS = 45000;
+
       try {
-        const outcome = await runAgentGraph(
-          subAgentType,
-          subTaskDescription,
-          workspaceId,
-          messageContext,
-          (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
-          (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
-          'DIRECT',
-        );
+        const outcome = await Promise.race([
+          runAgentGraph(
+            subAgentType,
+            subTaskDescription,
+            workspaceId,
+            messageContext,
+            (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
+            (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
+            'DIRECT',
+          ),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`子代理 ${subAgentType} 执行超时（${SUBAGENT_TIMEOUT_MS / 1000}秒）`)), SUBAGENT_TIMEOUT_MS)
+          ),
+        ]);
 
         if (outcome.status === 'completed' && outcome.payload) {
           subResult = outcome.payload;

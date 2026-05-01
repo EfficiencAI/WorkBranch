@@ -1,3 +1,4 @@
+import { StateGraph, END } from '@langchain/langgraph';
 import { runDirectorGraph, type MessageContext as DirectorMessageContext } from './director-agent';
 import { SegmentType } from '../../session-service/canonical';
 import { runCompaction } from './subgraphs/compaction-graph';
@@ -177,6 +178,145 @@ function checkState(
   return 'done';
 }
 
+const OrchestratorStateChannels = {
+  messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  workspace_id: { value: (_a: unknown, b: unknown) => b, default: () => '' },
+  plan: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  current_step: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  results: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  plan_failed: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  tool_history: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  replan_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  agent_type: { value: (_a: unknown, b: unknown) => b, default: () => null },
+  parent_chain_messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  current_conversation_messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+};
+
+function createPlanNode(context: MessageContext, config: OrchestratorConfig) {
+  return async (state: OrchestratorState): Promise<Partial<OrchestratorState>> => {
+    const isReplan = state.plan_failed;
+    const replanCount = state.replan_count;
+
+    await context.send_message('', SegmentType.STATE_CHANGE, {
+      state: 'plan',
+      is_replan: isReplan,
+    });
+
+    const directorContext: DirectorMessageContext = {
+      send_message: context.send_message,
+      session_id: context.session_id,
+      conversation_id: context.conversation_id,
+      workspace_id: context.workspace_id,
+      message_id: context.message_id,
+    };
+
+    await runDirectorGraph(
+      String(state.messages[state.messages.length - 1]),
+      state.workspace_id,
+      directorContext,
+    );
+
+    const update: Partial<OrchestratorState> = {};
+
+    if (isReplan) {
+      update.tool_history = [];
+      update.plan_failed = false;
+      update.current_step = 0;
+      update.results = [];
+      update.replan_count = replanCount + 1;
+    }
+
+    persistence.save(state.workspace_id, { ...state, ...update });
+
+    return update;
+  };
+}
+
+function createBuildNode(context: MessageContext, config: OrchestratorConfig) {
+  return async (state: OrchestratorState): Promise<Partial<OrchestratorState>> => {
+    context.cancel_check?.();
+
+    await context.send_message('', SegmentType.STATE_CHANGE, {
+      state: 'build',
+      step: state.current_step + 1,
+      total: state.plan.length,
+    });
+
+    const directorContext: DirectorMessageContext = {
+      send_message: context.send_message,
+      session_id: context.session_id,
+      conversation_id: context.conversation_id,
+      workspace_id: context.workspace_id,
+      message_id: context.message_id,
+    };
+
+    await runDirectorGraph(
+      String(state.messages[state.messages.length - 1]),
+      state.workspace_id,
+      directorContext,
+    );
+
+    const update: Partial<OrchestratorState> = {
+      current_step: state.current_step + 1,
+    };
+
+    persistence.save(state.workspace_id, { ...state, ...update });
+
+    return update;
+  };
+}
+
+function createCompactionNode(config: OrchestratorConfig) {
+  return (state: OrchestratorState): Partial<OrchestratorState> => {
+    const compactionResult = runCompaction(state.messages, config.max_messages);
+
+    persistence.save(state.workspace_id, { ...state, messages: compactionResult.messages });
+
+    return {
+      messages: compactionResult.messages,
+    };
+  };
+}
+
+function createOrchestratorGraph(context: MessageContext, config: OrchestratorConfig) {
+  const graph = new StateGraph({
+    channels: OrchestratorStateChannels,
+  } as any);
+
+  graph.addNode('plan_flow', createPlanNode(context, config));
+  graph.addNode('build_flow', createBuildNode(context, config));
+  graph.addNode('compaction', createCompactionNode(config));
+
+  const routeCheckState = (state: OrchestratorState): 'plan' | 'build' | 'compaction' | 'done' => {
+    return checkState(state, config);
+  };
+
+  (graph as any).setConditionalEntryPoint(routeCheckState, {
+    plan: 'plan_flow',
+    build: 'build_flow',
+    compaction: 'compaction',
+    done: END,
+  });
+
+  (graph as any).addConditionalEdges('plan_flow', routeCheckState, {
+    plan: 'plan_flow',
+    build: 'build_flow',
+    compaction: 'compaction',
+    done: END,
+  });
+
+  (graph as any).addConditionalEdges('build_flow', routeCheckState, {
+    plan: 'plan_flow',
+    build: 'build_flow',
+    compaction: 'compaction',
+    done: END,
+  });
+
+  graph.addEdge('compaction', 'build_flow');
+
+  return graph.compile();
+}
+
 export async function runOrchestrator(
   userMessage: string,
   workspaceId: string,
@@ -220,78 +360,10 @@ export async function runOrchestrator(
       };
     }
 
-    let currentState = { ...initialState };
-    let maxIterations = 50;
+    const graph = createOrchestratorGraph(context, fullConfig);
+    const finalState = await graph.invoke(initialState, { recursionLimit: 50 });
 
-    while (maxIterations-- > 0) {
-      const nextStep = checkState(currentState, fullConfig);
-
-      if (nextStep === 'done') {
-        break;
-      }
-
-      if (nextStep === 'plan') {
-        await context.send_message('', SegmentType.STATE_CHANGE, {
-          state: 'plan',
-          is_replan: currentState.plan_failed,
-        });
-
-        const directorContext: DirectorMessageContext = {
-          send_message: context.send_message,
-          session_id: context.session_id,
-          conversation_id: context.conversation_id,
-          workspace_id: context.workspace_id,
-          message_id: context.message_id,
-        };
-
-        await runDirectorGraph(
-          String(currentState.messages[currentState.messages.length - 1]),
-          workspaceId,
-          directorContext,
-        );
-
-        if (currentState.plan_failed) {
-          currentState.tool_history = [];
-          currentState.plan_failed = false;
-          currentState.current_step = 0;
-          currentState.results = [];
-          currentState.replan_count++;
-        }
-
-        persistence.save(workspaceId, currentState);
-      } else if (nextStep === 'build') {
-        context.cancel_check?.();
-
-        await context.send_message('', SegmentType.STATE_CHANGE, {
-          state: 'build',
-          step: currentState.current_step + 1,
-          total: currentState.plan.length,
-        });
-
-        const directorContext: DirectorMessageContext = {
-          send_message: context.send_message,
-          session_id: context.session_id,
-          conversation_id: context.conversation_id,
-          workspace_id: context.workspace_id,
-          message_id: context.message_id,
-        };
-
-        await runDirectorGraph(
-          String(currentState.messages[currentState.messages.length - 1]),
-          workspaceId,
-          directorContext,
-        );
-
-        currentState.current_step++;
-        persistence.save(workspaceId, currentState);
-      } else if (nextStep === 'compaction') {
-        const compactionResult = runCompaction(currentState.messages, fullConfig.max_messages);
-        currentState.messages = compactionResult.messages;
-        persistence.save(workspaceId, currentState);
-      }
-    }
-
-    persistence.save(workspaceId, currentState);
+    persistence.save(workspaceId, finalState as Record<string, unknown>);
 
     logger.info({
       event: 'orchestrator.completed',
