@@ -1,12 +1,11 @@
+import { StateGraph, END } from '@langchain/langgraph';
 import type { AgentState, ToolCall } from '../state/agent-state';
 import type { MessageContext } from './director-agent/director-agent';
-import { runDirectorGraph } from './director-agent/director-agent';
+import { createOrchestratorGraphV3, getLastUserMessageText } from './director-agent/director-agent';
+import { runToolExecution } from './subgraphs/tool-execution-graph';
 import { SegmentType } from '../../session-service/canonical';
-import { llmService } from '../service/llm-service';
 import { persistence } from './orchestrator-v2';
 import { logger } from '../../../core/logging';
-
-const SUBAGENT_TIMEOUT_MS = 45000;
 
 export interface AgentOutcome {
   kind: 'graph';
@@ -90,56 +89,143 @@ function buildDefaultTools(agentType: string, userMessage: string): ToolCall[] {
   return [];
 }
 
-const EXPLORE_AGENT_PROMPT = '你是一个专业的代码探索代理。你的任务是帮助用户探索和分析代码库或搜索互联网信息。\n\n请根据任务描述，给出清晰的分析结果。';
+const AgentStateChannels = {
+  messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  current_user_message_text: { value: (_a: unknown, b: unknown) => b, default: () => '' },
+  current_user_message_parts: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  workspace_id: { value: (_a: unknown, b: unknown) => b, default: () => '' },
+  plan: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  current_step: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  results: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  plan_failed: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  explore_result: { value: (_a: unknown, b: unknown) => b, default: () => null },
+  tool_history: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
+  replan_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  agent_type: { value: (_a: unknown, b: unknown) => b, default: () => '' },
+  is_root_graph: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  parent_chain_messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  current_conversation_messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  execution_mode: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  mode_reason: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  suggested_tools: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  suggested_subagent: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  in_plan_mode: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  active_subagent: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  pending_tools: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  has_tool_use: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  final_reply: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  plan_file: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  plan_content: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  forced_execution_mode: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  last_tool_result: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  last_tool_name: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  last_tool_success: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  last_tool_error: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  iteration_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  max_iterations: { value: (_a: unknown, b: unknown) => b, default: () => 32 },
+  todos: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  current_todo_index: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  current_todo_goal: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  current_todo_done_when: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  current_todo_iteration_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  todo_max_iterations: { value: (_a: unknown, b: unknown) => b, default: () => 32 },
+  todo_status: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  next_action: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  invalid_tool_retry_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
+  intent_analysis: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+};
 
-const REVIEW_AGENT_PROMPT = '你是一个专业的代码审查代理。你的任务是审查代码质量、发现潜在问题并提供改进建议。\n\n审查要点：\n1. 代码质量和可读性\n2. 潜在的 bug 和错误\n3. 性能问题\n4. 安全隐患\n5. 最佳实践建议\n\n请根据任务描述，仔细审查并给出专业的审查意见。';
-
-async function runChildAgentLoop(
+function createChildAgentGraph(
   agentType: string,
-  userMessage: string,
   messageContext?: MessageContext,
-): Promise<string> {
-  const systemPrompt = agentType === 'explore_agent' ? EXPLORE_AGENT_PROMPT : REVIEW_AGENT_PROMPT;
+) {
+  const graph = new StateGraph({
+    channels: AgentStateChannels,
+  } as any);
 
-  if (messageContext?.send_message) {
-    await messageContext.send_message('', SegmentType.TEXT_START, {
-      agent_type: agentType,
-      is_start: true,
-    });
-  }
-
-  let result = '';
-  try {
-    for await (const chunk of llmService.chatStream(
-      [{ role: 'user', content: userMessage }],
-      systemPrompt,
-    )) {
-      result += chunk;
-      if (messageContext?.send_message) {
-        await messageContext.send_message(chunk, SegmentType.TEXT_DELTA, {
-          agent_type: agentType,
-          is_delta: true,
-        });
-      }
+  async function executeChildNode(state: AgentState): Promise<Partial<AgentState>> {
+    const pendingTools = state.pending_tools || [];
+    if (!pendingTools || pendingTools.length === 0) {
+      return {
+        final_reply: state.final_reply,
+        has_tool_use: false,
+        pending_tools: [],
+      };
     }
-  } catch (err) {
-    logger.error({
-      event: 'child_agent.stream_failed',
-      agent_type: agentType,
-      error: String(err),
+
+    const toolEntry = pendingTools[0];
+    const toolName = toolEntry.tool;
+    const toolArgs = toolEntry.args || {};
+
+    const toolResult = await runToolExecution({
+      toolName,
+      toolArgs,
+      workspaceId: state.workspace_id,
+      previousCalls: state.tool_history || [],
+      taskDescription: (toolArgs.description as string) || '',
+      previousResults: (state.tool_history || [])
+        .filter((item: ToolCall) => item.result !== undefined)
+        .map((item: ToolCall) => String(item.result || '')),
+      agentType,
+      messageContext: messageContext as unknown as Record<string, unknown>,
     });
-    result = String(err);
+
+    const resultStr = toolResult.result !== null && toolResult.result !== undefined
+      ? String(toolResult.result)
+      : '';
+
+    const newHistory: ToolCall[] = [
+      ...(state.tool_history || []),
+      { tool: toolName, args: toolArgs, result: toolResult.result as string },
+    ];
+
+    if (toolName === 'thinking') {
+      let remaining = pendingTools.slice(1);
+      if (!remaining || remaining.length === 0) {
+        remaining = [{ tool: 'chat', args: { description: getLastUserMessageText(state) } }];
+      }
+      return {
+        tool_history: newHistory,
+        pending_tools: remaining,
+        has_tool_use: remaining.length > 0,
+      };
+    }
+
+    if (toolName === 'chat') {
+      return {
+        tool_history: newHistory,
+        pending_tools: [],
+        has_tool_use: false,
+        final_reply: resultStr,
+      };
+    }
+
+    const remaining = pendingTools.slice(1);
+    return {
+      tool_history: newHistory,
+      pending_tools: remaining,
+      has_tool_use: remaining.length > 0,
+      final_reply: resultStr || state.final_reply,
+    };
   }
 
-  if (messageContext?.send_message) {
-    await messageContext.send_message('', SegmentType.TEXT_END, {
-      agent_type: agentType,
-      is_end: true,
-      result,
-    });
+  function routeChild(state: AgentState): 'execute' | typeof END {
+    if (state.final_reply) return END;
+    if (state.pending_tools && state.pending_tools.length > 0) return 'execute';
+    return END;
   }
 
-  return result;
+  graph.addNode('execute', executeChildNode as any);
+  (graph as any).setConditionalEntryPoint(routeChild as any, {
+    execute: 'execute',
+    [END]: END,
+  });
+  (graph as any).addConditionalEdges('execute', routeChild as any, {
+    execute: 'execute',
+    [END]: END,
+  });
+
+  return graph.compile();
 }
 
 function buildInitialChildState(
@@ -152,6 +238,7 @@ function buildInitialChildState(
   return {
     messages: [{ role: 'user', content: userMessage }],
     current_user_message_text: userMessage,
+    current_user_message_parts: [],
     workspace_id: workspaceId,
     plan: [],
     current_step: 0,
@@ -176,6 +263,17 @@ function buildInitialChildState(
   };
 }
 
+function createAgentGraph(
+  agentType: string,
+  messageContext?: MessageContext,
+) {
+  if (agentType === 'explore_agent' || agentType === 'review_agent') {
+    return createChildAgentGraph(agentType, messageContext);
+  }
+
+  return createOrchestratorGraphV3(messageContext);
+}
+
 export async function runAgentGraph(
   agentType: string,
   userMessage: string,
@@ -195,69 +293,50 @@ export async function runAgentGraph(
 
   try {
     const config = AGENT_GRAPH_CONFIG[agentType] || AGENT_GRAPH_CONFIG['director_agent'];
-    let finalState: AgentState;
 
-    if (agentType === 'explore_agent' || agentType === 'review_agent') {
-      let initialState: AgentState;
+    let savedState: AgentState | null = null;
+    if (persistState) {
+      savedState = persistence.load(workspaceId) as AgentState | null;
+    }
 
-      if (persistState) {
-        const savedState = persistence.load(workspaceId) as AgentState | null;
-        if (savedState) {
-          initialState = {
-            ...savedState,
-            messages: [...(savedState.messages || []), { role: 'user', content: userMessage }],
-            current_user_message_text: userMessage,
-          };
-        } else {
-          initialState = buildInitialChildState(userMessage, workspaceId, agentType, parentChainMessages, currentConversationMessages);
-        }
-      } else {
-        initialState = buildInitialChildState(userMessage, workspaceId, agentType, parentChainMessages, currentConversationMessages);
-      }
+    let initialState: AgentState;
 
-      if (config.execution_mode) {
-        initialState.execution_mode = config.execution_mode as 'DIRECT' | 'PLAN';
-        initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
-        if (!initialState.pending_tools?.length) {
-          initialState.pending_tools = buildDefaultTools(agentType, userMessage);
-          initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
-        }
-      }
-
-      const executeWithTimeout = async (): Promise<string> => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), SUBAGENT_TIMEOUT_MS);
-
-        try {
-          const result = await runChildAgentLoop(agentType, userMessage, messageContext);
-          return result;
-        } finally {
-          clearTimeout(timeoutId);
-        }
+    if (savedState) {
+      initialState = {
+        ...savedState,
+        messages: [...(savedState.messages || []), { role: 'user', content: userMessage }],
+        current_user_message_text: userMessage,
       };
-
-      const result = await executeWithTimeout();
-      initialState.final_reply = result;
-
-      if (persistState) {
-        persistence.save(workspaceId, initialState as unknown as Record<string, unknown>);
-      }
-
-      finalState = initialState;
     } else {
-      finalState = await runDirectorGraph(
+      initialState = buildInitialChildState(
         userMessage,
         workspaceId,
-        messageContext,
+        agentType,
         parentChainMessages,
         currentConversationMessages,
-        agentType,
-        forcedExecutionMode,
       );
+    }
 
-      if (persistState) {
-        persistence.save(workspaceId, finalState as unknown as Record<string, unknown>);
+    initialState.agent_type = agentType;
+
+    if (config.execution_mode) {
+      initialState.execution_mode = config.execution_mode as 'DIRECT' | 'PLAN';
+      initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
+      if (!initialState.pending_tools || initialState.pending_tools.length === 0) {
+        initialState.pending_tools = buildDefaultTools(agentType, getLastUserMessageText(initialState));
+        initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
       }
+    }
+
+    if (forcedExecutionMode) {
+      initialState.forced_execution_mode = forcedExecutionMode;
+    }
+
+    const graph = createAgentGraph(agentType, messageContext);
+    const finalState = await graph.invoke(initialState as Record<string, unknown>) as AgentState;
+
+    if (persistState) {
+      persistence.save(workspaceId, finalState as unknown as Record<string, unknown>);
     }
 
     const outcome = buildAgentOutcome(agentType, finalState);

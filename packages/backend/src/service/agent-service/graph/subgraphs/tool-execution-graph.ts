@@ -2,11 +2,12 @@ import { StateGraph, END } from '@langchain/langgraph';
 import { toolExecutor, checkPermission, type ToolExecutionContext } from '../../tools/executors';
 import type { ToolCall } from '../../state/agent-state';
 import type { ToolExecutionState } from '../../state/subgraph-states';
-import { isSpecialTool, writeToolEvent } from './tool-registry';
+import { isSpecialTool, writeToolEvent, FILE_TOOLS as REGISTRY_FILE_TOOLS, EXPLORE_TOOLS, WORKSPACE_TOOLS } from './tool-registry';
 import { SegmentType } from '../../../session-service/canonical';
 import { logger } from '../../../../core/logging';
+import { workspaceService } from '../../service/workspace-service';
 
-const FILE_TOOLS = new Set(['read_file', 'write_file', 'delete_file', 'list_dir', 'create_dir']);
+const FILE_TOOLS = new Set(['read_file', 'write_file', 'delete_file', 'list_dir', 'create_dir', 'read_document']);
 
 const TOOL_EXECUTION_TIMEOUT_MS = 30000;
 const SPECIAL_TOOL_TIMEOUT_MS = 120000;
@@ -83,7 +84,12 @@ function checkPermissionNode(state: ToolExecutionState): Partial<ToolExecutionSt
 }
 
 function routeByPermission(state: ToolExecutionState): 'execute' | 'ask_user' | 'deny' {
-  return state.permission as 'execute' | 'ask_user' | 'deny';
+  const perm = state.permission;
+  if (perm === 'allow') return 'execute';
+  if (perm === 'ask') return 'ask_user';
+  if (perm === 'deny') return 'deny';
+  logger.error({ event: 'tool_execution.unknown_permission', permission: perm });
+  return 'deny';
 }
 
 function askUserNode(_state: ToolExecutionState): Partial<ToolExecutionState> {
@@ -140,6 +146,49 @@ function createExecuteNode(messageContext?: Record<string, unknown>) {
     if ('file_content' in toolArgs && !('content' in toolArgs)) {
       toolArgs['content'] = toolArgs['file_content'];
       delete toolArgs['file_content'];
+    }
+
+    if (FILE_TOOLS.has(toolName)) {
+      const pathKey = 'path' in toolArgs ? 'path' : 'file_path';
+      const targetPath = toolArgs[pathKey] as string | undefined || toolArgs['directory'] as string | undefined;
+
+      if (targetPath) {
+        const resolved = workspaceService.resolvePath(workspaceId, targetPath);
+        if (resolved.valid && resolved.path) {
+          if (pathKey in toolArgs) {
+            toolArgs['path'] = resolved.path;
+          } else if ('file_path' in toolArgs) {
+            toolArgs['file_path'] = resolved.path;
+          } else if ('directory' in toolArgs) {
+            toolArgs['directory'] = resolved.path;
+          }
+          logger.info({ event: 'tool_execution.path_resolved', tool_name: toolName, resolved_path: resolved.path });
+        } else {
+          logger.error({ event: 'tool_execution.path_resolve_failed', tool_name: toolName, error: resolved.error });
+          return {
+            result: null,
+            error: resolved.error || '路径解析失败',
+          } as Partial<ToolExecutionState>;
+        }
+      } else if (toolName === 'list_dir' || toolName === 'create_dir') {
+        const workspaceRoot = workspaceService.getWorkspaceDir(workspaceId);
+        if (!workspaceRoot) {
+          return {
+            result: null,
+            error: `工作区不存在: ${workspaceId}`,
+          } as Partial<ToolExecutionState>;
+        }
+        toolArgs['directory'] = workspaceRoot;
+        logger.info({ event: 'tool_execution.default_workspace_root', tool_name: toolName, workspace_root: workspaceRoot });
+      }
+    }
+
+    if (EXPLORE_TOOLS.has(toolName)) {
+      const workspaceRoot = workspaceService.getWorkspaceDir(workspaceId);
+      if (workspaceRoot) {
+        toolArgs['workspace_root'] = workspaceRoot;
+        logger.info({ event: 'tool_execution.explore_workspace_root', tool_name: toolName, workspace_root: workspaceRoot });
+      }
     }
 
     const context: ToolExecutionContext = {

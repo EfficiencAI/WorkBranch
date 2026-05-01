@@ -176,6 +176,14 @@ export class ToolExecutor {
     const taskDescription = args.task_description as string || args.description as string || '';
 
     try {
+      if (sendMessage && !isSpecialTool(toolName)) {
+        await sendMessage('', SegmentType.TOOL_CALL, {
+          tool_name: toolName,
+          tool_args: args,
+          task_description: taskDescription,
+        });
+      }
+
       if (PLAN_MODE_TOOLS.has(toolName)) {
         return await this.executePlanModeTool(toolName, args, context);
       }
@@ -190,14 +198,6 @@ export class ToolExecutor {
 
       if (MODE_SWITCH_TOOLS.has(toolName)) {
         return this.executeModeSwitchTool(toolName, args);
-      }
-
-      if (sendMessage && !isSpecialTool(toolName)) {
-        await sendMessage('', SegmentType.TOOL_CALL, {
-          tool_name: toolName,
-          tool_args: args,
-          task_description: taskDescription,
-        });
       }
 
       writeToolEvent(conversationId, toolName, 'started', { taskDescription });
@@ -303,7 +303,7 @@ export class ToolExecutor {
     }
   }
 
-  private resolveToolArgs(_toolName: string, args: Record<string, unknown>, context: ToolExecutionContext): Record<string, unknown> {
+  private resolveToolArgs(_toolName: string, args: Record<string, unknown>, _context: ToolExecutionContext): Record<string, unknown> {
     const resolved = { ...args };
 
     if ('file_name' in resolved && !('file_path' in resolved) && !('path' in resolved)) {
@@ -313,22 +313,6 @@ export class ToolExecutor {
     if ('file_content' in resolved && !('content' in resolved)) {
       resolved['content'] = resolved['file_content'];
       delete resolved['file_content'];
-    }
-
-    const pathKey = 'path' in resolved ? 'path' : 'file_path';
-    const targetPath = resolved[pathKey] as string | undefined || resolved['directory'] as string | undefined;
-
-    if (targetPath && typeof targetPath === 'string') {
-      const pathResult = resolveWorkspacePath(context.workspace_id, targetPath);
-      if (pathResult.valid && pathResult.path) {
-        if (pathKey in resolved) {
-          resolved['path'] = pathResult.path;
-        } else if ('file_path' in resolved) {
-          resolved['file_path'] = pathResult.path;
-        } else if ('directory' in resolved) {
-          resolved['directory'] = pathResult.path;
-        }
-      }
     }
 
     return resolved;

@@ -1,3 +1,4 @@
+import { StateGraph, END } from '@langchain/langgraph';
 import type { CompactionState } from '../../state/subgraph-states';
 import { logger } from '../../../../core/logging';
 
@@ -105,6 +106,35 @@ export function skipCompaction(_state: CompactionState): Partial<CompactionState
   return { compressed: true };
 }
 
+const CompactionStateChannels = {
+  messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
+  max_messages: { value: (_a: unknown, b: unknown) => b, default: () => 10 },
+  compressed: { value: (_a: unknown, b: unknown) => b, default: () => false },
+  summary: { value: (_a: unknown, b: unknown) => b, default: () => '' },
+};
+
+export function createCompactionSubgraph() {
+  const graph = new StateGraph({
+    channels: CompactionStateChannels,
+  } as any);
+
+  graph.addNode('check', checkCompaction as any);
+  graph.addNode('compress', doCompaction as any);
+  graph.addNode('skip', skipCompaction as any);
+
+  (graph as any).setEntryPoint('check');
+
+  (graph as any).addConditionalEdges('check', routeByCompaction as any, {
+    compress: 'compress',
+    skip: 'skip',
+  });
+
+  graph.addEdge('compress', END);
+  graph.addEdge('skip', END);
+
+  return graph.compile();
+}
+
 export function runCompaction(
   messages: unknown[],
   maxMessages: number = 10,
@@ -118,21 +148,12 @@ export function runCompaction(
     summary: '',
   };
 
-  const checkResult = checkCompaction(initialState);
-
-  if (checkResult.compressed) {
-    return {
-      messages: initialState.messages,
-      compressed: true,
-      summary: '',
-    };
-  }
-
-  const compactionResult = doCompaction({ ...initialState, ...checkResult });
+  const graph = createCompactionSubgraph();
+  const result = graph.invoke(initialState as Record<string, unknown>) as CompactionState;
 
   return {
-    messages: compactionResult.messages || initialState.messages,
-    compressed: compactionResult.compressed ?? true,
-    summary: compactionResult.summary || '',
+    messages: result.messages,
+    compressed: result.compressed,
+    summary: result.summary || '',
   };
 }

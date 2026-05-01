@@ -1,5 +1,5 @@
 import { BaseSubAgent, type AgentContext, type SubAgentResult, type TokenCallback } from './base';
-import { llmService } from '../service/llm-service';
+import { runAgentGraph } from '../graph/agent-graphs';
 import { SegmentType } from '../../session-service/canonical';
 import { logger } from '../../../core/logging';
 
@@ -38,29 +38,38 @@ export class ReviewAgent extends BaseSubAgent {
     });
 
     try {
-      const messages = [{ role: 'user', content: taskDescription }];
-      let result = '';
-      let textStarted = false;
+      const messageContext = {
+        send_message: async (content: string, type: SegmentType, metadata?: Record<string, unknown>) => {
+          this.tokenCallback(content, type);
+        },
+        conversation_id: context?.conversation_id,
+        workspace_id: context?.workspace_id,
+      };
 
-      for await (const chunk of llmService.chatStream(messages, this.systemPrompt)) {
-        if (!textStarted) {
-          this.tokenCallback('', SegmentType.TEXT_START);
-          textStarted = true;
-        }
-        result += chunk;
-        this.tokenCallback(chunk, SegmentType.TEXT_DELTA);
+      const outcome = await runAgentGraph(
+        'review_agent',
+        taskDescription,
+        context?.workspace_id || '',
+        messageContext as any,
+        [],
+        [],
+        'DIRECT',
+      );
+
+      if (outcome.status === 'completed' && outcome.payload) {
+        logger.info({
+          event: 'review_agent.execute.completed',
+          result_length: outcome.payload.length,
+        });
+        return { result: outcome.payload, error: null };
       }
 
-      if (textStarted) {
-        this.tokenCallback('', SegmentType.TEXT_END);
-      }
-
-      logger.info({
-        event: 'review_agent.execute.completed',
-        result_length: result.length,
+      const errorMsg = outcome.exit_info.message || 'review_agent 执行失败';
+      logger.error({
+        event: 'review_agent.execute.failed',
+        error: errorMsg,
       });
-
-      return { result, error: null };
+      return { result: null, error: errorMsg };
     } catch (err) {
       logger.error({
         event: 'review_agent.execute.failed',

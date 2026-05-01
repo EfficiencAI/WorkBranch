@@ -1,7 +1,6 @@
 import { StateGraph, END, START } from '@langchain/langgraph';
 import type { AgentState, NextAction, ToolCall, TodoItem, IntentAnalysis } from '../../state/agent-state';
 import { ExecutionMode } from '../decision/complexity-analyzer';
-import { checkLoopOrStuck, shouldCheckLoop } from './loop-detection';
 import { runToolExecution } from '../subgraphs/tool-execution-graph';
 import { llmService } from '../../service/llm-service';
 import { planFileService } from '../../service/plan-file-service';
@@ -9,6 +8,11 @@ import { runAgentGraph } from '../agent-graphs';
 import { SegmentType } from '../../../session-service/canonical';
 import { logger } from '../../../../core/logging';
 import { toolRegistry } from '../../tools/registry';
+import { isToolAllowed, getAllowedTools } from '../subgraphs/tool-registry';
+import { buildContextPrompt, formatTodoPromptBlock, DIRECT_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, THINK_SYSTEM_PROMPT, buildDirectorPlanMessages, buildChatSystemPrompt } from '../../prompts/graph-prompts';
+import { workspaceService } from '../../service/workspace-service';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export interface MessageContext {
   send_message?: (content: string, type: SegmentType, metadata?: Record<string, unknown>) => Promise<void>;
@@ -20,24 +24,8 @@ export interface MessageContext {
   settings_service?: Record<string, unknown>;
 }
 
-const DEFAULT_ALLOWED_TOOLS: Record<string, string[]> = {
-  director_agent: [
-    'read_file', 'write_file', 'delete_file', 'list_dir', 'create_dir',
-    'explore_code', 'explore_internet', 'thinking', 'chat',
-    'call_explore_agent', 'call_review_agent',
-    'list_workspace_files', 'get_workspace_info', 'search_files',
-    'update_todo', 'switch_execution_mode',
-  ],
-  plan_agent: [
-    'read_file', 'write_file', 'list_dir', 'explore_code', 'thinking', 'chat',
-    'call_explore_agent', 'call_review_agent', 'switch_execution_mode',
-  ],
-  review_agent: ['read_file', 'list_dir', 'explore_code', 'thinking', 'chat'],
-  explore_agent: [
-    'read_file', 'list_dir', 'thinking', 'chat', 'explore_internet',
-    'list_workspace_files', 'get_workspace_info', 'search_files',
-  ],
-};
+const MAX_DIRECT_ITERATIONS = 32;
+const CHECK_INTERVAL = 8;
 
 function modeName(value: unknown): string | null {
   if (value === null || value === undefined) return null;
@@ -47,7 +35,7 @@ function modeName(value: unknown): string | null {
   return String(value).split('.').pop()?.toUpperCase() ?? null;
 }
 
-function getLastUserMessageText(state: AgentState): string {
+export function getLastUserMessageText(state: AgentState): string {
   const messages = state.messages || [];
   if (messages.length === 0) return '';
   const last = messages[messages.length - 1];
@@ -59,62 +47,15 @@ function getLastUserMessageText(state: AgentState): string {
   return '';
 }
 
-function getAllowedTools(agentType: string): string[] {
-  return DEFAULT_ALLOWED_TOOLS[agentType] || DEFAULT_ALLOWED_TOOLS['director_agent'];
+function stripCodeBlock(text: string): string {
+  let result = text.trim();
+  if (result.startsWith('```json')) result = result.slice(7);
+  else if (result.startsWith('```')) result = result.slice(3);
+  if (result.endsWith('```')) result = result.slice(0, -3);
+  return result.trim();
 }
 
-function isToolAllowed(toolName: string, agentType: string): boolean {
-  return getAllowedTools(agentType).includes(toolName);
-}
-
-function buildContextPrompt(
-  parentChainMessages: Array<Record<string, unknown>>,
-  currentConversationMessages: Array<Record<string, unknown>>,
-  currentTask: string,
-): string {
-  const parts: string[] = [];
-
-  if (parentChainMessages.length > 0) {
-    parts.push('[历史对话]');
-    for (const msg of parentChainMessages) {
-      const role = (msg.role as string) || 'user';
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      parts.push(`${role}: ${content}`);
-    }
-    parts.push('');
-  }
-
-  if (currentConversationMessages.length > 0) {
-    parts.push('[当前对话内历史]');
-    for (const msg of currentConversationMessages) {
-      const role = (msg.role as string) || 'user';
-      const content = typeof msg.content === 'string' ? msg.content : JSON.stringify(msg.content);
-      parts.push(`${role}: ${content}`);
-    }
-    parts.push('');
-  }
-
-  parts.push('[当前任务]');
-  parts.push(currentTask);
-
-  return parts.join('\n');
-}
-
-function formatTodoPromptBlock(todos: TodoItem[], currentTodoIndex: number): string {
-  if (!todos || todos.length === 0) return '';
-
-  const lines = ['当前 TODO 列表（完整状态）:'];
-  for (let idx = 0; idx < todos.length; idx++) {
-    const todo = todos[idx];
-    const marker = idx === currentTodoIndex ? ' <= 当前执行项' : '';
-    lines.push(`- [${idx}] [${todo.status}] ${todo.description}${marker}`);
-  }
-  lines.push(`doingIdx=${currentTodoIndex}`);
-  lines.push('如果任务明显是多步骤、阶段化，或执行中发现当前任务过大/过难，应使用 update_todo 一次性写入或重写完整 todo 列表；如果任务本身是单步骤且简单，则不要使用 todo 工具。');
-  return lines.join('\n');
-}
-
-function emitFinalReply(reply: string, messageContext?: MessageContext): void {
+function _emitFinalReply(reply: string, messageContext?: MessageContext): void {
   if (!messageContext?.send_message) return;
   const send = messageContext.send_message;
   send('', SegmentType.CHAT_START, { task_description: '输出最终回复', is_start: true });
@@ -124,18 +65,252 @@ function emitFinalReply(reply: string, messageContext?: MessageContext): void {
   send('', SegmentType.CHAT_END, { task_description: '输出最终回复', is_end: true, result: reply });
 }
 
+function _buildLoopCheckPrompt(
+  toolHistory: ToolCall[],
+  iterationCount: number,
+  userMessage: string = '',
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  todos?: TodoItem[],
+): string {
+  const recentHistory = toolHistory.slice(-CHECK_INTERVAL);
+
+  const historyLines = recentHistory.map((item, idx) => {
+    const toolName = item.tool || 'unknown';
+    const argsStr = JSON.stringify(item.args || {}).slice(0, 100);
+    const resultPreview = String(item.result || '').slice(0, 200);
+    return `第${idx + 1}轮: 工具=${toolName}, 参数=${argsStr}, 结果摘要=${resultPreview}...`;
+  });
+  const historyBlock = historyLines.join('\n') || '(暂无工具调用历史)';
+
+  const userMessageBlock = userMessage
+    ? `\n## 用户原始请求\n${userMessage.slice(0, 500)}`
+    : '';
+
+  const conversationBlock =
+    conversationHistory.length > 0
+      ? `\n## 对话历史\n${conversationHistory
+          .slice(-6)
+          .map((msg) => `[${msg.role}]: ${msg.content.slice(0, 300)}`)
+          .join('\n')}`
+      : '';
+
+  const todosBlock =
+    todos && todos.length > 0
+      ? `\n## 待办事项\n${todos
+          .slice(0, 10)
+          .map((todo, idx) => `${idx + 1}. [${todo.status}] ${todo.description.slice(0, 100)}`)
+          .join('\n')}`
+      : '';
+
+  return `你是一个任务执行监控器。请分析以下信息，判断任务执行是否存在循环或卡死情况。
+${userMessageBlock}${conversationBlock}${todosBlock}
+## 最近${recentHistory.length}轮工具调用历史
+${historyBlock}
+
+## 当前状态
+- 已执行轮次: ${iterationCount}
+
+## 判断标准
+1. **循环**: 连续多次调用相同工具，使用相同或非常相似的参数，且结果没有实质进展
+2. **卡死**: 工具调用失败后反复重试，或在一个无效状态中无法跳出
+3. **正常**: 工具调用有变化，或正在逐步推进任务，或者正在处理复杂任务需要更多步骤
+
+## 重要提示
+- 如果工具调用正在推进任务（例如：创建目录后创建文件，读取文件后修改内容），应判断为"正常"
+- 如果用户请求是复杂任务（如创建项目、多文件修改），可能需要较多工具调用，应判断为"正常"
+- 只有在明确看到重复调用相同工具且无进展时，才判断为"循环"
+
+## 输出要求
+请以JSON格式返回判断结果：
+- 如果判断为循环或卡死，返回: {"action": "stop", "reason": "具体原因"}
+- 如果判断为正常，返回: {"action": "continue", "reason": "简要说明"}
+
+只返回JSON，不要其他内容。`;
+}
+
+function detectLoopPattern(toolHistory: ToolCall[]): { detected: boolean; pattern?: string } {
+  if (toolHistory.length < 3) {
+    return { detected: false };
+  }
+
+  const recentCalls = toolHistory.slice(-6);
+  const toolNames = recentCalls.map((call) => call.tool);
+  const argsStrings = recentCalls.map((call) => JSON.stringify(call.args));
+  const uniqueTools = new Set(toolNames);
+  const uniqueArgs = new Set(argsStrings);
+
+  if (uniqueArgs.size === 1 && argsStrings.length >= 3) {
+    return { detected: true, pattern: 'same_args_repeated' };
+  }
+
+  if (uniqueTools.size === 1 && toolNames.length >= 3) {
+    return { detected: true, pattern: 'same_tool_repeated' };
+  }
+
+  if (uniqueTools.size === 2 && toolNames.length >= 4) {
+    let isAlternating = true;
+    for (let i = 0; i < toolNames.length - 1; i++) {
+      if (toolNames[i] === toolNames[i + 1]) {
+        isAlternating = false;
+        break;
+      }
+    }
+
+    if (isAlternating) {
+      const toolCounts: Record<string, number> = {};
+      for (const tool of toolNames) {
+        toolCounts[tool] = (toolCounts[tool] || 0) + 1;
+      }
+      const counts = Object.values(toolCounts);
+      if (counts.every((c) => c >= 2)) {
+        return { detected: true, pattern: 'alternating_loop' };
+      }
+    }
+  }
+
+  return { detected: false };
+}
+
+function shouldCheckLoop(iterationCount: number): boolean {
+  return iterationCount > 0 && iterationCount % CHECK_INTERVAL === 0;
+}
+
+async function _checkLoopOrStuck(
+  toolHistory: ToolCall[],
+  iterationCount: number,
+  userMessage: string = '',
+  conversationHistory: Array<{ role: string; content: string }> = [],
+  todos?: TodoItem[],
+): Promise<{ action: string; reason: string }> {
+  const patternResult = detectLoopPattern(toolHistory);
+  if (patternResult.detected) {
+    logger.warn({
+      event: 'loop_detection.pattern_detected',
+      pattern: patternResult.pattern,
+      iteration_count: iterationCount,
+    });
+    return {
+      action: 'stop',
+      reason: `检测到循环模式: ${patternResult.pattern}`,
+    };
+  }
+
+  if (!shouldCheckLoop(iterationCount)) {
+    return { action: 'continue', reason: '未到检查间隔' };
+  }
+
+  try {
+    const prompt = _buildLoopCheckPrompt(toolHistory, iterationCount, userMessage, conversationHistory, todos);
+    const response = await llmService.chat([{ role: 'user', content: prompt }]);
+
+    let responseText = response.trim();
+    if (responseText.startsWith('```json')) {
+      responseText = responseText.slice(7);
+    }
+    if (responseText.startsWith('```')) {
+      responseText = responseText.slice(3);
+    }
+    if (responseText.endsWith('```')) {
+      responseText = responseText.slice(0, -3);
+    }
+    responseText = responseText.trim();
+
+    const result = JSON.parse(responseText);
+
+    if (result.action === 'stop') {
+      logger.warn({
+        event: 'loop_detection.llm_detected',
+        reason: result.reason,
+        iteration_count: iterationCount,
+      });
+      return {
+        action: 'stop',
+        reason: result.reason || 'LLM 判断存在循环',
+      };
+    }
+
+    return {
+      action: 'continue',
+      reason: result.reason || 'LLM 判断正常',
+    };
+  } catch (err) {
+    logger.warn({
+      event: 'loop_detection.llm_check_failed',
+      error: String(err),
+    });
+    return { action: 'continue', reason: `检查失败: ${String(err)}` };
+  }
+}
+
+function _loadPlanContentForState(state: AgentState): { planContent: string | undefined; planFile: string | undefined } {
+  const existingContent = state.plan_content;
+  const existingPlanFile = state.plan_file;
+  if (existingContent) {
+    return { planContent: existingContent, planFile: existingPlanFile };
+  }
+
+  const workspaceId = state.workspace_id;
+  const planReadResult = planFileService.readPlan(workspaceId);
+  if (!planReadResult.success) {
+    return { planContent: undefined, planFile: existingPlanFile };
+  }
+
+  return { planContent: planReadResult.content, planFile: planReadResult.planFile };
+}
+
+function hasImageParts(parts: unknown[]): boolean {
+  if (!parts || !Array.isArray(parts)) return false;
+  return parts.some((p: any) => {
+    if (!p || typeof p !== 'object') return false;
+    const type = (p as Record<string, unknown>).type;
+    return type === 'image' || type === 'image_url';
+  });
+}
+
+function shouldUseNativeMultimodalChat(state: AgentState): boolean {
+  const currentAgentType = state.agent_type || 'director_agent';
+  if (currentAgentType !== 'director_agent') return false;
+  const userMessageParts = state.current_user_message_parts || [];
+  return hasImageParts(userMessageParts as unknown[]);
+}
+
+function buildNativeMultimodalChatTask(state: AgentState): Partial<AgentState> {
+  const userMessage = state.current_user_message_text || getLastUserMessageText(state);
+  const userMessageParts = state.current_user_message_parts || [];
+  const chatTask = userMessage || '请直接分析这张图片并回答用户。';
+  const toolArgs: Record<string, unknown> = {
+    description: chatTask,
+    multimodal_parts: userMessageParts,
+  };
+
+  return {
+    pending_tools: [{ tool: 'chat', args: toolArgs }],
+    has_tool_use: true,
+    next_action: {
+      kind: 'tool',
+      tool_name: 'chat',
+      tool_args: toolArgs,
+      task_description: chatTask,
+    } as NextAction,
+    mode_reason: '检测到图片输入，DIRECT 模式直接走原生多模态 chat',
+  };
+}
+
 async function _executeChatToolDirect(
   taskDescription: string,
   messageContext: MessageContext | undefined,
   parentChainMessages: Array<Record<string, unknown>>,
   currentConversationMessages: Array<Record<string, unknown>>,
+  toolArgs?: Record<string, unknown>,
+  multimodalParts?: unknown,
 ): Promise<string> {
-  const CHAT_SYSTEM_PROMPT = '你是一个专业的软件工程师助手。当前需要向用户输出回复。\n\n你会收到：\n1. 当前任务描述\n2. 之前任务的执行结果（如果有）\n\n请直接向用户输出回复内容：\n- 语言简洁清晰\n- 直接回答用户问题\n- 不要输出思考过程，只输出最终回复\n- 使用友好、专业的语气';
+  const chatSystemPrompt = buildChatSystemPrompt(!!multimodalParts);
 
-  const fullPrompt = buildContextPrompt(
+  const fullPrompt = await buildContextPrompt(
     parentChainMessages,
     currentConversationMessages,
     taskDescription,
+    messageContext as unknown as Record<string, unknown>,
   );
 
   if (messageContext?.send_message) {
@@ -147,7 +322,7 @@ async function _executeChatToolDirect(
 
   let result = '';
   try {
-    for await (const chunk of llmService.chatStream([{ role: 'user', content: fullPrompt }], CHAT_SYSTEM_PROMPT)) {
+    for await (const chunk of llmService.chatStream([{ role: 'user', content: fullPrompt }], chatSystemPrompt)) {
       result += chunk;
       if (messageContext?.send_message) {
         await messageContext.send_message(chunk, SegmentType.CHAT_DELTA, {
@@ -178,12 +353,11 @@ async function _executeThinkingToolDirect(
   parentChainMessages: Array<Record<string, unknown>> = [],
   currentConversationMessages: Array<Record<string, unknown>> = [],
 ): Promise<string> {
-  const THINKING_SYSTEM_PROMPT = '你是一个专业的软件工程师助手。当前正在执行一个任务计划中的某个步骤。\n\n你会收到：\n1. 当前任务描述\n2. 之前任务的执行结果（如果有）\n\n请针对当前任务进行思考：\n1. 分析任务目标\n2. 结合之前的执行结果（如果有）\n3. 给出你的思考过程和结论\n\n请简洁清晰地回答，不要过于冗长。';
-
-  const fullPrompt = buildContextPrompt(
+  const fullPrompt = await buildContextPrompt(
     parentChainMessages,
     currentConversationMessages,
     taskDescription,
+    messageContext as unknown as Record<string, unknown>,
   );
 
   if (messageContext?.send_message) {
@@ -197,7 +371,7 @@ async function _executeThinkingToolDirect(
   try {
     for await (const chunk of llmService.chatStream(
       [{ role: 'user', content: fullPrompt }],
-      THINKING_SYSTEM_PROMPT,
+      THINK_SYSTEM_PROMPT,
     )) {
       result += chunk;
       if (messageContext?.send_message) {
@@ -223,41 +397,259 @@ async function _executeThinkingToolDirect(
   return result;
 }
 
-function stripCodeBlock(text: string): string {
-  let result = text.trim();
-  if (result.startsWith('```json')) result = result.slice(7);
-  else if (result.startsWith('```')) result = result.slice(3);
-  if (result.endsWith('```')) result = result.slice(0, -3);
-  return result.trim();
+function _formatFileSize(size: number): string {
+  const units = ['B', 'KB', 'MB', 'GB'];
+  for (const unit of units) {
+    if (size < 1024) {
+      return `${size.toFixed(1)} ${unit}`;
+    }
+    size /= 1024;
+  }
+  return `${size.toFixed(1)} TB`;
+}
+
+function _executeReadFile(toolArgs: Record<string, unknown>): { result: string | null; error: string | null } {
+  const filePath = (toolArgs.file_path as string) || (toolArgs.path as string);
+  if (!filePath) {
+    return { result: null, error: '缺少 file_path 参数' };
+  }
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { result: null, error: `文件不存在: ${filePath}` };
+    }
+
+    const stats = fs.statSync(filePath);
+    if (stats.isDirectory()) {
+      return { result: null, error: `路径是目录而非文件: ${filePath}` };
+    }
+
+    const MAX_FILE_SIZE = 1024 * 1024;
+    if (stats.size > MAX_FILE_SIZE) {
+      return { result: null, error: `文件过大 (${_formatFileSize(stats.size)})，超过1MB限制` };
+    }
+
+    const encoding = (toolArgs.encoding as string) || 'utf-8';
+    const content = fs.readFileSync(filePath, { encoding: encoding as BufferEncoding });
+    return { result: content, error: null };
+  } catch (e) {
+    return { result: null, error: `读取文件失败: ${String(e)}` };
+  }
+}
+
+function _executeWriteFile(toolArgs: Record<string, unknown>): { result: string | null; error: string | null } {
+  const filePath = (toolArgs.file_path as string) || (toolArgs.path as string);
+  if (!filePath) {
+    return { result: null, error: '缺少 file_path 参数' };
+  }
+
+  const content = toolArgs.content as string;
+  if (content === undefined || content === null) {
+    return { result: null, error: '缺少 content 参数' };
+  }
+
+  const mode = (toolArgs.mode as string) || 'write';
+  const encoding = (toolArgs.encoding as string) || 'utf-8';
+
+  try {
+    const dirPath = path.dirname(filePath);
+    if (dirPath && !fs.existsSync(dirPath)) {
+      fs.mkdirSync(dirPath, { recursive: true });
+    }
+
+    const writeMode = mode === 'append' ? 'a' : 'w';
+    fs.writeFileSync(filePath, content, { encoding: encoding as BufferEncoding, flag: writeMode });
+
+    const action = mode === 'append' ? '追加' : '写入';
+    return { result: `文件${action}成功: ${filePath}`, error: null };
+  } catch (e) {
+    return { result: null, error: `写入文件失败: ${String(e)}` };
+  }
+}
+
+function _executeDeleteFile(toolArgs: Record<string, unknown>): { result: string | null; error: string | null } {
+  const filePath = (toolArgs.file_path as string) || (toolArgs.path as string);
+  if (!filePath) {
+    return { result: null, error: '缺少 file_path 参数' };
+  }
+
+  try {
+    if (!fs.existsSync(filePath)) {
+      return { result: null, error: `路径不存在: ${filePath}` };
+    }
+
+    const stats = fs.statSync(filePath);
+    if (stats.isFile()) {
+      fs.unlinkSync(filePath);
+      return { result: `文件已删除: ${filePath}`, error: null };
+    } else if (stats.isDirectory()) {
+      fs.rmSync(filePath, { recursive: true });
+      return { result: `目录已删除: ${filePath}`, error: null };
+    } else {
+      return { result: null, error: `未知文件类型: ${filePath}` };
+    }
+  } catch (e) {
+    return { result: null, error: `删除失败: ${String(e)}` };
+  }
+}
+
+function _executeListDir(toolArgs: Record<string, unknown>): { result: string | null; error: string | null } {
+  const dirPath = (toolArgs.directory as string) || (toolArgs.path as string) || (toolArgs.dir_path as string);
+  if (!dirPath) {
+    return { result: null, error: '缺少 directory 参数' };
+  }
+
+  const recursive = toolArgs.recursive as boolean || false;
+  const showHidden = toolArgs.show_hidden as boolean || false;
+
+  try {
+    if (!fs.existsSync(dirPath)) {
+      return { result: null, error: `目录不存在: ${dirPath}` };
+    }
+
+    if (!fs.statSync(dirPath).isDirectory()) {
+      return { result: null, error: `路径不是目录: ${dirPath}` };
+    }
+
+    const resultLines: string[] = [];
+    let fileCount = 0;
+    let dirCount = 0;
+
+    if (recursive) {
+      const walkDir = (currentDir: string) => {
+        const entries = fs.readdirSync(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!showHidden && entry.name.startsWith('.')) continue;
+          const relRoot = path.relative(dirPath, currentDir);
+          const prefix = relRoot ? `${relRoot}/` : '';
+          const fullPath = path.join(currentDir, entry.name);
+          if (entry.isDirectory()) {
+            dirCount++;
+            resultLines.push(`📁 ${prefix}${entry.name}/`);
+            walkDir(fullPath);
+          } else {
+            fileCount++;
+            resultLines.push(`📄 ${prefix}${entry.name}`);
+          }
+        }
+      };
+      walkDir(dirPath);
+    } else {
+      const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+      for (const entry of entries) {
+        if (!showHidden && entry.name.startsWith('.')) continue;
+        if (entry.isDirectory()) {
+          dirCount++;
+          resultLines.push(`📁 ${entry.name}/`);
+        } else {
+          fileCount++;
+          resultLines.push(`📄 ${entry.name}`);
+        }
+      }
+    }
+
+    const summary = `目录: ${dirPath}\n共 ${dirCount} 个目录, ${fileCount} 个文件`;
+    const content = resultLines.length > 0 ? resultLines.join('\n') : '(空目录)';
+
+    return { result: `${summary}\n\n${content}`, error: null };
+  } catch (e) {
+    return { result: null, error: `列出目录失败: ${String(e)}` };
+  }
+}
+
+function _executeCreateDir(toolArgs: Record<string, unknown>): { result: string | null; error: string | null } {
+  const dirPath = (toolArgs.directory as string) || (toolArgs.path as string) || (toolArgs.dir_path as string);
+  if (!dirPath) {
+    return { result: null, error: '缺少 directory 参数' };
+  }
+
+  try {
+    if (fs.existsSync(dirPath)) {
+      if (fs.statSync(dirPath).isDirectory()) {
+        return { result: `目录已存在: ${dirPath}`, error: null };
+      } else {
+        return { result: null, error: `路径已存在但不是目录: ${dirPath}` };
+      }
+    }
+
+    fs.mkdirSync(dirPath, { recursive: true });
+    return { result: `目录已创建: ${dirPath}`, error: null };
+  } catch (e) {
+    return { result: null, error: `创建目录失败: ${String(e)}` };
+  }
 }
 
 export function checkState(state: AgentState): 'analyze' | 'decide' | 'execute' | 'done' {
-  if (state.pending_tools && state.pending_tools.length > 0) return 'execute';
-  if (state.final_reply) return 'done';
+  if (state.pending_tools && state.pending_tools.length > 0) {
+    logger.info({ event: 'route.checkState', target: 'execute', reason: 'has_pending_tools' });
+    return 'execute';
+  }
+  if (state.final_reply) {
+    logger.info({ event: 'route.checkState', target: 'done', reason: 'has_final_reply' });
+    return 'done';
+  }
+  if (state.todo_status === 'step_done') {
+    logger.info({ event: 'route.checkState', target: 'done', reason: 'todo_step_done' });
+    return 'done';
+  }
+  if (state.todo_status === 'blocked') {
+    const reply = '当前任务被阻塞，无法继续执行。';
+    logger.info({ event: 'route.checkState', target: 'done', reason: 'todo_blocked' });
+    return 'done';
+  }
+  const retryCount = state.invalid_tool_retry_count || 0;
+  if (retryCount > 3 && !state.pending_tools?.length && !state.final_reply) {
+    logger.info({ event: 'route.checkState', target: 'done', reason: 'invalid_tool_retry_exceeded' });
+    return 'done';
+  }
+  logger.info({ event: 'route.checkState', target: 'decide', reason: 'default', todo_status: state.todo_status, invalid_tool_retry_count: retryCount });
   return 'decide';
 }
 
 export function routeAfterAnalyze(state: AgentState): 'decide' | 'execute' | 'done' {
-  if (state.pending_tools && state.pending_tools.length > 0) return 'execute';
+  if (state.pending_tools && state.pending_tools.length > 0) {
+    logger.info({ event: 'route.afterAnalyze', target: 'execute' });
+    return 'execute';
+  }
+  logger.info({ event: 'route.afterAnalyze', target: 'decide' });
   return 'decide';
 }
 
 export function routeAfterExecute(state: AgentState): 'analyze' | 'decide' | 'todo_review' | 'execute' | 'done' {
-  if (state.final_reply) return 'done';
+  if (state.final_reply) {
+    logger.info({ event: 'route.afterExecute', target: 'done', reason: 'has_final_reply' });
+    return 'done';
+  }
 
   const nextAction = state.next_action || {} as NextAction;
-  if (nextAction.kind === 'enter_plan') return 'analyze';
+  if (nextAction.kind === 'enter_plan') {
+    logger.info({ event: 'route.afterExecute', target: 'analyze', reason: 'enter_plan' });
+    return 'analyze';
+  }
 
-  if (state.pending_tools && state.pending_tools.length > 0) return 'execute';
+  if (state.pending_tools && state.pending_tools.length > 0) {
+    logger.info({ event: 'route.afterExecute', target: 'execute', reason: 'has_pending_tools' });
+    return 'execute';
+  }
 
   if (modeName(state.execution_mode) === 'DIRECT' && (!state.pending_tools || state.pending_tools.length === 0)) {
+    logger.info({ event: 'route.afterExecute', target: 'todo_review', reason: 'DIRECT_no_pending' });
     return 'todo_review';
   }
 
   return checkState(state);
 }
 
-export function routeAfterTodoReview(_state: AgentState): 'decide' {
+export function routeAfterTodoReview(state: AgentState): 'decide' | 'done' {
+  if (state.todo_status === 'step_done') {
+    logger.info({ event: 'route.afterTodoReview', target: 'done', reason: 'todo_step_done' });
+    return 'done';
+  }
+  if (state.todo_status === 'blocked' && !state.final_reply) {
+    logger.info({ event: 'route.afterTodoReview', target: 'done', reason: 'todo_blocked_no_reply' });
+    return 'done';
+  }
+  logger.info({ event: 'route.afterTodoReview', target: 'decide', reason: 'default', todo_status: state.todo_status });
   return 'decide';
 }
 
@@ -314,6 +706,10 @@ export function createAnalyzeNode(messageContext?: MessageContext) {
       next_action: undefined,
     };
 
+    if (shouldUseNativeMultimodalChat(state)) {
+      Object.assign(result, buildNativeMultimodalChatTask(state));
+    }
+
     logger.info({
       event: 'director.analyze.completed',
       mode: modeDecision.mode,
@@ -327,158 +723,6 @@ export function createAnalyzeNode(messageContext?: MessageContext) {
     }
 
     return result;
-  };
-}
-
-const DIRECT_SYSTEM_PROMPT = `你现在的职责是作为 branch code，围绕当前用户任务做出下一步执行决策，并在需要时调用合适的工具完成工作。
-
-如果历史对话中上一条提到了 plan.md，并且当前用户消息表达了批准/继续执行方案的语义，那么你应先使用 read_file 读取该 plan.md，再严格遵守该计划执行；否则不要因为工作区里存在 plan.md 就默认按计划执行。
-
-你必须且只能返回以下三种 JSON 结构之一，不要输出额外文本：
-
-1. 调用工具：
-{
-  "kind": "tool",
-  "tool_name": "工具名",
-  "tool_args": {"参数名": "参数值"},
-  "task_description": "调用当前步骤的原因"
-}
-
-2. 当前 todo 已完成：
-{
-  "kind": "step_done"
-}
-
-3. 当前无法继续：
-{
-  "kind": "blocked",
-  "reply": "阻塞原因"
-}
-
-规则：
-1. 一次只能决定一步，不要输出多步计划
-2. 如果用户的问题里提到了文件路径，且该文件存在，优先使用工具读取文件内容并根据内容决策下一步
-3. kind=tool 时，tool_name 必填，tool_args 必填，task_description 必填
-4. kind=tool 时，tool_name 必须来自工具协议里的工具名，tool_args 必须严格使用协议里的参数名
-5. kind=blocked 时，不要返回 tool_name 或 tool_args
-6. 如果任务明显复杂、多阶段、跨文件、需要先输出方案，或者用户明确要求先给方案/计划，优先调用 switch_execution_mode 把模式切到 PLAN
-7. 如果当前任务是多步骤/有阶段或是任务执行过程中有不确定因素不能一口气完成的，使用 update_todo 写入完整 todo 列表
-8. 如果 todo 不为空，优先围绕完整 todo 列表继续执行，并通过 update_todo 覆盖更新完整列表与 doingIdx
-9. 如果任务拆分发生变化，直接用 update_todo 重写整个 todo 列表
-10. 只有当前工作真的完成时，才能返回 step_done
-11. 如果拿不准下一步该用什么工具或缺少必填参数，返回 blocked，不要返回不完整的 tool JSON
-12. 如果发现现有工具无法解决用户的问题，例如读取二进制文件、处理特定格式文件，但你刚好没有能处理这类文件工具时，可以使用 chat 工具向用户说明情况。
-13. 当需要向用户输出最终回复或回答用户问题时，必须使用 chat 工具，不要尝试返回其他格式。`;
-
-const PLAN_MODE_SYSTEM_PROMPT = `你现在的职责是作为规划代理，围绕当前用户任务进行探索和分析，最终生成一个完整的执行计划。
-
-## 权限说明
-- 你可以使用只读工具进行探索
-- 你只能写入 plan.md 文件，禁止写入任何其他文件
-- 禁止编写任何代码实现，只做规划和分析
-
-## 输出格式
-你必须且只能返回以下三种 JSON 结构之一：
-
-1. 调用工具：
-{
-  "kind": "tool",
-  "tool_name": "工具名",
-  "tool_args": {"参数名": "参数值"},
-  "task_description": "调用当前步骤的原因"
-}
-
-2. 计划已完成：
-{
-  "kind": "step_done"
-}
-
-3. 当前无法继续：
-{
-  "kind": "blocked",
-  "reply": "阻塞原因"
-}
-
-## 规则
-1. 探索阶段：使用只读工具了解代码库、需求背景
-2. 规划阶段：将计划写入 plan.md，格式为 Markdown
-3. 严禁写入 plan.md 以外的任何文件
-4. 严禁编写代码实现，只输出规划文档
-5. 完成后使用 chat 工具向用户总结计划并询问是否执行
-6. 用户确认后，使用 switch_execution_mode 切换到 DIRECT 模式
-
-## 计划文档结构要求
-
-生成的 plan.md 必须包含以下章节：
-
-### # Context
-描述问题背景、当前状态、改造目标。说明为什么要做这个任务，解决什么问题。
-
-### # Recommended approach
-分步骤的推荐方案，每步包含：
-- **具体要做什么**：清晰描述这一步的目标
-- **实现原则**：关键的设计决策和约束
-- **优先修改文件**：列出需要改动的文件路径
-- **复用点**：可以复用的现有代码/接口
-
-### # Critical files to modify
-列出所有需要修改的关键文件路径。
-
-### # Specific reuse points
-列出可以复用的现有代码、接口、函数。
-
-### # Verification
-验证计划，包含：
-- 功能验证：如何验证功能正确
-- 回归验证：如何确保不影响现有功能
-- 边界验证：异常情况如何处理
-
-### # Key constraints
-关键约束和注意事项，避免执行时踩坑。
-
-## 计划质量要求
-1. 每个步骤要有明确的完成条件
-2. 文件路径要准确，不要猜测不存在的文件
-3. 复用点要具体到函数名/接口名
-4. 验证计划要可执行，不要泛泛而谈
-5. 约束要具体，避免执行时产生歧义
-`;
-
-function hasImageParts(parts: unknown[]): boolean {
-  if (!parts || !Array.isArray(parts)) return false;
-  return parts.some((p: any) => {
-    if (!p || typeof p !== 'object') return false;
-    const type = (p as Record<string, unknown>).type;
-    return type === 'image' || type === 'image_url';
-  });
-}
-
-function shouldUseNativeMultimodalChat(state: AgentState): boolean {
-  const currentAgentType = state.agent_type || 'director_agent';
-  if (currentAgentType !== 'director_agent') return false;
-  const userMessageParts = state.current_user_message_parts || [];
-  return hasImageParts(userMessageParts as unknown[]);
-}
-
-function buildNativeMultimodalChatTask(state: AgentState): Partial<AgentState> {
-  const userMessage = state.current_user_message_text || getLastUserMessageText(state);
-  const userMessageParts = state.current_user_message_parts || [];
-  const chatTask = userMessage || '请直接分析这张图片并回答用户。';
-  const toolArgs: Record<string, unknown> = {
-    description: chatTask,
-    multimodal_parts: userMessageParts,
-  };
-
-  return {
-    pending_tools: [{ tool: 'chat', args: toolArgs }],
-    has_tool_use: true,
-    next_action: {
-      kind: 'tool',
-      tool_name: 'chat',
-      tool_args: toolArgs,
-      task_description: chatTask,
-    } as NextAction,
-    mode_reason: '检测到图片输入，DIRECT 模式直接走原生多模态 chat',
   };
 }
 
@@ -512,7 +756,7 @@ export function createDecideNode(messageContext?: MessageContext) {
 
     if (iterationCount >= maxIterations) {
       const reply = '抱歉，当前任务在限定步骤内未完成。我已经停止继续调用工具，请你细化要求或分步执行。';
-      emitFinalReply(reply, messageContext);
+      _emitFinalReply(reply, messageContext);
       return {
         next_action: { kind: 'reply', reply, task_description: '达到最大迭代次数，向用户说明' },
         final_reply: reply,
@@ -523,7 +767,7 @@ export function createDecideNode(messageContext?: MessageContext) {
     }
 
     if (shouldCheckLoop(iterationCount)) {
-      const checkResult = await checkLoopOrStuck(
+      const checkResult = await _checkLoopOrStuck(
         toolHistory,
         iterationCount,
         userMessage,
@@ -533,7 +777,7 @@ export function createDecideNode(messageContext?: MessageContext) {
       if (checkResult.action === 'stop') {
         const reason = checkResult.reason || '检测到循环或卡死';
         const reply = `抱歉，检测到任务执行出现循环或卡死情况（${reason}）。我已经停止继续调用工具，请你细化要求或分步执行。`;
-        emitFinalReply(reply, messageContext);
+        _emitFinalReply(reply, messageContext);
         return {
           next_action: { kind: 'reply', reply, task_description: `循环检测停止: ${reason}` },
           final_reply: reply,
@@ -559,14 +803,14 @@ export function createDecideNode(messageContext?: MessageContext) {
       : '(无)';
 
     const currentTodoIndex = state.current_todo_index || 0;
-    const todoBlock = formatTodoPromptBlock(todos, currentTodoIndex);
+    const todoBlock = formatTodoPromptBlock(todos as any, currentTodoIndex);
     const todoIntro = todoBlock ? `\n\n${todoBlock}\n\n` : '';
 
     let planIntro = '';
-    if (!isPlanMode && state.workspace_id) {
-      const planReadResult = planFileService.readPlan(state.workspace_id);
-      if (planReadResult.success && planReadResult.content) {
-        planIntro = `\n\n[工作区存在 plan.md，内容如下]\n${planReadResult.content}\n\n如果用户消息表达了批准/继续执行该计划的语义，请严格按计划执行；否则不要因为存在 plan.md 就默认按计划执行。\n`;
+    if (!isPlanMode) {
+      const { planContent } = _loadPlanContentForState(state);
+      if (planContent) {
+        planIntro = `\n\n当前工作区存在计划文件: plan.md\n如果上一条历史对话提到了 plan.md，并且当前用户消息表达了批准/继续执行方案的语义，那么你应主动使用 read_file 读取该 plan.md，再严格遵守该计划执行；否则不要因为计划文件存在就默认按计划执行。\n`;
       }
     }
 
@@ -575,9 +819,9 @@ export function createDecideNode(messageContext?: MessageContext) {
       `当前工作区ID: ${state.workspace_id}`,
       `已执行轮次: ${iterationCount}/${maxIterations}`,
       '',
+      planIntro,
       toolSchemaPrompt,
       todoIntro,
-      planIntro,
       `最近工具结果:`,
       lastResultBlock,
       '',
@@ -586,14 +830,15 @@ export function createDecideNode(messageContext?: MessageContext) {
       '',
       isPlanMode
         ? '请只决定下一步动作，并以 JSON 形式返回：如果需要继续操作，返回一个 tool 调用；如果计划已完成，返回 kind=step_done；如果需要向用户输出回复，使用 chat 工具；如果无法继续，返回 kind=blocked。'
-        : '注意：只有当 todo 列表非空时，你才应围绕 todo 执行；如果当前没有 todo 且任务明显多步骤/阶段化，可以先使用 update_todo 写入完整 todo 列表。默认按 DIRECT 执行；如果你在执行过程中发现任务明显复杂、多阶段、跨文件、需要先输出方案，才调用 switch_execution_mode 把模式切到 PLAN。请只决定下一步动作，并以 JSON 形式返回。',
+        : '注意：只有当 todo 列表非空时，你才应围绕 todo 执行；如果当前没有 todo 且任务明显多步骤/阶段化，可以先使用 update_todo 写入完整 todo 列表。如果 todo 列表非空，你应继续通过 update_todo 覆盖更新完整 todo 列表和 doingIdx；如果任务拆分发生变化，也应通过 update_todo 一次性重写。默认按 DIRECT 执行；如果你在执行过程中发现任务明显复杂、多阶段、跨文件、需要先输出方案，才调用 switch_execution_mode 把模式切到 PLAN。如果上一条历史对话提到了 plan.md，并且当前用户消息表达了批准/继续执行方案的语义，那么你应先使用 read_file 读取该 plan.md，再严格遵守该计划执行。除非用户明确要求查看计划文件，否则不要为了展示而读取 plan.md。请只决定下一步动作，并以 JSON 形式返回：如果需要继续操作，返回一个 tool 调用；如果当前 todo 已完成，返回 kind=step_done；如果需要向用户输出最终回复，使用 chat 工具；如果无法继续，返回 kind=blocked。',
     ].join('\n');
 
     const systemPrompt = isPlanMode ? PLAN_MODE_SYSTEM_PROMPT : DIRECT_SYSTEM_PROMPT;
-    const contextPrompt = buildContextPrompt(
+    const contextPrompt = await buildContextPrompt(
       parentChainMessages as Array<Record<string, unknown>>,
       currentConversationMessages as Array<Record<string, unknown>>,
       currentTask,
+      messageContext as unknown as Record<string, unknown>,
     );
     logger.info({ event: 'director.decide.prompt_length', system: systemPrompt.length, context: contextPrompt.length, total: systemPrompt.length + contextPrompt.length });
 
@@ -626,7 +871,7 @@ export function createDecideNode(messageContext?: MessageContext) {
 
       if (kind === 'blocked') {
         const reply = (decisionData.reply as string) || '当前 todo 被阻塞';
-        emitFinalReply(reply, messageContext);
+        _emitFinalReply(reply, messageContext);
         return {
           todo_status: 'blocked',
           final_reply: reply,
@@ -656,8 +901,8 @@ export function createDecideNode(messageContext?: MessageContext) {
           };
         }
 
-        const reply = `工具决策无效，无法继续执行：${toolName}`;
-        emitFinalReply(reply, messageContext);
+        const reply = `工具决策无效，无法继续执行：${toolName}；原始回复：${JSON.stringify(decisionData)}`;
+        _emitFinalReply(reply, messageContext);
         return {
           next_action: { kind: 'reply', reply, task_description: taskDescription },
           final_reply: reply,
@@ -681,8 +926,8 @@ export function createDecideNode(messageContext?: MessageContext) {
         invalid_tool_retry_count: 0,
       };
     } catch (err) {
-      const reply = `当前无法自动决策下一步：${String(err)}`;
-      emitFinalReply(reply, messageContext);
+      const reply = `当前无法自动决策下一步：${String(err)}；原始回复：${responseText.slice(0, 200)}`;
+      _emitFinalReply(reply, messageContext);
       return {
         next_action: { kind: 'reply', reply, task_description: userMessage },
         final_reply: reply,
@@ -729,6 +974,80 @@ export function createStepReviewNode() {
   };
 }
 
+export function createPlanNode(messageContext?: MessageContext) {
+  return async (state: AgentState): Promise<Partial<AgentState>> => {
+    const userMessage = getLastUserMessageText(state);
+    const workspaceId = state.workspace_id;
+
+    logger.info({ event: 'director.plan.entry', user_message: userMessage.slice(0, 100) });
+
+    let plan: Array<Record<string, unknown>>;
+
+    try {
+      const { systemPrompt, messages } = buildDirectorPlanMessages(userMessage);
+      const response = await llmService.chat(messages as Array<Record<string, unknown>>, systemPrompt);
+
+      let responseText = stripCodeBlock(response);
+      const data = JSON.parse(responseText);
+      const rawTasks = data.tasks;
+      if (!rawTasks || !Array.isArray(rawTasks)) {
+        throw new Error('计划结果缺少 tasks');
+      }
+
+      plan = rawTasks.map((task: Record<string, unknown>, i: number) => ({
+        id: i + 1,
+        description: (task.description as string) || `步骤 ${i + 1}`,
+        goal: (task.goal as string) || (task.description as string) || `完成步骤 ${i + 1}`,
+        done_when: (task.done_when as string) || '该步骤目标达成',
+        phase: (task.phase as string) || 'implementation',
+        status: 'pending',
+        tool: null,
+        args: null,
+        result: null,
+        feedback: null,
+      }));
+    } catch (e) {
+      logger.warn({ event: 'director.plan.fallback', error: String(e) });
+      plan = [
+        { id: 1, description: '理解需求并确认工作区现状', goal: '明确任务边界', done_when: '已确认目标文件和工作区状态', phase: 'research', status: 'pending', tool: null, args: null, result: null, feedback: null },
+        { id: 2, description: '执行核心改动', goal: '完成用户请求的功能', done_when: '相关文件和行为已按要求完成', phase: 'implementation', status: 'pending', tool: null, args: null, result: null, feedback: null },
+        { id: 3, description: '验证结果', goal: '确认结果满足要求', done_when: '测试或检查结果符合预期', phase: 'verification', status: 'pending', tool: null, args: null, result: null, feedback: null },
+      ];
+    }
+
+    const planContent = planFileService.formatPlanAsMarkdown(userMessage, plan);
+    const createResult = planFileService.createPlan(workspaceId, planContent, plan);
+    const planFilePath = createResult.planFile;
+
+    logger.info({ event: 'director.plan.created', plan_file: planFilePath, steps: plan.length });
+
+    if (messageContext?.send_message) {
+      await messageContext.send_message('', SegmentType.STATE_CHANGE, {
+        execution_mode: 'PLAN',
+        plan_steps: plan.length,
+        plan_file: planFilePath,
+      });
+    }
+
+    const chatDescription = `计划已生成并保存到 plan.md。\n\n以下是计划内容：\n${planContent}\n\n请向用户简要总结这个计划，并询问用户是否同意执行。`;
+
+    return {
+      plan: plan as any,
+      plan_file: planFilePath,
+      plan_content: planContent,
+      final_reply: undefined,
+      has_tool_use: true,
+      pending_tools: [{ tool: 'chat', args: { description: chatDescription } }],
+      next_action: {
+        kind: 'tool',
+        tool_name: 'chat',
+        tool_args: { description: chatDescription },
+        task_description: '总结计划并询问用户',
+      },
+    };
+  };
+}
+
 export function createExecuteNode(messageContext?: MessageContext) {
   return async (state: AgentState): Promise<Partial<AgentState>> => {
     if (messageContext?.cancel_check) {
@@ -737,6 +1056,7 @@ export function createExecuteNode(messageContext?: MessageContext) {
 
     const pendingTools = state.pending_tools || [];
     const currentAgentType = state.agent_type || 'director_agent';
+    const parentChainMessages = state.parent_chain_messages || [];
     const currentConversationMessages = state.current_conversation_messages || [];
     const workspaceId = state.workspace_id;
     const executionMode = state.execution_mode;
@@ -744,6 +1064,8 @@ export function createExecuteNode(messageContext?: MessageContext) {
     if (pendingTools.length === 0) {
       return {
         pending_tools: [],
+        in_plan_mode: false,
+        execution_mode: undefined,
         has_tool_use: false,
       };
     }
@@ -759,12 +1081,16 @@ export function createExecuteNode(messageContext?: MessageContext) {
       workspace_id: workspaceId,
     });
 
+    let toolResult: { result: unknown; error: string | null };
+
     if (toolName === 'chat') {
       const chatResult = await _executeChatToolDirect(
         taskDescription || state.current_user_message_text || '',
         messageContext,
         (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
         (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
+        toolArgs,
+        toolArgs.multimodal_parts,
       );
 
       const newToolHistory: ToolCall[] = [
@@ -789,144 +1115,9 @@ export function createExecuteNode(messageContext?: MessageContext) {
       };
     }
 
-    if (toolName === 'thinking') {
-      const thinkingResult = await _executeThinkingToolDirect(
-        taskDescription || state.current_user_message_text || '',
-        messageContext,
-        (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
-        (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
-      );
-
-      const newToolHistory: ToolCall[] = [
-        ...state.tool_history,
-        { tool: toolName, args: toolArgs, result: thinkingResult },
-      ];
-
-      const newCurrentConvMsgs = [...currentConversationMessages];
-      newCurrentConvMsgs.push({ role: 'assistant', content: `[思考结果]: ${thinkingResult.slice(0, 500)}` } as Record<string, unknown>);
-
-      const hasMoreTools = pendingTools.length > 1;
-
-      return {
-        pending_tools: pendingTools.slice(1),
-        tool_history: newToolHistory,
-        current_conversation_messages: newCurrentConvMsgs,
-        has_tool_use: hasMoreTools,
-        last_tool_result: thinkingResult.length > 4000 ? thinkingResult.slice(0, 4000) + '...' : thinkingResult,
-        last_tool_name: toolName,
-        last_tool_success: true,
-        last_tool_error: undefined,
-      };
-    }
-
-    if (toolName === 'call_explore_agent' || toolName === 'call_review_agent') {
-      const subAgentType = toolName === 'call_explore_agent' ? 'explore_agent' : 'review_agent';
-      const subTaskDescription = (toolArgs.task_description as string) || (toolArgs.description as string) || taskDescription;
-
-      if (messageContext?.send_message) {
-        await messageContext.send_message('', SegmentType.TOOL_CALL, {
-          tool_name: toolName,
-          tool_args: toolArgs,
-          task_description: subTaskDescription,
-          agent_type: subAgentType,
-        });
-      }
-
-      let subResult: string;
-      let subError: string | null = null;
-
-      const SUBAGENT_TIMEOUT_MS = 45000;
-
-      try {
-        const outcome = await Promise.race([
-          runAgentGraph(
-            subAgentType,
-            subTaskDescription,
-            workspaceId,
-            messageContext,
-            (state.parent_chain_messages || []) as Array<Record<string, unknown>>,
-            (state.current_conversation_messages || []) as Array<Record<string, unknown>>,
-            'DIRECT',
-          ),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`子代理 ${subAgentType} 执行超时（${SUBAGENT_TIMEOUT_MS / 1000}秒）`)), SUBAGENT_TIMEOUT_MS)
-          ),
-        ]);
-
-        if (outcome.status === 'completed' && outcome.payload) {
-          subResult = outcome.payload;
-        } else if (outcome.status === 'failed') {
-          subResult = outcome.exit_info.message || '子代理执行失败';
-          subError = outcome.exit_info.message || '子代理执行失败';
-        } else {
-          subResult = outcome.exit_info.message || '子代理未产生有效输出';
-          subError = '子代理未产生有效输出';
-        }
-      } catch (err) {
-        subResult = String(err);
-        subError = String(err);
-      }
-
-      if (messageContext?.send_message) {
-        await messageContext.send_message('', SegmentType.TOOL_RES, {
-          tool_name: toolName,
-          result: subResult.slice(0, 500),
-          error: subError,
-          success: subError === null,
-        });
-      }
-
-      const newToolHistory: ToolCall[] = [
-        ...state.tool_history,
-        { tool: toolName, args: toolArgs, result: subResult },
-      ];
-
-      const newCurrentConvMsgs = [...currentConversationMessages];
-      const content = subError
-        ? `[子代理 ${subAgentType} 执行失败]: ${subResult.slice(0, 500)}`
-        : `[子代理 ${subAgentType} 执行结果]: ${subResult.slice(0, 1000)}`;
-      newCurrentConvMsgs.push({ role: 'assistant', content } as Record<string, unknown>);
-
-      const truncatedResult = subResult.length > 4000 ? subResult.slice(0, 4000) + '...' : subResult;
-
-      if (modeName(executionMode) === 'DIRECT') {
-        return {
-          pending_tools: [],
-          tool_history: newToolHistory,
-          current_conversation_messages: newCurrentConvMsgs,
-          has_tool_use: false,
-          last_tool_result: truncatedResult,
-          last_tool_name: toolName,
-          last_tool_success: subError === null,
-          last_tool_error: subError || undefined,
-          iteration_count: (state.iteration_count || 0) + 1,
-          current_todo_iteration_count: (state.current_todo_iteration_count || 0) + 1,
-          todo_status: 'in_progress',
-          next_action: undefined,
-        };
-      }
-
-      return {
-        pending_tools: pendingTools.slice(1),
-        tool_history: newToolHistory,
-        current_conversation_messages: newCurrentConvMsgs,
-        has_tool_use: pendingTools.length > 1,
-        last_tool_result: truncatedResult,
-        last_tool_name: toolName,
-        last_tool_success: subError === null,
-        last_tool_error: subError || undefined,
-      };
-    }
-
-    if (messageContext?.send_message) {
-      await messageContext.send_message('', SegmentType.TOOL_CALL, {
-        tool_name: toolName,
-        tool_args: toolArgs,
-        task_description: taskDescription,
-      });
-    }
-
-    let toolResult: { result: unknown; error: string | null };
+    const enhancedMessageContext: Record<string, unknown> = { ...(messageContext as unknown as Record<string, unknown> || {}) };
+    enhancedMessageContext['parent_chain_messages'] = parentChainMessages;
+    enhancedMessageContext['current_conversation_messages'] = currentConversationMessages;
 
     toolResult = await runToolExecution({
       toolName,
@@ -934,37 +1125,15 @@ export function createExecuteNode(messageContext?: MessageContext) {
       workspaceId,
       agentType: currentAgentType,
       previousCalls: state.tool_history,
+      taskDescription,
+      previousResults: (state.tool_history || [])
+        .filter((item: ToolCall) => item.result !== undefined)
+        .map((item: ToolCall) => String(item.result || '')),
+      messageContext: enhancedMessageContext,
     });
-
-    let duplicateCount = 0;
-    for (const call of state.tool_history) {
-      if (call.tool === toolName && JSON.stringify(call.args) === JSON.stringify(toolArgs)) {
-        duplicateCount++;
-      }
-    }
-    if (duplicateCount >= 3 && toolResult.error === null) {
-      logger.warn({
-        event: 'doom_loop.detected',
-        tool_name: toolName,
-        duplicate_count: duplicateCount,
-      });
-      toolResult = { result: null, error: 'DoomLoop detected: repeated tool calls with identical args' };
-      if (messageContext?.send_message) {
-        await messageContext.send_message('DoomLoop detected: repeated tool calls', SegmentType.ERROR, { source: 'doom_loop' });
-      }
-    }
 
     const resultStr = toolResult.result ? String(toolResult.result) : '';
     const truncatedResult = resultStr.length > 4000 ? resultStr.slice(0, 4000) + '...' : resultStr;
-
-    if (messageContext?.send_message) {
-      await messageContext.send_message('', SegmentType.TOOL_RES, {
-        tool_name: toolName,
-        result: truncatedResult,
-        error: toolResult.error,
-        success: toolResult.error === null,
-      });
-    }
 
     const newToolHistory: ToolCall[] = [
       ...state.tool_history,
@@ -979,15 +1148,7 @@ export function createExecuteNode(messageContext?: MessageContext) {
 
     const toolSuccess = toolResult.error === null;
 
-    if (toolSuccess && toolName === 'write_file') {
-      const filePath = (toolArgs.file_path as string) || (toolArgs.path as string) || '';
-      if (filePath.endsWith('plan.md') && modeName(executionMode) === 'PLAN') {
-        const planContent = (toolArgs.content as string) || '';
-        planFileService.createPlan(workspaceId, planContent, state.plan || []);
-      }
-    }
-
-    if (modeName(executionMode) === 'DIRECT') {
+    if (modeName(executionMode) === 'DIRECT' && toolName !== 'chat') {
       const directUpdate: Partial<AgentState> = {
         pending_tools: [],
         tool_history: newToolHistory,
@@ -1098,7 +1259,7 @@ const AgentStateChannels = {
   invalid_tool_retry_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
 };
 
-export function createOrchestratorGraph(messageContext?: MessageContext) {
+export function createOrchestratorGraphV3(messageContext?: MessageContext) {
   const graph = new StateGraph({
     channels: AgentStateChannels,
   } as any);
@@ -1133,10 +1294,13 @@ export function createOrchestratorGraph(messageContext?: MessageContext) {
 
   (graph as any).addConditionalEdges('todo_review', routeAfterTodoReview, {
     decide: 'decide',
+    done: END,
   });
 
   return graph.compile();
 }
+
+export const createOrchestratorGraph = createOrchestratorGraphV3;
 
 export async function runDirectorGraph(
   userMessage: string,
@@ -1194,7 +1358,7 @@ export async function runDirectorGraph(
     next_action: undefined,
   };
 
-  const graph = createOrchestratorGraph(messageContext);
+  const graph = createOrchestratorGraphV3(messageContext);
   const finalState = await graph.invoke(initialState, { recursionLimit: 50 });
 
   logger.info({

@@ -1,7 +1,8 @@
 import { messageQueue } from '../session-service/mq';
 import { createMessage, createContentBlock, SegmentType, type ContentBlock } from '../session-service/canonical';
 import { logger } from '../../core/logging';
-import { runOrchestrator, type MessageContext, type OrchestratorConfig, type MemoryMode } from './graph/orchestrator-v2';
+import { runAgentGraph, type AgentOutcome } from './graph/agent-graphs';
+import type { MessageContext } from './graph/director-agent/director-agent';
 import { initializeTools } from './tools';
 import { sessionService } from '../session-service';
 import { workspaceService } from './service/workspace-service';
@@ -37,13 +38,6 @@ export class AgentService {
 
   private generateId(): string {
     return crypto.randomUUID();
-  }
-
-  private getMemoryConfig(): { memory_mode: MemoryMode; window_size: number } {
-    return {
-      memory_mode: 'accumulate',
-      window_size: 3,
-    };
   }
 
   async createConversation(
@@ -143,7 +137,6 @@ export class AgentService {
     conv.status = ConversationStatus.RUNNING;
 
     const mid = messageId || this.generateId();
-    const { memory_mode, window_size } = this.getMemoryConfig();
 
     logger.info({
       event: 'agent.run.started',
@@ -192,13 +185,15 @@ export class AgentService {
       cancel_check: () => this.cancelCheck(conversationId),
     };
 
-    const orchestratorConfig: Partial<OrchestratorConfig> = {
-      memory_mode,
-      window_size,
-    };
-
     try {
-      await runOrchestrator(userMessage, conv.workspace_id, context, orchestratorConfig);
+      const outcome: AgentOutcome = await runAgentGraph(
+        'director_agent',
+        userMessage,
+        conv.workspace_id,
+        context,
+        parentChainMessages,
+        currentConversationMessages,
+      );
 
       if (textStarted) {
         await sendMessage('', SegmentType.TEXT_END);
@@ -221,6 +216,8 @@ export class AgentService {
         event: 'agent.run.completed',
         conversation_id: conversationId,
         message_id: mid,
+        outcome_status: outcome.status,
+        produced_user_reply: outcome.produced_user_reply,
       });
     } catch (err) {
       const errorMessage = String(err);

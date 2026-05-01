@@ -2,62 +2,79 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from './types';
 import { toolRegistry } from './registry';
-import { getWorkspaceDir } from './executors';
 import { workspaceService } from '../service/workspace-service';
+
+async function executeListWorkspaceFiles(_args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
+  const workspaceId = context.workspace_id;
+  const result = workspaceService.listFiles(workspaceId);
+
+  if (!result.success) {
+    return { result: null, error: result.error };
+  }
+
+  if (result.files.length === 0) {
+    return { result: '工作区为空，暂无文件', error: null };
+  }
+
+  const resultLines = ['工作区文件列表：\n'];
+  for (const f of result.files) {
+    const icon = f.is_dir ? '📁' : '📄';
+    const sizeStr = f.is_dir ? '' : ` (${formatFileSize(f.size)})`;
+    resultLines.push(`  ${icon} ${f.path}${sizeStr}`);
+  }
+
+  return { result: resultLines.join('\n'), error: null };
+}
 
 async function executeGetWorkspaceInfo(_args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
   const workspaceId = context.workspace_id;
   const info = workspaceService.getWorkspaceInfo(workspaceId);
-  
+
   if (!info) {
-    return { result: null, error: `Workspace not found: ${workspaceId}` };
+    return { result: null, error: `工作区不存在: ${workspaceId}` };
   }
 
-  const workspaceDir = getWorkspaceDir(workspaceId);
-  
-  let totalFiles = 0;
-  let totalDirs = 0;
-  let totalSize = 0;
+  const workspaceDir = workspaceService.getWorkspaceDir(workspaceId);
+
+  const resultLines = [
+    '工作区信息：',
+    `  ID: ${info.id}`,
+    `  会话ID: ${info.session_id}`,
+    `  状态: ${info.status}`,
+    `  路径: ${workspaceDir}`,
+  ];
 
   if (workspaceDir && fs.existsSync(workspaceDir)) {
-    const countItems = (dir: string) => {
-      const items = fs.readdirSync(dir);
-      for (const item of items) {
-        if (item.startsWith('.')) continue;
-        const itemPath = path.join(dir, item);
-        const stat = fs.statSync(itemPath);
-        if (stat.isDirectory()) {
-          totalDirs++;
-          countItems(itemPath);
+    let totalSize = 0;
+    let fileCount = 0;
+    let dirCount = 0;
+    const walkDir = (dir: string) => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isDirectory()) {
+          dirCount++;
+          walkDir(fullPath);
         } else {
-          totalFiles++;
-          totalSize += stat.size;
+          fileCount++;
+          totalSize += fs.statSync(fullPath).size;
         }
       }
     };
-    countItems(workspaceDir);
+    walkDir(workspaceDir);
+    resultLines.push(
+      `  文件数: ${fileCount}`,
+      `  目录数: ${dirCount}`,
+      `  总大小: ${formatFileSize(totalSize)}`,
+    );
   }
 
-  const result = {
-    workspace_id: workspaceId,
-    session_id: info.session_id,
-    status: info.status,
-    created_at: info.created_at,
-    directory: workspaceDir,
-    statistics: {
-      total_files: totalFiles,
-      total_directories: totalDirs,
-      total_size_bytes: totalSize,
-      total_size_formatted: formatBytes(totalSize),
-    },
-  };
-
-  return { result, error: null };
+  return { result: resultLines.join('\n'), error: null };
 }
 
 async function executeGetFileTree(_args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
   const result = workspaceService.getFileTree(context.workspace_id);
-  
+
   if (!result.success) {
     return { result: null, error: result.error ?? 'Unknown error' };
   }
@@ -66,71 +83,59 @@ async function executeGetFileTree(_args: Record<string, unknown>, context: ToolE
 }
 
 async function executeSearchFiles(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const pattern = (args.pattern || args.query) as string;
-  if (!pattern) {
-    return { result: null, error: '缺少 pattern 参数' };
-  }
-
-  const workspaceDir = getWorkspaceDir(context.workspace_id);
+  const pattern = (args.pattern || args.query || '*') as string;
+  const workspaceDir = workspaceService.getWorkspaceDir(context.workspace_id);
   if (!workspaceDir) {
-    return { result: null, error: `Workspace not found: ${context.workspace_id}` };
+    return { result: null, error: `工作区不存在: ${context.workspace_id}` };
   }
 
   if (!fs.existsSync(workspaceDir)) {
-    return { result: [], error: null };
+    return { result: '工作区为空', error: null };
   }
 
-  const maxResults = (args.max_results as number) || 50;
-  const results: Array<{ path: string; line_number: number; line: string; match: string }> = [];
+  const matches: Array<{ name: string; path: string; size?: number; is_dir?: boolean }> = [];
 
-  const regex = new RegExp(pattern, 'gi');
+  const walkDir = (dir: string) => {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      const relPath = path.relative(workspaceDir, fullPath).replace(/\\/g, '/');
 
-  const searchInFile = (filePath: string, relativePath: string) => {
-    try {
-      const content = fs.readFileSync(filePath, 'utf-8');
-      const lines = content.split('\n');
-
-      for (let i = 0; i < lines.length && results.length < maxResults; i++) {
-        const line = lines[i];
-        const match = regex.exec(line);
-        if (match) {
-          results.push({
-            path: relativePath,
-            line_number: i + 1,
-            line: line.trim().slice(0, 200),
-            match: match[0],
-          });
-          regex.lastIndex = 0;
+      if (entry.isDirectory()) {
+        if (fnmatch(pattern.toLowerCase(), entry.name.toLowerCase())) {
+          matches.push({ name: entry.name, path: relPath, is_dir: true });
+        }
+        walkDir(fullPath);
+      } else {
+        if (fnmatch(pattern.toLowerCase(), entry.name.toLowerCase())) {
+          matches.push({ name: entry.name, path: relPath, size: fs.statSync(fullPath).size });
         }
       }
-    } catch {
-      // Skip binary or unreadable files
     }
   };
 
-  const walk = (dir: string, baseDir: string) => {
-    if (results.length >= maxResults) return;
+  walkDir(workspaceDir);
 
-    const items = fs.readdirSync(dir);
-    for (const item of items) {
-      if (item.startsWith('.')) continue;
-      if (results.length >= maxResults) break;
+  if (matches.length === 0) {
+    return { result: `未找到匹配 '${pattern}' 的文件`, error: null };
+  }
 
-      const itemPath = path.join(dir, item);
-      const relativePath = path.relative(baseDir, itemPath);
-      const stat = fs.statSync(itemPath);
+  const resultLines = [`找到 ${matches.length} 个匹配 '${pattern}' 的结果：\n`];
+  for (const m of matches) {
+    const icon = m.is_dir ? '📁' : '📄';
+    const sizeStr = m.is_dir ? '' : ` (${formatFileSize(m.size!)})`;
+    resultLines.push(`  ${icon} ${m.path}${sizeStr}`);
+  }
 
-      if (stat.isDirectory()) {
-        walk(itemPath, baseDir);
-      } else if (stat.isFile()) {
-        searchInFile(itemPath, relativePath.replace(/\\/g, '/'));
-      }
-    }
-  };
+  return { result: resultLines.join('\n'), error: null };
+}
 
-  walk(workspaceDir, workspaceDir);
-
-  return { result: results, error: null };
+function fnmatch(pattern: string, name: string): boolean {
+  const regexStr = pattern
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*')
+    .replace(/\?/g, '.');
+  return new RegExp(`^${regexStr}$`).test(name);
 }
 
 async function executeGlobFiles(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
@@ -139,7 +144,7 @@ async function executeGlobFiles(args: Record<string, unknown>, context: ToolExec
     return { result: null, error: '缺少 pattern 参数' };
   }
 
-  const workspaceDir = getWorkspaceDir(context.workspace_id);
+  const workspaceDir = workspaceService.getWorkspaceDir(context.workspace_id);
   if (!workspaceDir) {
     return { result: null, error: `Workspace not found: ${context.workspace_id}` };
   }
@@ -150,10 +155,6 @@ async function executeGlobFiles(args: Record<string, unknown>, context: ToolExec
 
   const results: string[] = [];
   const maxResults = (args.max_results as number) || 100;
-
-  const patternParts = pattern.split('*');
-  const startsWith = patternParts[0];
-  const endsWith = patternParts.length > 1 ? patternParts[patternParts.length - 1] : '';
 
   const walk = (dir: string, baseDir: string) => {
     if (results.length >= maxResults) return;
@@ -170,21 +171,7 @@ async function executeGlobFiles(args: Record<string, unknown>, context: ToolExec
       if (stat.isDirectory()) {
         walk(itemPath, baseDir);
       } else if (stat.isFile()) {
-        let matches = false;
-
-        if (pattern === '*') {
-          matches = true;
-        } else if (pattern.startsWith('*') && pattern.endsWith('*')) {
-          matches = item.includes(patternParts[1]);
-        } else if (pattern.startsWith('*')) {
-          matches = item.endsWith(endsWith);
-        } else if (pattern.endsWith('*')) {
-          matches = item.startsWith(startsWith);
-        } else {
-          matches = item === pattern;
-        }
-
-        if (matches) {
+        if (fnmatch(pattern.toLowerCase(), item.toLowerCase())) {
           results.push(relativePath);
         }
       }
@@ -196,16 +183,25 @@ async function executeGlobFiles(args: Record<string, unknown>, context: ToolExec
   return { result: results, error: null };
 }
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+function formatFileSize(size: number): string {
+  for (const unit of ['B', 'KB', 'MB', 'GB']) {
+    if (size < 1024) {
+      return `${size.toFixed(1)} ${unit}`;
+    }
+    size /= 1024;
+  }
+  return `${size.toFixed(1)} TB`;
 }
 
 export function registerWorkspaceTools(): void {
   const tools: ToolDefinition[] = [
+    {
+      name: 'list_workspace_files',
+      description: '列出工作区内所有文件和目录。',
+      params: 'list_workspace_files:{}',
+      category: 'workspace',
+      executor: executeListWorkspaceFiles,
+    },
     {
       name: 'get_workspace_info',
       description: '获取当前工作区的基本信息，包括目录路径、文件统计等。',
@@ -222,14 +218,14 @@ export function registerWorkspaceTools(): void {
     },
     {
       name: 'search_files',
-      description: '在工作区内搜索文件内容。使用正则表达式匹配。',
-      params: 'search_files:{"pattern":"(正则表达式)","max_results":"(最大返回数，本参数可不填)"}',
+      description: '在工作区内按文件名模式搜索文件。支持通配符 * 和 ?。',
+      params: 'search_files:{"pattern":"(文件名模式，如 *.ts, test_*)"}',
       category: 'workspace',
       executor: executeSearchFiles,
     },
     {
       name: 'glob_files',
-      description: '使用通配符模式匹配文件名。支持 * 通配符。',
+      description: '使用通配符模式匹配文件名。支持 * 和 ? 通配符。',
       params: 'glob_files:{"pattern":"(如 *.ts, src/*)","max_results":"(最大返回数，本参数可不填)"}',
       category: 'workspace',
       executor: executeGlobFiles,

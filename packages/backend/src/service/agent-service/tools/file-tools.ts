@@ -2,31 +2,25 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from './types';
 import { toolRegistry } from './registry';
-import { resolveWorkspacePathStrict, getWorkspaceDir } from './executors';
+import { getWorkspaceDir } from './executors';
 
-async function executeReadFile(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.file_path || args.path) as string;
-  if (!relativePath) {
+async function executeReadFile(args: Record<string, unknown>, _context: ToolExecutionContext): Promise<ToolResult> {
+  const filePath = (args.file_path || args.path) as string;
+  if (!filePath) {
     return { result: null, error: '缺少 file_path 参数' };
   }
 
-  const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-  if (!resolved.valid) {
-    return { result: null, error: resolved.error };
-  }
-
-  const filePath = resolved.path!;
   const encoding = (args.encoding as BufferEncoding) || 'utf-8';
   const startLine = (args.start_line as number) || 1;
   const endLine = args.end_line as number | undefined;
 
   try {
     if (!fs.existsSync(filePath)) {
-      return { result: null, error: `文件不存在: ${relativePath}` };
+      return { result: null, error: `文件不存在: ${filePath}` };
     }
 
     if (!fs.statSync(filePath).isFile()) {
-      return { result: null, error: `路径不是文件: ${relativePath}` };
+      return { result: null, error: `路径不是文件: ${filePath}` };
     }
 
     const content = fs.readFileSync(filePath, encoding);
@@ -44,18 +38,12 @@ async function executeReadFile(args: Record<string, unknown>, context: ToolExecu
   }
 }
 
-async function executeWriteFile(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.file_path || args.path) as string;
-  if (!relativePath) {
+async function executeWriteFile(args: Record<string, unknown>, _context: ToolExecutionContext): Promise<ToolResult> {
+  const filePath = (args.file_path || args.path) as string;
+  if (!filePath) {
     return { result: null, error: '缺少 file_path 参数' };
   }
 
-  const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-  if (!resolved.valid) {
-    return { result: null, error: resolved.error };
-  }
-
-  const filePath = resolved.path!;
   const content = (args.content as string) || '';
   const mode = (args.mode as string) || 'write';
   const encoding = (args.encoding as BufferEncoding) || 'utf-8';
@@ -69,39 +57,32 @@ async function executeWriteFile(args: Record<string, unknown>, context: ToolExec
     const writeMode = mode === 'append' ? 'a' : 'w';
     fs.writeFileSync(filePath, content, { encoding, flag: writeMode });
 
-    return { result: `文件写入成功: ${relativePath}`, error: null };
+    return { result: `文件写入成功: ${filePath}`, error: null };
   } catch (err) {
     return { result: null, error: String(err) };
   }
 }
 
-async function executeDeleteFile(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.file_path || args.path) as string;
-  if (!relativePath) {
+async function executeDeleteFile(args: Record<string, unknown>, _context: ToolExecutionContext): Promise<ToolResult> {
+  const filePath = (args.file_path || args.path) as string;
+  if (!filePath) {
     return { result: null, error: '缺少 file_path 参数' };
   }
 
-  const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-  if (!resolved.valid) {
-    return { result: null, error: resolved.error };
-  }
-
-  const filePath = resolved.path!;
-
   try {
     if (!fs.existsSync(filePath)) {
-      return { result: null, error: `路径不存在: ${relativePath}` };
+      return { result: null, error: `路径不存在: ${filePath}` };
     }
 
     const stat = fs.statSync(filePath);
     if (stat.isFile()) {
       fs.unlinkSync(filePath);
-      return { result: `文件删除成功: ${relativePath}`, error: null };
+      return { result: `文件删除成功: ${filePath}`, error: null };
     } else if (stat.isDirectory()) {
       fs.rmSync(filePath, { recursive: true, force: true });
-      return { result: `目录删除成功: ${relativePath}`, error: null };
+      return { result: `目录删除成功: ${filePath}`, error: null };
     } else {
-      return { result: null, error: `未知类型: ${relativePath}` };
+      return { result: null, error: `未知类型: ${filePath}` };
     }
   } catch (err) {
     return { result: null, error: String(err) };
@@ -109,34 +90,25 @@ async function executeDeleteFile(args: Record<string, unknown>, context: ToolExe
 }
 
 async function executeListDir(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.directory || args.path || '.') as string;
-  const recursive = (args.recursive as boolean) || false;
+  const dirPath = (args.directory || args.path) as string;
 
   const workspaceDir = getWorkspaceDir(context.workspace_id);
   if (!workspaceDir) {
     return { result: null, error: `Workspace not found: ${context.workspace_id}` };
   }
 
-  let targetDir: string;
-  if (relativePath === '.' || relativePath === '') {
-    targetDir = workspaceDir;
-  } else {
-    const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-    if (!resolved.valid) {
-      return { result: null, error: resolved.error };
-    }
-    targetDir = resolved.path!;
-  }
+  const targetDir = dirPath || workspaceDir;
 
   try {
     if (!fs.existsSync(targetDir)) {
-      return { result: null, error: `目录不存在: ${relativePath}` };
+      return { result: null, error: `目录不存在: ${dirPath || '.'}` };
     }
 
     if (!fs.statSync(targetDir).isDirectory()) {
-      return { result: null, error: `路径不是目录: ${relativePath}` };
+      return { result: null, error: `路径不是目录: ${dirPath || '.'}` };
     }
 
+    const recursive = (args.recursive as boolean) || false;
     const resultLines: string[] = [];
 
     if (recursive) {
@@ -170,22 +142,15 @@ async function executeListDir(args: Record<string, unknown>, context: ToolExecut
   }
 }
 
-async function executeCreateDir(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.directory || args.path) as string;
-  if (!relativePath) {
+async function executeCreateDir(args: Record<string, unknown>, _context: ToolExecutionContext): Promise<ToolResult> {
+  const dirPath = (args.directory || args.path) as string;
+  if (!dirPath) {
     return { result: null, error: '缺少 directory 参数' };
   }
 
-  const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-  if (!resolved.valid) {
-    return { result: null, error: resolved.error };
-  }
-
-  const dirPath = resolved.path!;
-
   try {
     fs.mkdirSync(dirPath, { recursive: true });
-    return { result: `目录创建成功: ${relativePath}`, error: null };
+    return { result: `目录创建成功: ${dirPath}`, error: null };
   } catch (err) {
     return { result: null, error: String(err) };
   }

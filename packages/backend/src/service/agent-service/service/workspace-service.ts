@@ -238,6 +238,58 @@ class WorkspaceServiceImpl {
     }
   }
 
+  listFiles(workspaceId: string): { success: boolean; files: Array<{ name: string; path: string; is_dir: boolean; size: number; modified_at: string }>; error: string } {
+    const workspaceDir = this.getWorkspaceDir(workspaceId);
+    if (!workspaceDir) {
+      return { success: false, files: [], error: `工作区不存在: ${workspaceId}` };
+    }
+
+    if (!fs.existsSync(workspaceDir)) {
+      return { success: true, files: [], error: '' };
+    }
+
+    const files: Array<{ name: string; path: string; is_dir: boolean; size: number; modified_at: string }> = [];
+
+    try {
+      const walk = (dir: string) => {
+        const entries = fs.readdirSync(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          const fullPath = path.join(dir, entry.name);
+          const relPath = path.relative(workspaceDir, fullPath).replace(/\\/g, '/');
+          const stat = fs.statSync(fullPath);
+          if (entry.isDirectory()) {
+            files.push({
+              name: entry.name,
+              path: relPath,
+              is_dir: true,
+              size: 0,
+              modified_at: stat.mtime.toISOString(),
+            });
+            walk(fullPath);
+          } else {
+            files.push({
+              name: entry.name,
+              path: relPath,
+              is_dir: false,
+              size: stat.size,
+              modified_at: stat.mtime.toISOString(),
+            });
+          }
+        }
+      };
+      walk(workspaceDir);
+
+      files.sort((a, b) => {
+        if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1;
+        return a.path.toLowerCase().localeCompare(b.path.toLowerCase());
+      });
+
+      return { success: true, files, error: '' };
+    } catch (e) {
+      return { success: false, files: [], error: `列出文件失败: ${String(e)}` };
+    }
+  }
+
   listSessions(): Record<string, string[]> {
     const sessions: Record<string, string[]> = {};
     for (const [wid, info] of this.workspaces) {

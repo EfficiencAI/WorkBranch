@@ -2,7 +2,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { ToolDefinition, ToolResult, ToolExecutionContext } from './types';
 import { toolRegistry } from './registry';
-import { resolveWorkspacePathStrict } from './executors';
 
 interface DocumentMetadata {
   file_type: string;
@@ -145,29 +144,23 @@ async function readExcel(
   }
 }
 
-async function executeReadDocument(args: Record<string, unknown>, context: ToolExecutionContext): Promise<ToolResult> {
-  const relativePath = (args.file_path || args.path) as string;
+async function executeReadDocument(args: Record<string, unknown>, _context: ToolExecutionContext): Promise<ToolResult> {
+  const filePath = (args.file_path || args.path) as string;
   
-  if (!relativePath) {
+  if (!filePath) {
     return { result: null, error: '缺少 file_path 参数' };
   }
   
-  const resolved = resolveWorkspacePathStrict(context.workspace_id, relativePath);
-  if (!resolved.valid) {
-    return { result: null, error: resolved.error };
-  }
-  
-  const filePath = resolved.path!;
   const startIdx = (args.start_idx as number) || 0;
   const maxLength = (args.max_length as number) || 10000;
   const includeMetadata = (args.include_metadata as boolean) ?? true;
   
   if (!fs.existsSync(filePath)) {
-    return { result: null, error: `文件不存在: ${relativePath}` };
+    return { result: null, error: `文件不存在: ${filePath}` };
   }
   
   if (!fs.statSync(filePath).isFile()) {
-    return { result: null, error: `路径不是文件: ${relativePath}` };
+    return { result: null, error: `路径不是文件: ${filePath}` };
   }
   
   const ext = path.extname(filePath).toLowerCase();
