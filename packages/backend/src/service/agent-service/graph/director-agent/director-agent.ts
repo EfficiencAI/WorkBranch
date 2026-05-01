@@ -434,6 +434,44 @@ const PLAN_MODE_SYSTEM_PROMPT = `你现在的职责是作为规划代理，围�
 5. 约束要具体，避免执行时产生歧义
 `;
 
+function hasImageParts(parts: unknown[]): boolean {
+  if (!parts || !Array.isArray(parts)) return false;
+  return parts.some((p: any) => {
+    if (!p || typeof p !== 'object') return false;
+    const type = (p as Record<string, unknown>).type;
+    return type === 'image' || type === 'image_url';
+  });
+}
+
+function shouldUseNativeMultimodalChat(state: AgentState): boolean {
+  const currentAgentType = state.agent_type || 'director_agent';
+  if (currentAgentType !== 'director_agent') return false;
+  const userMessageParts = state.current_user_message_parts || [];
+  return hasImageParts(userMessageParts as unknown[]);
+}
+
+function buildNativeMultimodalChatTask(state: AgentState): Partial<AgentState> {
+  const userMessage = state.current_user_message_text || getLastUserMessageText(state);
+  const userMessageParts = state.current_user_message_parts || [];
+  const chatTask = userMessage || '请直接分析这张图片并回答用户。';
+  const toolArgs: Record<string, unknown> = {
+    description: chatTask,
+    multimodal_parts: userMessageParts,
+  };
+
+  return {
+    pending_tools: [{ tool: 'chat', args: toolArgs }],
+    has_tool_use: true,
+    next_action: {
+      kind: 'tool',
+      tool_name: 'chat',
+      tool_args: toolArgs,
+      task_description: chatTask,
+    } as NextAction,
+    mode_reason: '检测到图片输入，DIRECT 模式直接走原生多模态 chat',
+  };
+}
+
 export function createDecideNode(messageContext?: MessageContext) {
   return async (state: AgentState): Promise<Partial<AgentState>> => {
     const userMessage = getLastUserMessageText(state);
@@ -456,6 +494,11 @@ export function createDecideNode(messageContext?: MessageContext) {
       mode: isPlanMode ? 'PLAN' : 'DIRECT',
       iteration: `${iterationCount + 1}/${maxIterations}`,
     });
+
+    if (!isPlanMode && shouldUseNativeMultimodalChat(state)) {
+      logger.info({ event: 'director.decide.multimodal_detected' });
+      return buildNativeMultimodalChatTask(state);
+    }
 
     if (iterationCount >= maxIterations) {
       const reply = '抱歉，当前任务在限定步骤内未完成。我已经停止继续调用工具，请你细化要求或分步执行。';

@@ -6,6 +6,8 @@ export * from './explore-tools';
 export * from './thinking';
 export * from './document-tools';
 export * from './chat';
+export * from './agent-tools';
+export * from './subagent-tools';
 
 import { registerFileTools } from './file-tools';
 import { registerPlanTools } from './plan-tools';
@@ -13,6 +15,8 @@ import { registerExploreTools } from './explore-tools';
 import { registerThinkingTool } from './thinking';
 import { registerDocumentTools } from './document-tools';
 import { registerChatTool } from './chat';
+import { registerAgentTools } from './agent-tools';
+import { registerSubagentTools } from './subagent-tools';
 import { toolRegistry } from './registry';
 import type { ToolDefinition, ToolExecutionContext, ToolResult } from './types';
 
@@ -35,17 +39,31 @@ function registerSpecialTools(): void {
       executor: noopExecutor,
     },
     {
-      name: 'call_explore_agent',
-      description: '调用探索子代理',
-      params: 'call_explore_agent:{"task_description":"(交给探索子代理的任务描述)"}',
-      category: 'agent',
+      name: 'enter_plan_mode',
+      description: '进入规划模式',
+      params: 'enter_plan_mode:{"task_description":"(任务描述)","max_steps":5}',
+      category: 'plan',
       executor: noopExecutor,
     },
     {
-      name: 'call_review_agent',
-      description: '调用审查子代理',
-      params: 'call_review_agent:{"task_description":"(交给审查子代理的任务描述)"}',
-      category: 'agent',
+      name: 'exit_plan_mode',
+      description: '退出规划模式',
+      params: 'exit_plan_mode:{}',
+      category: 'plan',
+      executor: noopExecutor,
+    },
+    {
+      name: 'update_plan',
+      description: '更新执行计划',
+      params: 'update_plan:{"tasks":[{"description":"(步骤描述)","tool":"(工具名)","args":{}}]}',
+      category: 'plan',
+      executor: noopExecutor,
+    },
+    {
+      name: 'execute_plan',
+      description: '执行当前计划',
+      params: 'execute_plan:{}',
+      category: 'plan',
       executor: noopExecutor,
     },
   ];
@@ -61,5 +79,7 @@ export function initializeTools(): void {
   registerThinkingTool();
   registerDocumentTools();
   registerChatTool();
+  registerAgentTools();
+  registerSubagentTools();
   registerSpecialTools();
 }

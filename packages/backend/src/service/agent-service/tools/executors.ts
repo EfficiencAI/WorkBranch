@@ -1,6 +1,8 @@
 import type { ToolResult, ToolExecutionContext } from './types';
 import { toolRegistry } from './registry';
 import { workspaceService } from '../service/workspace-service';
+import { SegmentType } from '../../session-service/canonical';
+import { writeToolEvent, isSpecialTool } from '../graph/subgraphs/tool-registry';
 import { logger } from '../../../core/logging';
 import * as path from 'path';
 
@@ -33,6 +35,9 @@ const DANGEROUS_TOOLS = new Set([
   'execute_command',
   'modify_system',
 ]);
+
+const TOOL_EXECUTION_TIMEOUT_MS = 30000;
+const SPECIAL_TOOL_TIMEOUT_MS = 120000;
 
 export function resolveWorkspacePath(workspaceId: string, relativePath: string): { valid: boolean; path?: string; error?: string } {
   const workspaceDir = workspaceService.getWorkspaceDir(workspaceId);
@@ -116,6 +121,38 @@ export function checkPermission(
   return { permission: 'allow' };
 }
 
+function buildToolFailureResult(
+  toolName: string,
+  error: string,
+  options?: {
+    messageContext?: Record<string, unknown>;
+    conversationId?: string;
+    taskDescription?: string;
+  },
+): ToolResult {
+  if (options?.messageContext) {
+    const sendMessage = options.messageContext.send_message as
+      ((content: string, type: SegmentType, metadata?: Record<string, unknown>) => Promise<void>) | undefined;
+    if (sendMessage && !isSpecialTool(toolName)) {
+      sendMessage('', SegmentType.TOOL_RES, {
+        tool_name: toolName,
+        result: null,
+        error,
+        success: false,
+      }).catch(() => {});
+    }
+  }
+
+  writeToolEvent(
+    options?.conversationId,
+    toolName,
+    'failed',
+    { taskDescription: options?.taskDescription, error },
+  );
+
+  return { result: null, error };
+}
+
 export class ToolExecutor {
   private currentMode: 'normal' | 'plan' = 'normal';
   private currentPlan: Array<{ description: string; tool?: string; args?: Record<string, unknown> }> = [];
@@ -123,7 +160,8 @@ export class ToolExecutor {
   async execute(
     toolName: string,
     args: Record<string, unknown>,
-    context: ToolExecutionContext
+    context: ToolExecutionContext,
+    messageContext?: Record<string, unknown>,
   ): Promise<ToolResult> {
     logger.info({
       event: 'tool.execute.started',
@@ -131,6 +169,11 @@ export class ToolExecutor {
       workspace_id: context.workspace_id,
       agent_type: context.agent_type,
     });
+
+    const sendMessage = messageContext?.send_message as
+      ((content: string, type: SegmentType, metadata?: Record<string, unknown>) => Promise<void>) | undefined;
+    const conversationId = messageContext?.conversation_id as string | undefined;
+    const taskDescription = args.task_description as string || args.description as string || '';
 
     try {
       if (PLAN_MODE_TOOLS.has(toolName)) {
@@ -149,6 +192,16 @@ export class ToolExecutor {
         return this.executeModeSwitchTool(toolName, args);
       }
 
+      if (sendMessage && !isSpecialTool(toolName)) {
+        await sendMessage('', SegmentType.TOOL_CALL, {
+          tool_name: toolName,
+          tool_args: args,
+          task_description: taskDescription,
+        });
+      }
+
+      writeToolEvent(conversationId, toolName, 'started', { taskDescription });
+
       const tool = toolRegistry.get(toolName);
 
       if (!tool) {
@@ -158,12 +211,54 @@ export class ToolExecutor {
           tool_name: toolName,
           error,
         });
-        return { result: null, error };
+        return buildToolFailureResult(toolName, error, {
+          messageContext,
+          conversationId,
+          taskDescription,
+        });
       }
 
       const resolvedArgs = this.resolveToolArgs(toolName, args, context);
 
-      const result = await tool.executor(resolvedArgs, context);
+      const timeoutMs = isSpecialTool(toolName) ? SPECIAL_TOOL_TIMEOUT_MS : TOOL_EXECUTION_TIMEOUT_MS;
+      const result = await this.executeWithTimeout(tool.executor(resolvedArgs, context), timeoutMs, toolName);
+
+      if (sendMessage && !isSpecialTool(toolName)) {
+        const resultContent = result.result;
+        let resultPreview = '';
+        if (resultContent !== null && resultContent !== undefined) {
+          resultPreview = String(resultContent);
+          if (resultPreview.length > 500) {
+            resultPreview = resultPreview.slice(0, 500) + '...';
+          }
+        }
+        await sendMessage('', SegmentType.TOOL_RES, {
+          tool_name: toolName,
+          result: resultPreview,
+          error: result.error,
+          success: result.error === null,
+        });
+      }
+
+      if (result.error === null) {
+        writeToolEvent(conversationId, toolName, 'completed', {
+          taskDescription,
+          result: result.result ? String(result.result).slice(0, 200) : '',
+        });
+      } else {
+        writeToolEvent(conversationId, toolName, 'failed', {
+          taskDescription,
+          error: result.error,
+        });
+      }
+
+      if (result.error === null) {
+        if (result.result === null || result.result === undefined) {
+          result.result = '[工具没有返回内容]';
+        } else if (result.result === '') {
+          result.result = '[工具返回内容为空]';
+        }
+      }
 
       logger.info({
         event: 'tool.execute.completed',
@@ -179,7 +274,32 @@ export class ToolExecutor {
         tool_name: toolName,
         error,
       });
-      return { result: null, error };
+      return buildToolFailureResult(toolName, error, {
+        messageContext,
+        conversationId,
+        taskDescription,
+      });
+    }
+  }
+
+  private async executeWithTimeout(
+    promise: Promise<ToolResult>,
+    timeoutMs: number,
+    toolName: string,
+  ): Promise<ToolResult> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      return await promise;
+    } catch (err) {
+      if (controller.signal.aborted) {
+        logger.error({ event: 'tool.execute.timeout', tool_name: toolName, timeout_ms: timeoutMs });
+        return { result: null, error: `工具 ${toolName} 执行超时（${timeoutMs / 1000}秒）` };
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 

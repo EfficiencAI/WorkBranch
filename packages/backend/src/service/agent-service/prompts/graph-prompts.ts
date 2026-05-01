@@ -249,7 +249,7 @@ export function formatTodoPromptBlock(todos: string[], currentTodoIndex: number)
   return lines.join('\n');
 }
 
-export function getPlanSystemPrompt(agentType: string = 'director_agent'): string {
+export function getPlanSystemPrompt(_agentType: string = 'director_agent'): string {
   return PLAN_SYSTEM_PROMPT_BASE;
 }
 
@@ -259,7 +259,7 @@ export function buildIntentAnalysisMessages(
   currentConversationMessages: Array<Record<string, unknown>>,
 ): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
   const systemPrompt = INTENT_ANALYSIS_PROMPT.replace('{tool_prompt}', '');
-  const prompt = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
+  let prompt = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
   prompt += '\n请分析以上用户当前问题的意图。';
   return { systemPrompt, messages: [{ role: 'user', content: prompt }] };
 }

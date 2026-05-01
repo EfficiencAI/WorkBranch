@@ -1,8 +1,9 @@
-import type { AgentState } from '../state/agent-state';
+import type { AgentState, ToolCall } from '../state/agent-state';
 import type { MessageContext } from './director-agent/director-agent';
 import { runDirectorGraph } from './director-agent/director-agent';
 import { SegmentType } from '../../session-service/canonical';
 import { llmService } from '../service/llm-service';
+import { persistence } from './orchestrator-v2';
 import { logger } from '../../../core/logging';
 
 const SUBAGENT_TIMEOUT_MS = 45000;
@@ -72,6 +73,23 @@ export function buildAgentOutcome(agentType: string, finalState: AgentState): Ag
   };
 }
 
+const AGENT_GRAPH_CONFIG: Record<string, { execution_mode: string | null }> = {
+  director_agent: { execution_mode: null },
+  explore_agent: { execution_mode: 'DIRECT' },
+  review_agent: { execution_mode: 'DIRECT' },
+  plan_agent: { execution_mode: 'PLAN' },
+};
+
+function buildDefaultTools(agentType: string, userMessage: string): ToolCall[] {
+  if (agentType === 'explore_agent' || agentType === 'review_agent') {
+    return [
+      { tool: 'thinking', args: { description: userMessage } },
+      { tool: 'chat', args: { description: userMessage } },
+    ];
+  }
+  return [];
+}
+
 const EXPLORE_AGENT_PROMPT = '你是一个专业的代码探索代理。你的任务是帮助用户探索和分析代码库或搜索互联网信息。\n\n请根据任务描述，给出清晰的分析结果。';
 
 const REVIEW_AGENT_PROMPT = '你是一个专业的代码审查代理。你的任务是审查代码质量、发现潜在问题并提供改进建议。\n\n审查要点：\n1. 代码质量和可读性\n2. 潜在的 bug 和错误\n3. 性能问题\n4. 安全隐患\n5. 最佳实践建议\n\n请根据任务描述，仔细审查并给出专业的审查意见。';
@@ -124,6 +142,40 @@ async function runChildAgentLoop(
   return result;
 }
 
+function buildInitialChildState(
+  userMessage: string,
+  workspaceId: string,
+  agentType: string,
+  parentChainMessages?: Array<Record<string, unknown>>,
+  currentConversationMessages?: Array<Record<string, unknown>>,
+): AgentState {
+  return {
+    messages: [{ role: 'user', content: userMessage }],
+    current_user_message_text: userMessage,
+    workspace_id: workspaceId,
+    plan: [],
+    current_step: 0,
+    results: [],
+    plan_failed: false,
+    tool_history: [],
+    replan_count: 0,
+    agent_type: agentType,
+    is_root_graph: false,
+    parent_chain_messages: parentChainMessages || [],
+    current_conversation_messages: currentConversationMessages || [],
+    execution_mode: 'DIRECT',
+    pending_tools: buildDefaultTools(agentType, userMessage),
+    has_tool_use: true,
+    final_reply: '',
+    iteration_count: 0,
+    max_iterations: 32,
+    todos: [],
+    current_todo_index: 0,
+    todo_max_iterations: 32,
+    invalid_tool_retry_count: 0,
+  };
+}
+
 export async function runAgentGraph(
   agentType: string,
   userMessage: string,
@@ -132,17 +184,46 @@ export async function runAgentGraph(
   parentChainMessages?: Array<Record<string, unknown>>,
   currentConversationMessages?: Array<Record<string, unknown>>,
   forcedExecutionMode?: 'DIRECT' | 'PLAN',
+  persistState: boolean = false,
 ): Promise<AgentOutcome> {
   logger.info({
     event: 'agent_graph.started',
     agent_type: agentType,
     workspace_id: workspaceId,
+    persist_state: persistState,
   });
 
   try {
+    const config = AGENT_GRAPH_CONFIG[agentType] || AGENT_GRAPH_CONFIG['director_agent'];
     let finalState: AgentState;
 
     if (agentType === 'explore_agent' || agentType === 'review_agent') {
+      let initialState: AgentState;
+
+      if (persistState) {
+        const savedState = persistence.load(workspaceId) as AgentState | null;
+        if (savedState) {
+          initialState = {
+            ...savedState,
+            messages: [...(savedState.messages || []), { role: 'user', content: userMessage }],
+            current_user_message_text: userMessage,
+          };
+        } else {
+          initialState = buildInitialChildState(userMessage, workspaceId, agentType, parentChainMessages, currentConversationMessages);
+        }
+      } else {
+        initialState = buildInitialChildState(userMessage, workspaceId, agentType, parentChainMessages, currentConversationMessages);
+      }
+
+      if (config.execution_mode) {
+        initialState.execution_mode = config.execution_mode as 'DIRECT' | 'PLAN';
+        initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
+        if (!initialState.pending_tools?.length) {
+          initialState.pending_tools = buildDefaultTools(agentType, userMessage);
+          initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
+        }
+      }
+
       const executeWithTimeout = async (): Promise<string> => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), SUBAGENT_TIMEOUT_MS);
@@ -156,32 +237,13 @@ export async function runAgentGraph(
       };
 
       const result = await executeWithTimeout();
+      initialState.final_reply = result;
 
-      finalState = {
-        messages: [{ role: 'user', content: userMessage }],
-        current_user_message_text: userMessage,
-        workspace_id: workspaceId,
-        plan: [],
-        current_step: 0,
-        results: [],
-        plan_failed: false,
-        tool_history: [],
-        replan_count: 0,
-        agent_type: agentType,
-        is_root_graph: false,
-        parent_chain_messages: parentChainMessages || [],
-        current_conversation_messages: currentConversationMessages || [],
-        execution_mode: 'DIRECT',
-        pending_tools: [],
-        has_tool_use: false,
-        final_reply: result,
-        iteration_count: 0,
-        max_iterations: 32,
-        todos: [],
-        current_todo_index: 0,
-        todo_max_iterations: 32,
-        invalid_tool_retry_count: 0,
-      };
+      if (persistState) {
+        persistence.save(workspaceId, initialState as unknown as Record<string, unknown>);
+      }
+
+      finalState = initialState;
     } else {
       finalState = await runDirectorGraph(
         userMessage,
@@ -192,6 +254,10 @@ export async function runAgentGraph(
         agentType,
         forcedExecutionMode,
       );
+
+      if (persistState) {
+        persistence.save(workspaceId, finalState as unknown as Record<string, unknown>);
+      }
     }
 
     const outcome = buildAgentOutcome(agentType, finalState);

@@ -15,6 +15,8 @@ export enum SegmentType {
   STATE_CHANGE = 'state_change',
   TOOL_CALL = 'tool_call',
   TOOL_RES = 'tool_res',
+  COMPRESSION_START = 'compression_start',
+  COMPRESSION_END = 'compression_end',
   ERROR = 'error',
   DONE = 'done',
 }
