@@ -482,17 +482,17 @@ export class ToolExecutor {
 
   private executeModeSwitchTool(toolName: string, args: Record<string, unknown>): ToolResult {
     if (toolName === 'switch_execution_mode') {
-      const mode = (args['mode'] as string || '').toLowerCase();
+      const mode = (args['mode'] as string || '').toUpperCase();
       const reason = args['reason'] as string || 'agent 决定切换执行模式';
 
-      if (mode !== 'plan' && mode !== 'direct') {
+      if (mode !== 'PLAN' && mode !== 'DIRECT') {
         return { result: null, error: `无效的 mode: ${mode}` };
       }
 
       return {
         result: `已切换执行模式为 ${mode}`,
         error: null,
-        execution_mode: mode as 'plan' | 'direct',
+        execution_mode: mode as 'PLAN' | 'DIRECT',
         mode_reason: reason,
       } as ToolResult & { execution_mode: string; mode_reason: string };
     }

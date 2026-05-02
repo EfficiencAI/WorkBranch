@@ -17,6 +17,8 @@ export interface ToolExecutionResult {
   args: Record<string, unknown>;
   result: unknown;
   error: string | null;
+  execution_mode?: string;
+  mode_reason?: string;
 }
 
 export interface RunToolExecutionParams {
@@ -319,6 +321,8 @@ export async function runToolExecution(params: RunToolExecutionParams): Promise<
     args: toolArgs,
     result: result.result,
     error: result.error || null,
+    execution_mode: result.execution_mode || undefined,
+    mode_reason: result.mode_reason || undefined,
   };
 }
 
