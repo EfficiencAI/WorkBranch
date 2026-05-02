@@ -154,32 +154,14 @@ function createExecuteNode(messageContext?: Record<string, unknown>) {
 
       if (targetPath) {
         const resolved = workspaceService.resolvePath(workspaceId, targetPath);
-        if (resolved.valid && resolved.path) {
-          if (pathKey in toolArgs) {
-            toolArgs['path'] = resolved.path;
-          } else if ('file_path' in toolArgs) {
-            toolArgs['file_path'] = resolved.path;
-          } else if ('directory' in toolArgs) {
-            toolArgs['directory'] = resolved.path;
-          }
-          logger.info({ event: 'tool_execution.path_resolved', tool_name: toolName, resolved_path: resolved.path });
-        } else {
-          logger.error({ event: 'tool_execution.path_resolve_failed', tool_name: toolName, error: resolved.error });
+        if (!resolved.valid) {
+          logger.error({ event: 'tool_execution.path_validate_failed', tool_name: toolName, error: resolved.error });
           return {
             result: null,
-            error: resolved.error || '路径解析失败',
+            error: resolved.error || '路径验证失败',
           } as Partial<ToolExecutionState>;
         }
-      } else if (toolName === 'list_dir' || toolName === 'create_dir') {
-        const workspaceRoot = workspaceService.getWorkspaceDir(workspaceId);
-        if (!workspaceRoot) {
-          return {
-            result: null,
-            error: `工作区不存在: ${workspaceId}`,
-          } as Partial<ToolExecutionState>;
-        }
-        toolArgs['directory'] = workspaceRoot;
-        logger.info({ event: 'tool_execution.default_workspace_root', tool_name: toolName, workspace_root: workspaceRoot });
+        logger.info({ event: 'tool_execution.path_validated', tool_name: toolName, raw_path: targetPath });
       }
     }
 
