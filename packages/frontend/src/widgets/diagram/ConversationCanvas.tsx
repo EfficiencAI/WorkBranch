@@ -802,27 +802,8 @@ function FlowViewport({
   }, [focusedConversationId, getNodeScreenRect])
 
   const focusMetrics = useMemo(() => {
-    if (!focusedConversation) {
-      return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
-    }
-
-    const focusZoom = 0.82
-    const viewportPixelWidth = viewportRef.current?.clientWidth ?? window.innerWidth
-    const viewportPixelHeight = viewportRef.current?.clientHeight ?? window.innerHeight
-    const composerHeight = composerRef.current?.clientHeight ?? 0
-    const graphViewportWidth = viewportPixelWidth / focusZoom
-    const graphViewportHeight = Math.max(220, (viewportPixelHeight - composerHeight) / focusZoom)
-    const cardWidth = graphViewportWidth * 0.95
-    const bodyHeight = cardWidth * (graphViewportHeight / graphViewportWidth) * 0.9
-
-    return {
-      cardWidth,
-      bodyHeight,
-      centerYOffset: 0,
-      visualWidth: cardWidth,
-      visualHeight: bodyHeight,
-    }
-  }, [focusedConversation, viewportWidth])
+    return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
+  }, [])
 
   const previewMetrics = useMemo(() => {
     const baseWidth = viewportWidth <= 640 ? 280 : 320
@@ -925,19 +906,14 @@ function FlowViewport({
 
     const timeoutId = window.setTimeout(() => {
       const position = resolveConversationPosition(focusedConversation, overviewLayoutMap)
-      const focusZoom = 0.82
-      const composerHeight = composerRef.current?.clientHeight ?? 0
-      const centerX = position.x
-      const centerY = position.y + (composerHeight / focusZoom) / 4
-      void reactFlow.setCenter(centerX, centerY, {
-        zoom: focusZoom,
+      void reactFlow.setCenter(position.x, position.y, {
         duration: 420,
         ease: (value) => 1 - Math.pow(1 - value, 3),
       })
     }, 50)
 
     return () => window.clearTimeout(timeoutId)
-  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow, focusMetrics])
+  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow])
 
   useEffect(() => {
     if (!focusedConversation && !halfPreviewConversation) {
@@ -1059,8 +1035,8 @@ function FlowViewport({
         nodeTypes={nodeTypes}
         fitView
         panOnDrag={true}
-        zoomOnScroll={!focusedConversation}
-        zoomOnPinch={!focusedConversation}
+        zoomOnScroll
+        zoomOnPinch
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
