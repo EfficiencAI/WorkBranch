@@ -83,15 +83,13 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const navExpanded = !responsive.isMobile && (peekNav || activeSidebar !== null)
   const isFocused = focusedConversationId !== null
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
-  const navClassName = responsive.isMobile
-    ? 'diagram-shell__nav diagram-shell__nav--mobile'
-    : isFocused
-      ? 'diagram-shell__nav diagram-shell__nav--focused'
-      : activeSidebar
-        ? 'diagram-shell__nav diagram-shell__nav--open'
-        : navExpanded
-          ? 'diagram-shell__nav diagram-shell__nav--peek'
-          : 'diagram-shell__nav'
+  const navClassName = [
+    'diagram-shell__nav',
+    responsive.isMobile ? 'diagram-shell__nav--mobile' : null,
+    isFocused ? 'diagram-shell__nav--focused' : null,
+    !isFocused && activeSidebar ? 'diagram-shell__nav--open' : null,
+    !isFocused && !activeSidebar && navExpanded ? 'diagram-shell__nav--peek' : null,
+  ].filter(Boolean).join(' ')
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,

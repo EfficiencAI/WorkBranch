@@ -1035,6 +1035,7 @@ function FlowViewport({
         nodeTypes={nodeTypes}
         fitView
         panOnDrag={true}
+        panOnScroll={false}
         zoomOnScroll
         zoomOnPinch
         zoomOnDoubleClick={false}
