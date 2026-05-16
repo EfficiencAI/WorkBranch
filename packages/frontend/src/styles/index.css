@@ -164,8 +164,8 @@ button {
 
 .diagram-shell__nav {
   position: fixed;
-  top: 18px;
-  left: 18px;
+  top: 1%;
+  left: 1%;
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -187,8 +187,49 @@ button {
     box-shadow 240ms ease,
     border-color 240ms ease,
     padding 240ms ease,
-    top 240ms ease,
-    left 240ms ease;
+    top 300ms ease,
+    left 300ms ease,
+    right 300ms ease;
+}
+
+.diagram-shell__exit-focus-overlay {
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  width: auto !important;
+  height: 100% !important;
+  z-index: 50 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: inherit;
+  background: var(--app-panel-bg);
+  padding: 0 !important;
+  border: none !important;
+}
+
+.diagram-shell__exit-focus-overlay:hover {
+  background: var(--app-panel-bg) !important;
+}
+
+.diagram-shell__exit-focus-overlay--hidden {
+  display: none !important;
+}
+
+.diagram-shell__exit-focus-overlay .anticon {
+  font-size: 24px !important;
+  color: #2c3e50 !important;
+  font-weight: 700 !important;
+}
+
+.diagram-shell__exit-focus-overlay:hover .anticon {
+  color: #1a252f !important;
+}
+
+.diagram-shell__nav-trigger--focused {
+  opacity: 0.3;
 }
 
 .diagram-shell__nav--peek {
@@ -207,7 +248,8 @@ button {
 }
 
 .diagram-shell__nav--focused {
-  left: calc(100vw - 76px);
+    left: auto !important;
+    right: 1% !important;
   width: 58px;
   min-height: 58px;
   padding: var(--app-space-1);
@@ -239,6 +281,10 @@ button {
   align-items: center;
   gap: 6px;
   min-height: var(--app-control-height-lg);
+}
+
+.diagram-shell__hidden {
+  display: none !important;
 }
 
 .diagram-shell__nav-trigger-slot {
@@ -695,7 +741,7 @@ button {
 }
 
 .conversation-node__focus-content--focused {
-  padding: 8px;
+  padding: clamp(16px, 2vw, 24px);
 }
 
 .conversation-node__focus-content--half-preview {
@@ -1344,9 +1390,9 @@ button {
 
 @media screen and (max-width: 767px) {
   .diagram-shell__nav {
-    top: 14px;
-    left: 14px;
-    right: 14px;
+    top: 1%;
+    left: 1%;
+    right: 1%;
     width: 58px;
     min-height: 58px;
     padding: 5px;
@@ -1354,7 +1400,7 @@ button {
 
   .diagram-shell__nav--focused {
     left: auto !important;
-    right: 14px;
+    right: 1% !important;
     width: 58px;
     min-height: 58px;
   }
@@ -1738,7 +1784,9 @@ button {
 .focus-overlay__composer {
   flex-shrink: 0;
   margin-top: auto;
-  height: 56px;
+  min-height: 56px;
+  height: auto;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
 }
 
 .focus-overlay__composer .ant-input,

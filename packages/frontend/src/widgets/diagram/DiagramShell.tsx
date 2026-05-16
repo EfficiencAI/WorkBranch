@@ -406,112 +406,38 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           onAutoArrange={handleAutoArrange}
         />
 
-        {responsive.isMobile ? (
-          <>
-            <div className={navClassName}>
-              <div className="diagram-shell__nav-head">
-                <div className="diagram-shell__nav-trigger-slot">
-                  <Button
-                    type="text"
-                    shape="round"
-                    className="diagram-shell__nav-trigger"
-                    aria-label="打开侧边栏"
-                    onClick={() => setActiveSidebar('history')}
-                  >
-                    WB
-                  </Button>
-                </div>
-              </div>
+        <div className={navClassName}>
+          <Button
+            type="text"
+            shape="round"
+            data-testid="exit-focus-button"
+            className={`diagram-shell__exit-focus-overlay ${!isFocused ? 'diagram-shell__exit-focus-overlay--hidden' : ''}`}
+            aria-label="退出聚焦"
+            icon={<CloseOutlined />}
+            onClick={() => setFocusedConversationId(null)}
+          />
+          <div className="diagram-shell__nav-head">
+            <div className="diagram-shell__nav-trigger-slot">
+              <Button
+                type="text"
+                shape="round"
+                className={`diagram-shell__nav-trigger ${isFocused ? 'diagram-shell__nav-trigger--focused' : ''}`}
+                aria-label="打开侧边栏"
+                onClick={() => setActiveSidebar('history')}
+              >
+                WB
+              </Button>
             </div>
 
-            <Drawer
-              open={activeSidebar !== null}
-              placement="left"
-              width={responsive.navWidth.open}
-              onClose={collapseNav}
-              title={
-                <Space>
-                  <Button
-                    className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                    onClick={() => openSidebar('history')}
-                  >
-                    会话历史
-                  </Button>
-                  <Button
-                    className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                    onClick={() => openSidebar('settings')}
-                  >
-                    设置
-                  </Button>
-                </Space>
-              }
-              className="diagram-shell__drawer"
-            >
-              <div className="diagram-shell__drawer-content">
-                {activeSidebar === 'history' && user ? (
-                  <SessionSidebar
-                    user={user}
-                    sessions={sessions}
-                    selectedSessionId={selectedSessionId}
-                    creatingSession={creatingSession}
-                    deletingSessionId={deletingSessionId}
-                    onCreateSession={handleCreateSession}
-                    onDeleteSession={handleDeleteSession}
-                    onSelectSession={handleSelectSession}
-                  />
-                ) : null}
-
-                {activeSidebar === 'settings' ? (
-                  <div className="diagram-shell__settings">
-                    <SettingsPage embedded />
-                  </div>
-                ) : null}
-              </div>
-            </Drawer>
-          </>
-        ) : (
-          <div
-            className={navClassName}
-            onMouseEnter={() => {
-              if (!activeSidebar && !isFocused) {
-                setPeekNav(true)
-              }
-            }}
-            onMouseLeave={() => {
-              if (!activeSidebar && !isFocused) {
-                setPeekNav(false)
-              }
-            }}
-          >
-            {isFocused ? (
-              <div className="diagram-shell__nav-head">
-                <Button
-                  type="text"
-                  shape="round"
-                  className="diagram-shell__exit-focus-trigger"
-                  aria-label="退出聚焦"
-                  icon={<CloseOutlined />}
-                  onClick={() => setFocusedConversationId(null)}
-                />
-              </div>
-            ) : (
+            {!isFocused && (
               <>
-                <div className="diagram-shell__nav-head">
-                  <div className="diagram-shell__nav-trigger-slot">
-                    <Button
-                      type="text"
-                      shape="round"
-                      className="diagram-shell__nav-trigger"
-                      aria-label="展开或收起图侧边栏"
-                      aria-expanded={navExpanded}
-                      onClick={collapseNav}
-                    >
-                      WB
-                    </Button>
-                  </div>
-
-                  <div className="diagram-shell__nav-actions-slot">
-                    <div className={navExpanded ? 'diagram-shell__nav-actions diagram-shell__nav-actions--visible' : 'diagram-shell__nav-actions'}>
+                <Drawer
+                  open={activeSidebar !== null}
+                  placement="left"
+                  width={responsive.navWidth.open}
+                  onClose={collapseNav}
+                  title={
+                    <Space>
                       <Button
                         className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
                         onClick={() => openSidebar('history')}
@@ -524,12 +450,11 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
                       >
                         设置
                       </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className={activeSidebar ? 'diagram-shell__nav-body diagram-shell__nav-body--visible' : 'diagram-shell__nav-body'}>
-                  <div className="diagram-shell__nav-panel">
+                    </Space>
+                  }
+                  className="diagram-shell__drawer"
+                >
+                  <div className="diagram-shell__drawer-content">
                     {activeSidebar === 'history' && user ? (
                       <SessionSidebar
                         user={user}
@@ -549,11 +474,11 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
                       </div>
                     ) : null}
                   </div>
-                </div>
+                </Drawer>
               </>
             )}
           </div>
-        )}
+        </div>
 
         {showWorkspaceHud ? (
           <div className="diagram-shell__hud">

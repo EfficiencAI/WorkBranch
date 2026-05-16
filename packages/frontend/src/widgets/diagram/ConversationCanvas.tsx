@@ -475,6 +475,19 @@ function FocusOverlay({
         inset: 0,
         zIndex: 100,
         pointerEvents: isActive ? 'auto' : 'none',
+        touchAction: isActive ? 'none' : 'auto',
+      }}
+      onTouchMove={(e) => {
+        if (isActive) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
+      }}
+      onWheel={(e) => {
+        if (isActive) {
+          e.preventDefault()
+          e.stopPropagation()
+        }
       }}
     >
       <div
@@ -498,7 +511,7 @@ function FocusOverlay({
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
-          padding: '24px',
+          padding: 'clamp(16px, 2vw, 24px)',
           opacity: isActive && !isExiting ? 1 : 0,
           transition: `opacity ${FOCUS_OVERLAY_DURATION_MS / 2}ms ease ${FOCUS_OVERLAY_DURATION_MS / 2}ms`,
         }}
@@ -1048,25 +1061,9 @@ function FlowViewport({
             return
           }
 
-          if (responsive.isMobile) {
-            clearInteractionGate()
-            setHalfPreviewConversationId(null)
-            setFocusedConversationId(node.id)
-            return
-          }
-
-          if (interactionGateConversationId === node.id) {
-            clearInteractionGate()
-            setFocusedConversationId(node.id)
-            return
-          }
-
-          if (halfPreviewConversationId === node.id) {
-            return
-          }
-
-          clearHalfPreviewConversationId()
-          startInteractionGate(node.id)
+          clearInteractionGate()
+          setHalfPreviewConversationId(null)
+          setFocusedConversationId(node.id)
         }}
         onNodeDoubleClick={(_, node) => {
           clearInteractionGate()

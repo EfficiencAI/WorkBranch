@@ -46,3 +46,21 @@ platforms/android/scripts/
 packages/backend/workspaces
 
 dev-tools/
+
+# ============================================
+# 🚫 防止调试文件污染（临时测试文件）
+# ============================================
+
+# 手动测试脚本（test-debug.js, test-exit-button.js等）
+test-*.js
+
+# 测试截图（test-mobile-initial.png, test-fail.png等）
+test-*.png
+
+# 调试数据文件（DOM诊断、验证报告等）
+debug-*.json
+verification-*.json
+full-diagnosis.json
+
+# 临时调试输出
+*.tmp.debug.*
