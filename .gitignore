@@ -15,6 +15,7 @@ __pycache__/
 node_modules/
 
 .temp/
+.tmp-debug/
 
 packages/backend/data/*
 logs/

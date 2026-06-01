@@ -16,7 +16,6 @@ import {
   selectCurrentSessionId,
   selectDeletingSessionId,
   selectFocusedConversationId,
-  selectHalfPreviewConversationId,
   selectLockedSendConversationId,
   selectSelectedConversationId,
   selectSessionList,
@@ -59,7 +58,6 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
   const conversationNodes = useChatWorkbenchStore(selectChatWorkbenchConversationNodes)
   const streamingConversationIds = useChatWorkbenchStore(selectChatWorkbenchStreamingConversationIds)
   const focusedConversationId = useTreeStore(selectFocusedConversationId)
-  const halfPreviewConversationId = useTreeStore(selectHalfPreviewConversationId)
   const lockedSendConversationId = useTreeStore(selectLockedSendConversationId)
   const selectedConversationId = useTreeStore(selectSelectedConversationId)
   const selectSession = useSessionStore((state) => state.selectSession)
@@ -103,11 +101,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
     () => conversationNodes.find((node) => node.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
-  const halfPreviewConversation = useMemo(
-    () => conversationNodes.find((node) => node.conversationId === halfPreviewConversationId) ?? null,
-    [conversationNodes, halfPreviewConversationId],
-  )
-  const viewedConversationId = focusedConversationId ?? halfPreviewConversationId ?? selectedConversationId ?? null
+  const viewedConversationId = focusedConversationId ?? selectedConversationId ?? null
   const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? null
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
@@ -223,9 +217,6 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           const treeState = useTreeStore.getState()
           if (treeState.focusedConversationId === conversationId) {
             treeState.clearFocusedConversationId()
-          }
-          if (treeState.halfPreviewConversationId === conversationId) {
-            treeState.clearHalfPreviewConversationId()
           }
           if (treeState.lockedSendConversationId === conversationId) {
             treeState.clearLockedSendConversationId()
@@ -388,7 +379,6 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
         <ConversationCanvas
           currentSessionId={selectedSessionId}
           focusedConversationId={focusedConversationId}
-          halfPreviewConversationId={halfPreviewConversationId}
           selectedConversationId={selectedConversationId}
           lockedSendConversationId={lockedSendConversationId}
           sessionDetail={sessionDetail}
@@ -490,9 +480,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
                     ? '系统设置'
                     : focusedConversation
                       ? `对话 ${focusedConversation.conversationId}`
-                      : halfPreviewConversation
-                        ? `对话 ${halfPreviewConversation.conversationId}`
-                        : sessionDetail
+                      : sessionDetail
                           ? `会话 ${sessionDetail.title}`
                           : '当前暂无会话'}
                 </Typography.Title>
@@ -502,8 +490,8 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
                 <StatusTag label="阶段十二" tone="processing" />
                 <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话图'} tone="success" />
                 <StatusTag
-                  label={focusedConversationId ? '聚焦态' : halfPreviewConversationId ? '半预览态' : '概览态'}
-                  tone={focusedConversationId ? 'warning' : halfPreviewConversationId ? 'processing' : 'default'}
+                  label={focusedConversationId ? '聚焦态' : '概览态'}
+                  tone={focusedConversationId ? 'warning' : 'default'}
                 />
                 {(lockedSendConversation || selectedConversation) ? (
                   <Space wrap size={6}>

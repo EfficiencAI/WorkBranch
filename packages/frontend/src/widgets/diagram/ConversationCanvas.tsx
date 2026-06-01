@@ -5,7 +5,7 @@ import { Button, Card, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
-import { selectFocusedConversationId, selectHalfPreviewConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
+import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
 import { useResponsive } from '../../shared/lib/useResponsive'
 import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
@@ -17,7 +17,6 @@ import { useLongPress } from './useLongPress'
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
   focusedConversationId: string | null
-  halfPreviewConversationId: string | null
   selectedConversationId: string | null
   lockedSendConversationId: string | null
   sessionDetail: SessionDetail | null
@@ -38,20 +37,13 @@ type ConversationCanvasProps = {
 type FlowNodeData = {
   conversation: ConversationNode
   focused: boolean
-  halfPreview: boolean
   selected: boolean
-  interactionGateActive: boolean
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
   conversationError: string | null
-  focusCardWidth?: number
-  focusBodyHeight?: number
-  previewCardWidth?: number
-  previewBodyHeight?: number
 }
 
-const DEFAULT_HALF_PREVIEW_INTERACTION_DELAY = 300
 const DIAGRAM_POINTER_TOLERANCE_PX = 4
 const FOCUS_OVERLAY_DURATION_MS = 500
 
@@ -176,33 +168,6 @@ function OverviewNodePage({ conversation, focused, selected }: { conversation: C
   )
 }
 
-function HalfPreviewNodePage({
-  conversation,
-  interactionGateActive,
-  conversationMessages,
-  messagesLoading,
-  messagesError,
-  conversationError,
-}: {
-  conversation: ConversationNode
-  interactionGateActive: boolean
-  conversationMessages: MessageNode[]
-  messagesLoading: boolean
-  messagesError: string | null
-  conversationError: string | null
-}) {
-  return (
-    <FocusNodePage
-      conversation={conversation}
-      conversationMessages={conversationMessages}
-      messagesLoading={messagesLoading}
-      messagesError={messagesError}
-      conversationError={conversationError}
-      interactive={!interactionGateActive}
-    />
-  )
-}
-
 function FocusNodePage({
   conversation,
   conversationMessages,
@@ -251,17 +216,7 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
     focused,
-    halfPreview,
     selected,
-    interactionGateActive,
-    conversationMessages = [],
-    messagesLoading = false,
-    messagesError = null,
-    conversationError,
-    focusCardWidth,
-    focusBodyHeight,
-    previewCardWidth,
-    previewBodyHeight,
   } = data
 
   const { setContextMenu } = useContextMenu()
@@ -334,36 +289,10 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
     }
   }, [isDragging, conversation.conversationId, reactFlow, updateConversationNodePosition, clearDraggingNodeId])
 
-  const width = focused ? focusCardWidth : halfPreview ? previewCardWidth : undefined
-  const bodyHeight = focused ? focusBodyHeight : halfPreview ? previewBodyHeight : undefined
   const nodeClassName = [
     'conversation-node',
-    focused ? 'conversation-node--focused' : null,
-    halfPreview ? 'conversation-node--half-preview' : null,
-    selected && !focused && !halfPreview ? 'conversation-node--selected' : null,
-    interactionGateActive ? 'conversation-node--interaction-gated' : null,
+    selected ? 'conversation-node--selected' : null,
     isDragging ? 'conversation-node--dragging' : null,
-  ].filter(Boolean).join(' ')
-  const focusShellClassName = [
-    'conversation-node__focus-shell',
-    focused ? 'conversation-node__focus-shell--focused' : null,
-    halfPreview ? 'conversation-node__focus-shell--half-preview' : null,
-  ].filter(Boolean).join(' ')
-  const focusContentClassName = [
-    'conversation-node__focus-content',
-    focused ? 'conversation-node__focus-content--focused' : null,
-    halfPreview ? 'conversation-node__focus-content--half-preview' : null,
-  ].filter(Boolean).join(' ')
-  const cardClassName = [
-    'conversation-node__card',
-    'conversation-node__card--assistant',
-    focused ? 'conversation-node__card--focused' : null,
-    halfPreview ? 'conversation-node__card--half-preview' : null,
-  ].filter(Boolean).join(' ')
-  const bodyFrameClassName = [
-    'conversation-node__body-frame',
-    focused ? 'conversation-node__body-frame--focused' : null,
-    halfPreview ? 'conversation-node__body-frame--half-preview' : null,
   ].filter(Boolean).join(' ')
 
   return (
@@ -371,48 +300,19 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
       className={nodeClassName}
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
-      style={width ? { width: `${width}px` } : undefined}
       {...longPressHandlers}
     >
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
-      <div className={focusShellClassName}>
-        <div className={focusContentClassName}>
-          <Card
-            size="small"
-            className={cardClassName}
-            styles={bodyHeight ? { body: { height: `${bodyHeight}px` } } : undefined}
-          >
-            <div className={bodyFrameClassName}>
-              <div className="conversation-node__page-shell">
-                {focused ? (
-                  <FocusNodePage
-                    conversation={conversation}
-                    conversationMessages={conversationMessages}
-                    messagesLoading={messagesLoading}
-                    messagesError={messagesError}
-                    conversationError={conversationError}
-                  />
-                ) : halfPreview ? (
-                  <div
-                    className={interactionGateActive ? 'conversation-node__half-preview-shell conversation-node__half-preview-shell--gated' : 'conversation-node__half-preview-shell'}
-                  >
-                    <HalfPreviewNodePage
-                      conversation={conversation}
-                      interactionGateActive={interactionGateActive}
-                      conversationMessages={conversationMessages}
-                      messagesLoading={messagesLoading}
-                      messagesError={messagesError}
-                      conversationError={conversationError}
-                    />
-                  </div>
-                ) : (
-                  <OverviewNodePage conversation={conversation} focused={focused} selected={selected} />
-                )}
-              </div>
-            </div>
-          </Card>
+      <Card
+        size="small"
+        className="conversation-node__card conversation-node__card--assistant"
+      >
+        <div className="conversation-node__body-frame">
+          <div className="conversation-node__page-shell">
+            <OverviewNodePage conversation={conversation} focused={focused} selected={selected} />
+          </div>
         </div>
-      </div>
+      </Card>
       <Handle type="source" position={Position.Bottom} className="conversation-node__handle" isConnectable={false} />
     </div>
   )
@@ -662,7 +562,6 @@ export function buildTreeLayout(conversationNodes: ConversationNode[]) {
 function FlowViewport({
   currentSessionId,
   focusedConversationId,
-  halfPreviewConversationId,
   lockedSendConversationId,
   sessionDetail,
   conversationDetail,
@@ -679,23 +578,11 @@ function FlowViewport({
   const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
   const responsive = useResponsive()
-  const halfPreviewInteractionDelay =
-    settings?.ui &&
-    typeof settings.ui === 'object' &&
-    'diagram_double_click_delay_ms' in settings.ui &&
-    typeof settings.ui.diagram_double_click_delay_ms === 'number'
-      ? settings.ui.diagram_double_click_delay_ms
-      : DEFAULT_HALF_PREVIEW_INTERACTION_DELAY
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
-  const setHalfPreviewConversationId = useTreeStore((state) => state.setHalfPreviewConversationId)
-  const clearHalfPreviewConversationId = useTreeStore((state) => state.clearHalfPreviewConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
-  const storeHalfPreviewConversationId = useTreeStore(selectHalfPreviewConversationId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
-  const interactionGateTimerRef = useRef<number | null>(null)
-  const [interactionGateConversationId, setInteractionGateConversationId] = useState<string | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
   const lastZoomRef = useRef<number>(1)
@@ -715,41 +602,8 @@ function FlowViewport({
     () => conversationNodes.find((conversation) => conversation.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
   )
-  const halfPreviewConversation = useMemo(
-    () => conversationNodes.find((conversation) => conversation.conversationId === halfPreviewConversationId) ?? null,
-    [conversationNodes, halfPreviewConversationId],
-  )
 
   const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
-
-  const clearInteractionGate = useCallback(() => {
-    if (interactionGateTimerRef.current !== null) {
-      window.clearTimeout(interactionGateTimerRef.current)
-      interactionGateTimerRef.current = null
-    }
-    setInteractionGateConversationId(null)
-  }, [])
-
-  const startInteractionGate = useCallback((conversationId: string) => {
-    if (interactionGateTimerRef.current !== null) {
-      window.clearTimeout(interactionGateTimerRef.current)
-    }
-
-    setInteractionGateConversationId(conversationId)
-    interactionGateTimerRef.current = window.setTimeout(() => {
-      setHalfPreviewConversationId(conversationId)
-      setInteractionGateConversationId(null)
-      interactionGateTimerRef.current = null
-    }, halfPreviewInteractionDelay)
-  }, [halfPreviewInteractionDelay, setHalfPreviewConversationId])
-
-  useEffect(() => {
-    return () => {
-      if (interactionGateTimerRef.current !== null) {
-        window.clearTimeout(interactionGateTimerRef.current)
-      }
-    }
-  }, [])
 
   useEffect(() => {
     const handleResize = () => {
@@ -818,21 +672,9 @@ function FlowViewport({
     return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
   }, [])
 
-  const previewMetrics = useMemo(() => {
-    const baseWidth = viewportWidth <= 640 ? 280 : 320
-    const cardWidth = baseWidth
-    const bodyHeight = cardWidth * 2
-
-    return {
-      cardWidth,
-      bodyHeight,
-    }
-  }, [viewportWidth])
-
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
     return conversationNodes.map((conversation) => {
       const focused = storeFocusedConversationId === conversation.conversationId
-      const halfPreview = storeHalfPreviewConversationId === conversation.conversationId
       const faded = storeFocusedConversationId !== null && storeFocusedConversationId !== conversation.conversationId
       return {
         id: conversation.conversationId,
@@ -844,22 +686,10 @@ function FlowViewport({
         data: {
           conversation,
           focused,
-          halfPreview,
           selected: lockedSendConversationId === conversation.conversationId,
-          interactionGateActive: interactionGateConversationId === conversation.conversationId,
-          conversationMessages: focused || halfPreview ? conversationMessages : [],
-          messagesLoading: focused || halfPreview ? messagesLoading : false,
-          messagesError: focused || halfPreview ? messagesError : null,
-          conversationError: focused || halfPreview ? conversationDetail?.error ?? null : null,
-          focusCardWidth: focused ? focusMetrics.cardWidth : undefined,
-          focusBodyHeight: focused ? focusMetrics.bodyHeight : undefined,
-          previewCardWidth: halfPreview ? previewMetrics.cardWidth : undefined,
-          previewBodyHeight: halfPreview ? previewMetrics.bodyHeight : undefined,
         },
         className: [
           'conversation-flow-node',
-          focused ? 'conversation-flow-node--focused' : null,
-          halfPreview ? 'conversation-flow-node--half-preview' : null,
           faded ? 'conversation-flow-node--dimmed' : null,
         ].filter(Boolean).join(' '),
         draggable: false,
@@ -867,19 +697,9 @@ function FlowViewport({
     })
   }, [
     conversationNodes,
-    conversationDetail?.error,
-    focusMetrics.bodyHeight,
-    focusMetrics.cardWidth,
-    conversationMessages,
-    interactionGateConversationId,
     lockedSendConversationId,
-    messagesError,
-    messagesLoading,
     overviewLayoutMap,
-    previewMetrics.bodyHeight,
-    previewMetrics.cardWidth,
     storeFocusedConversationId,
-    storeHalfPreviewConversationId,
   ])
 
   const flowEdges = useMemo<Edge[]>(() => {
@@ -893,24 +713,21 @@ function FlowViewport({
         type: 'smoothstep',
         animated:
           lockedSendConversationId === conversation.conversationId ||
-          focusedConversationId === conversation.conversationId ||
-          halfPreviewConversationId === conversation.conversationId,
+          focusedConversationId === conversation.conversationId,
         style: {
           strokeWidth:
             lockedSendConversationId === conversation.conversationId ||
-            focusedConversationId === conversation.conversationId ||
-            halfPreviewConversationId === conversation.conversationId
+            focusedConversationId === conversation.conversationId
               ? 2.5
               : 2,
           stroke:
             lockedSendConversationId === conversation.conversationId ||
-            focusedConversationId === conversation.conversationId ||
-            halfPreviewConversationId === conversation.conversationId
+            focusedConversationId === conversation.conversationId
               ? 'rgba(96, 165, 250, 0.95)'
               : 'rgba(148, 163, 184, 0.72)',
         },
       }))
-  }, [conversationNodes, focusedConversationId, halfPreviewConversationId, lockedSendConversationId])
+  }, [conversationNodes, focusedConversationId, lockedSendConversationId])
 
   useEffect(() => {
     if (!flowNodes.length || !focusedConversation) {
@@ -929,7 +746,7 @@ function FlowViewport({
   }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow])
 
   useEffect(() => {
-    if (!focusedConversation && !halfPreviewConversation) {
+    if (!focusedConversation) {
       return
     }
 
@@ -939,17 +756,12 @@ function FlowViewport({
       }
 
       event.preventDefault()
-      if (focusedConversation) {
-        setFocusedConversationId(null)
-        return
-      }
-
-      clearHalfPreviewConversationId()
+      setFocusedConversationId(null)
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [clearHalfPreviewConversationId, focusedConversation, halfPreviewConversation, setFocusedConversationId])
+  }, [focusedConversation, setFocusedConversationId])
 
   const handleForceRefresh = useCallback(() => {
     if (isRefreshingRef.current) {
@@ -1061,20 +873,9 @@ function FlowViewport({
             return
           }
 
-          clearInteractionGate()
-          setHalfPreviewConversationId(null)
-          setFocusedConversationId(node.id)
-        }}
-        onNodeDoubleClick={(_, node) => {
-          clearInteractionGate()
-          setHalfPreviewConversationId(null)
           setFocusedConversationId(node.id)
         }}
         onPaneClick={() => {
-          clearInteractionGate()
-          if (halfPreviewConversation) {
-            clearHalfPreviewConversationId()
-          }
           setContextMenu(null)
         }}
         onDoubleClick={() => {

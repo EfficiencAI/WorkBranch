@@ -3,35 +3,16 @@ import type { TreeStore } from './types'
 
 export const useTreeStore = create<TreeStore>((set) => ({
   focusedConversationId: null,
-  halfPreviewConversationId: null,
   selectedConversationId: null,
   lockedSendConversationId: null,
   draggingNodeId: null,
 
   setFocusedConversationId(conversationId) {
-    if (conversationId) {
-      set({ focusedConversationId: conversationId, halfPreviewConversationId: null })
-      return
-    }
-
-    set({ focusedConversationId: null })
+    set({ focusedConversationId: conversationId ?? null })
   },
 
   clearFocusedConversationId() {
     set({ focusedConversationId: null })
-  },
-
-  setHalfPreviewConversationId(conversationId) {
-    if (conversationId) {
-      set({ halfPreviewConversationId: conversationId, focusedConversationId: null })
-      return
-    }
-
-    set({ halfPreviewConversationId: null })
-  },
-
-  clearHalfPreviewConversationId() {
-    set({ halfPreviewConversationId: null })
   },
 
   setSelectedConversationId(conversationId) {
@@ -51,7 +32,7 @@ export const useTreeStore = create<TreeStore>((set) => ({
   },
 
   resetTreeUiState() {
-    set({ focusedConversationId: null, halfPreviewConversationId: null, selectedConversationId: null, lockedSendConversationId: null, draggingNodeId: null })
+    set({ focusedConversationId: null, selectedConversationId: null, lockedSendConversationId: null, draggingNodeId: null })
   },
 
   setDraggingNodeId(nodeId) {
