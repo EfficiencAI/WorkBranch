@@ -583,6 +583,7 @@ function FlowViewport({
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const composerRef = useRef<HTMLDivElement | null>(null)
+  const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
   const lastZoomRef = useRef<number>(1)
@@ -631,42 +632,74 @@ function FlowViewport({
     }
   }, [])
 
+  const enterFocusMode = useCallback((conversationId: string) => {
+    // 保存当前ReactFlow viewport状态
+    const currentViewport = reactFlow.getViewport()
+    savedViewportRef.current = { ...currentViewport }
+
+    const rect = getNodeScreenRect(conversationId)
+
+    if (!rect) {
+      requestAnimationFrame(() => {
+        const retryRect = getNodeScreenRect(conversationId)
+        if (retryRect) {
+          setFocusOriginRect(retryRect)
+          setOverlayPhase('entering')
+          setComposerSlideOut(true)
+
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setOverlayPhase('active')
+            })
+          })
+        }
+      })
+      return
+    }
+
+    setFocusOriginRect(rect)
+    setOverlayPhase('entering')
+    setComposerSlideOut(true)
+
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setOverlayPhase('active')
+      })
+    })
+  }, [getNodeScreenRect])
+
+  const exitFocusMode = useCallback((): (() => void) => {
+    setOverlayPhase('exiting')
+    setComposerSlideOut(false)
+
+    // 恢复ReactFlow viewport状态
+    if (savedViewportRef.current) {
+      reactFlow.setViewport(savedViewportRef.current, { duration: 0 })
+    }
+
+    const timer = window.setTimeout(() => {
+      setOverlayPhase('idle')
+      setFocusOriginRect(null)
+    }, FOCUS_OVERLAY_DURATION_MS)
+
+    return () => window.clearTimeout(timer)
+  }, [reactFlow])
+
   useEffect(() => {
     const wasFocused = previousFocusedIdRef.current
     const isNowFocused = focusedConversationId
 
     if (!wasFocused && isNowFocused) {
-      const rect = getNodeScreenRect(isNowFocused)
-      if (rect) {
-        setFocusOriginRect(rect)
-        setOverlayPhase('entering')
-        setComposerSlideOut(true)
-
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setOverlayPhase('active')
-          })
-        })
-      }
+      enterFocusMode(isNowFocused)
     } else if (wasFocused && !isNowFocused) {
-      setOverlayPhase('exiting')
-      setComposerSlideOut(false)
-
-      const timer = window.setTimeout(() => {
-        setOverlayPhase('idle')
-        setFocusOriginRect(null)
-      }, FOCUS_OVERLAY_DURATION_MS)
-
-      return () => window.clearTimeout(timer)
+      previousFocusedIdRef.current = isNowFocused // 立即更新ref，避免return导致跳过
+      return exitFocusMode()
     } else if (wasFocused && isNowFocused && wasFocused !== isNowFocused) {
-      const rect = getNodeScreenRect(isNowFocused)
-      if (rect) {
-        setFocusOriginRect(rect)
-      }
+      enterFocusMode(isNowFocused)
     }
 
     previousFocusedIdRef.current = isNowFocused
-  }, [focusedConversationId, getNodeScreenRect])
+  }, [focusedConversationId, enterFocusMode, exitFocusMode])
 
   const focusMetrics = useMemo(() => {
     return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
