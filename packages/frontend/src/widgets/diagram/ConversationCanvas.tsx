@@ -1,7 +1,7 @@
 import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Space, Typography } from 'antd'
+import { Button, Card, Spin, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -27,6 +27,7 @@ type ConversationCanvasProps = {
   messagesError: string | null
   sending: boolean
   canCreateConversationOnSend: boolean
+  initialLoading?: boolean
   onSendMessage: (message: string, enableContext: boolean) => Promise<void>
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
@@ -571,6 +572,7 @@ function FlowViewport({
   messagesError,
   sending,
   canCreateConversationOnSend,
+  initialLoading,
   onSendMessage,
   onStopMessage,
   onCreateConversation,
@@ -875,6 +877,11 @@ function FlowViewport({
 
   return (
     <div className={viewportClassName} onContextMenu={handleContextMenu} ref={viewportRef}>
+      {initialLoading ? (
+        <div className="conversation-canvas__loading-overlay">
+          <Spin size="large" tip="正在加载..." />
+        </div>
+      ) : null}
       <FocusOverlay
         phase={overlayPhase}
         originRect={focusOriginRect}

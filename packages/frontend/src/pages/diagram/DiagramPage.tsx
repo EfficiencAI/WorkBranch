@@ -1,4 +1,4 @@
-import { Alert, App as AntdApp } from 'antd'
+import { App as AntdApp } from 'antd'
 import { useCallback, useEffect } from 'react'
 import { useLocation } from 'react-router-dom'
 import {
@@ -13,7 +13,6 @@ import {
   useUserStore,
 } from '../../features'
 import { getErrorMessage } from '../../shared/api'
-import { LoadingState } from '../../shared/ui'
 import { DiagramShell } from '../../widgets'
 
 export function DiagramPage() {
@@ -40,15 +39,18 @@ export function DiagramPage() {
     void message.error(getErrorMessage(caughtError, '消息发送失败'))
   }, [message])
 
-  if (chatLoading || sessionLoading || userLoading) {
-    return <LoadingState tip="正在加载图数据..." />
-  }
-
   if (chatError || sessionError || userError) {
-    return <Alert type="error" showIcon title={chatError ?? sessionError ?? userError ?? '图数据加载失败'} />
+    void message.error(chatError ?? sessionError ?? userError ?? '图数据加载失败')
   }
 
   const isSettingsView = location.pathname === '/settings'
 
-  return <DiagramShell onSendError={handleSendError} onRequestError={handleRequestError} view={isSettingsView ? 'settings' : 'chat'} />
+  return (
+    <DiagramShell
+      onSendError={handleSendError}
+      onRequestError={handleRequestError}
+      view={isSettingsView ? 'settings' : 'chat'}
+      initialLoading={chatLoading || sessionLoading || userLoading}
+    />
+  )
 }

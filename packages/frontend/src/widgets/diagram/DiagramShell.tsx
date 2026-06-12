@@ -38,9 +38,10 @@ type DiagramShellProps = {
   onSendError: (content: string) => void
   onRequestError: (error: unknown) => void
   view: 'chat' | 'settings'
+  initialLoading?: boolean
 }
 
-export function DiagramShell({ onSendError, onRequestError, view }: DiagramShellProps) {
+export function DiagramShell({ onSendError, onRequestError, view, initialLoading }: DiagramShellProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
@@ -389,6 +390,7 @@ export function DiagramShell({ onSendError, onRequestError, view }: DiagramShell
           messagesError={messagesError}
           sending={isStreamingViewedConversation}
           canCreateConversationOnSend={canCreateConversationOnSend}
+          initialLoading={initialLoading}
           onSendMessage={handleSendMessage}
           onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}

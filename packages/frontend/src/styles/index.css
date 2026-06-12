@@ -615,6 +615,17 @@ button {
   transform: translateZ(0.001px);
 }
 
+.conversation-canvas__loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--app-bg) 80%, transparent);
+  backdrop-filter: blur(4px);
+}
+
 .conversation-canvas__exit-focus-button {
   min-width: 96px;
   min-height: 44px;
