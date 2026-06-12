@@ -767,6 +767,11 @@ function FlowViewport({
       return
     }
 
+    // 聚焦态下禁止移动视口，避免与 overlay 过渡动画冲突
+    if (storeFocusedConversationId !== null) {
+      return
+    }
+
     const timeoutId = window.setTimeout(() => {
       const position = resolveConversationPosition(focusedConversation, overviewLayoutMap)
       void reactFlow.setCenter(position.x, position.y, {
@@ -776,7 +781,7 @@ function FlowViewport({
     }, 50)
 
     return () => window.clearTimeout(timeoutId)
-  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow])
+  }, [flowNodes, focusedConversation, overviewLayoutMap, reactFlow, storeFocusedConversationId])
 
   useEffect(() => {
     if (!focusedConversation) {
@@ -891,7 +896,7 @@ function FlowViewport({
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
-        fitView
+        fitView={!focusedConversation}
         panOnDrag={true}
         panOnScroll={false}
         zoomOnScroll
@@ -907,6 +912,7 @@ function FlowViewport({
           }
 
           setFocusedConversationId(node.id)
+          setLockedSendConversationId(node.id)
         }}
         onPaneClick={() => {
           setContextMenu(null)
