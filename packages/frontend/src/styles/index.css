@@ -1752,3 +1752,275 @@ button {
   }
 }
 
+/* ====== 聚焦态：FocusView 分栏布局 ====== */
+
+.focus-view {
+  display: flex;
+  flex-direction: row;
+  height: 100%;
+  width: 100%;
+}
+
+.focus-view--mobile {
+  flex-direction: column;
+}
+
+/* 左侧树导航 */
+.focus-view__tree {
+  width: 200px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
+  padding: 16px 12px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: rgba(0, 0, 0, 0.01);
+}
+
+/* 右侧主内容区 */
+.focus-view__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: clamp(16px, 2vw, 24px);
+  padding-left: clamp(16px, 2vw, 24px);
+  overflow: hidden;
+}
+
+/* 面包屑 */
+.focus-view__breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--app-text-muted, #999);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+  line-height: 1.5;
+}
+
+.focus-view__breadcrumb-sep {
+  color: var(--app-text-muted, #999);
+  opacity: 0.5;
+}
+
+.focus-view__breadcrumb-link {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  border-radius: 4px;
+  color: var(--app-text-muted, #999);
+  transition: color 0.15s, background 0.15s;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.focus-view__breadcrumb-link:hover {
+  color: var(--app-primary, #1677ff);
+  background: rgba(22, 119, 255, 0.06);
+}
+
+.focus-view__breadcrumb-label--active {
+  color: var(--app-text, #333);
+  font-weight: 500;
+}
+
+/* 标题行 */
+.focus-view__header {
+  flex-shrink: 0;
+  margin-bottom: 12px;
+}
+
+/* 消息列表 */
+.focus-view__messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.focus-view__messages-list {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* 分支选择器 */
+.focus-view__branches {
+  flex-shrink: 0;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
+}
+
+.focus-view__branch-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.focus-view__branch-card {
+  cursor: pointer;
+  min-width: 120px;
+  max-width: 200px;
+  flex: 0 1 auto;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.focus-view__branch-card:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.focus-view__branch-title {
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 输入框 */
+.focus-view__composer {
+  flex-shrink: 0;
+  margin-top: auto;
+  min-height: 56px;
+  height: auto;
+  padding-bottom: env(safe-area-inset-bottom, 16px);
+}
+
+.focus-view__composer .ant-input,
+.focus-view__composer textarea {
+  max-height: 40px;
+  overflow-y: auto;
+}
+
+/* ====== 树导航节点样式 ====== */
+
+.focus-tree-nav {
+  font-size: 13px;
+  user-select: none;
+}
+
+.focus-tree-node {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s;
+  line-height: 1.6;
+}
+
+.focus-tree-node:hover {
+  background: rgba(22, 119, 255, 0.06);
+}
+
+.focus-tree-node--active {
+  background: rgba(22, 119, 255, 0.1);
+  font-weight: 500;
+}
+
+.focus-tree-node--path .focus-tree-node__label {
+  color: var(--app-text, #333);
+}
+
+.focus-tree-node__toggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  color: var(--app-text-muted, #999);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.focus-tree-node__spacer {
+  width: 14px;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+.focus-tree-node__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--app-text-muted, #bbb);
+  flex-shrink: 0;
+  transition: background 0.15s;
+}
+
+.focus-tree-node__dot--active {
+  background: var(--app-primary, #1677ff);
+  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.15);
+}
+
+.focus-tree-node--active .focus-tree-node__dot {
+  background: var(--app-primary, #1677ff);
+}
+
+.focus-tree-node__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--app-text-secondary, #666);
+  flex: 1;
+  min-width: 0;
+}
+
+.focus-tree-node__count {
+  font-size: 10px;
+  color: var(--app-text-muted, #999);
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+/* 移动端适配 */
+@media screen and (max-width: 767px) {
+  .focus-view {
+    flex-direction: column;
+  }
+
+  .focus-view__tree {
+    width: 100%;
+    max-height: 120px;
+    border-right: none;
+    border-bottom: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .focus-tree-nav {
+    display: flex;
+    gap: 4px;
+    flex-wrap: nowrap;
+  }
+
+  .focus-tree-node {
+    padding: 4px 8px;
+    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
+    border-radius: 12px;
+    font-size: 12px;
+  }
+
+  .focus-view__main {
+    padding: 12px 16px;
+  }
+
+  .focus-view__branch-cards {
+    flex-direction: column;
+  }
+
+  .focus-view__branch-card {
+    max-width: none;
+  }
+}
+

@@ -327,6 +327,7 @@ function FocusOverlay({
   phase,
   originRect,
   conversation,
+  conversationNodes,
   conversationMessages,
   messagesLoading,
   messagesError,
@@ -337,10 +338,13 @@ function FocusOverlay({
   onSend,
   onStop,
   onSwitchToSendTarget,
+  focusedConversationId,
+  onNavigateToNode,
 }: {
   phase: OverlayPhase
   originRect: FocusOverlayRect | null
   conversation: ConversationNode | null
+  conversationNodes: ConversationNode[]
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
@@ -351,9 +355,9 @@ function FocusOverlay({
   onSend: (message: string, enableContext: boolean) => Promise<void>
   onStop: () => Promise<void>
   onSwitchToSendTarget: (conversationId: string) => void
+  focusedConversationId: string | null
+  onNavigateToNode: (nodeId: string) => void
 }) {
-  const responsive = useResponsive()
-
   if (phase === 'idle' || !originRect || !conversation) {
     return null
   }
@@ -412,30 +416,170 @@ function FocusOverlay({
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
-          padding: 'clamp(16px, 2vw, 24px)',
+          padding: 0,
           opacity: isActive && !isExiting ? 1 : 0,
           transition: `opacity ${FOCUS_OVERLAY_DURATION_MS / 2}ms ease ${FOCUS_OVERLAY_DURATION_MS / 2}ms`,
         }}
       >
-        <div className="focus-overlay__header">
+        <FocusView
+          conversation={conversation}
+          conversationNodes={conversationNodes}
+          conversationMessages={conversationMessages}
+          messagesLoading={messagesLoading}
+          messagesError={messagesError}
+          conversationError={conversationError}
+          sending={sending}
+          selectedConversationId={selectedConversationId}
+          selectedConversationLabel={selectedConversationLabel}
+          focusedConversationId={focusedConversationId}
+          onSend={onSend}
+          onStop={onStop}
+          onSwitchToSendTarget={onSwitchToSendTarget}
+          onNavigateToNode={onNavigateToNode}
+        />
+      </div>
+    </div>
+  )
+}
+
+const NODE_WIDTH = 320
+const MIN_HORIZONTAL_GAP = 60
+const VERTICAL_GAP = 240
+
+// ─── 聚焦态界面（树导航 + 内容区） ───
+
+interface FocusViewProps {
+  conversation: ConversationNode | null
+  conversationNodes: ConversationNode[]
+  conversationMessages: MessageNode[]
+  messagesLoading: boolean
+  messagesError: string | null
+  conversationError: string | null
+  sending: boolean
+  selectedConversationId: string | null
+  selectedConversationLabel: string | null
+  focusedConversationId: string | null
+  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onStop: () => Promise<void>
+  onSwitchToSendTarget: (conversationId: string) => void
+  onNavigateToNode: (nodeId: string) => void
+}
+
+function FocusView({
+  conversation,
+  conversationNodes,
+  conversationMessages,
+  messagesLoading,
+  messagesError,
+  conversationError,
+  sending,
+  selectedConversationId,
+  selectedConversationLabel,
+  focusedConversationId,
+  onSend,
+  onStop,
+  onSwitchToSendTarget,
+  onNavigateToNode,
+}: FocusViewProps) {
+  const responsive = useResponsive()
+  const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
+
+  // 同步外部 conversation 变化（进入/退出聚焦态时）
+  useEffect(() => {
+    if (conversation?.conversationId) {
+      setViewedNodeId(conversation.conversationId)
+    }
+  }, [conversation?.conversationId])
+
+  const viewedNode = useMemo(
+    () => conversationNodes.find((n) => n.conversationId === viewedNodeId) ?? conversation ?? null,
+    [conversationNodes, viewedNodeId, conversation],
+  )
+
+  const siblingCount = useMemo(() => {
+    if (!viewedNode) return 0
+    return conversationNodes.filter(
+      (n) => n.parentConversationId === viewedNode.parentConversationId && n.conversationId !== viewedNodeId,
+    ).length
+  }, [conversationNodes, viewedNode])
+
+  const childNodes = useMemo(
+    () => conversationNodes.filter((n) => n.parentConversationId === viewedNodeId),
+    [conversationNodes, viewedNodeId],
+  )
+
+  const handleNavigate = useCallback(
+    (nodeId: string) => {
+      if (nodeId !== viewedNodeId) {
+        setViewedNodeId(nodeId)
+        onNavigateToNode(nodeId)
+      }
+    },
+    [viewedNodeId, onNavigateToNode],
+  )
+
+  // 构建祖先链（用于面包屑）
+  const ancestorChain = useMemo(() => {
+    const chain: ConversationNode[] = []
+    let current: ConversationNode | undefined = viewedNode
+    while (current) {
+      chain.unshift(current)
+      current = conversationNodes.find((n) => n.conversationId === current!.parentConversationId)
+    }
+    return chain
+  }, [conversationNodes, viewedNode])
+
+  const isMobile = responsive.isMobile
+
+  return (
+    <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
+      {/* 左侧：树导航 */}
+      <div className="focus-view__tree">
+        <FocusTreeNav
+          anchorId={focusedConversationId ?? ''}
+          allNodes={conversationNodes}
+          activeId={viewedNodeId}
+          onSelect={handleNavigate}
+        />
+      </div>
+
+      {/* 右侧：主内容区 */}
+      <div className="focus-view__main">
+        {/* 面包屑 */}
+        <FocusBreadcrumb chain={ancestorChain} activeId={viewedNodeId} onSelect={handleNavigate} />
+
+        {/* 标题行 + 兄弟统计 */}
+        <div className="focus-view__header">
           <Space direction="vertical" size={4}>
             <Typography.Title level={4} style={{ margin: 0 }}>
-              {summarizeConversation(conversation)}
+              {viewedNode ? summarizeConversation(viewedNode) : '—'}
+              {siblingCount > 0 && (
+                <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: '0.7em', marginLeft: 6 }}>
+                  · 兄弟: {siblingCount}
+                </Typography.Text>
+              )}
             </Typography.Title>
-            <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
+            <Typography.Text type="secondary">{viewedNode?.conversationId ?? '—'}</Typography.Text>
           </Space>
         </div>
 
-        <div className="focus-overlay__messages">
-          {renderMessageList(conversationMessages, messagesLoading, messagesError, conversationError, 'focus-overlay__messages-list')}
+        {/* 消息列表 */}
+        <div className="focus-view__messages">
+          {renderMessageList(conversationMessages, messagesLoading, messagesError, conversationError, 'focus-view__messages-list')}
         </div>
 
-        <div className="focus-overlay__composer">
+        {/* 分支选择器 */}
+        {childNodes.length >= 2 && (
+          <BranchSelector nodes={childNodes} onSelect={handleNavigate} />
+        )}
+
+        {/* 输入框 */}
+        <div className="focus-view__composer">
           <MessageComposer
             selectedConversationId={selectedConversationId}
             selectedConversationLabel={selectedConversationLabel}
-            focusedConversationId={conversation.conversationId}
-            focusedConversationLabel={summarizeConversation(conversation)}
+            focusedConversationId={viewedNode?.conversationId ?? null}
+            focusedConversationLabel={viewedNode ? summarizeConversation(viewedNode) : null}
             sending={sending}
             onSend={onSend}
             onStop={onStop}
@@ -447,9 +591,258 @@ function FocusOverlay({
   )
 }
 
-const NODE_WIDTH = 320
-const MIN_HORIZONTAL_GAP = 60
-const VERTICAL_GAP = 240
+// ─── 面包屑 ───
+
+interface BreadcrumbProps {
+  chain: ConversationNode[]
+  activeId: string
+  onSelect: (id: string) => void
+}
+
+function FocusBreadcrumb({ chain, activeId, onSelect }: BreadcrumbProps) {
+  if (chain.length <= 1) return null
+
+  return (
+    <div className="focus-view__breadcrumb">
+      {chain.map((node, idx) => {
+        const isLast = idx === chain.length - 1
+        return (
+          <span key={node.conversationId} className="focus-view__breadcrumb-item">
+            {idx > 0 && <span className="focus-view__breadcrumb-sep">→</span>}
+            {isLast ? (
+              <span className="focus-view__breadcrumb-label focus-view__breadcrumb-label--active">
+                {summarizeConversation(node)}
+              </span>
+            ) : (
+              <button
+                className="focus-view__breadcrumb-label focus-view__breadcrumb-link"
+                onClick={() => onSelect(node.conversationId)}
+              >
+                {summarizeConversation(node)}
+              </button>
+            )}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── 分支选择器 ───
+
+interface BranchSelectorProps {
+  nodes: ConversationNode[]
+  onSelect: (id: string) => void
+}
+
+function BranchSelector({ nodes, onSelect }: BranchSelectorProps) {
+  return (
+    <div className="focus-view__branches">
+      <Typography.Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
+        子节点
+      </Typography.Text>
+      <div className="focus-view__branch-cards">
+        {nodes.map((node) => (
+          <Card
+            key={node.conversationId}
+            size="small"
+            className="focus-view__branch-card"
+            onClick={() => onSelect(node.conversationId)}
+          >
+            <div className="focus-view__branch-title">{summarizeConversation(node)}</div>
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              {node.messageCount ?? 0} 条消息
+            </Typography.Text>
+          </Card>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── 树导航 ───
+
+interface TreeNodeData {
+  node: ConversationNode
+  children: TreeNodeData[]
+  isExpanded: boolean
+  isOnPath: boolean
+}
+
+interface TreeNavProps {
+  anchorId: string
+  allNodes: ConversationNode[]
+  activeId: string
+  onSelect: (id: string) => void
+}
+
+function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+
+  const treeRoots = useMemo(() => {
+    if (!anchorId || allNodes.length === 0) return []
+    return buildFocusTree(anchorId, allNodes)
+  }, [anchorId, allNodes])
+
+  // 初始化展开状态：路径上的节点 + anchor 的直接子节点默认展开
+  useEffect(() => {
+    const initial = new Set<string>()
+    function collectPathIds(nodes: TreeNodeData[]) {
+      for (const n of nodes) {
+        if (n.isOnPath) initial.add(n.node.conversationId)
+        collectPathIds(n.children)
+      }
+    }
+    collectPathIds(treeRoots)
+
+    function expandAnchorChildren(nodes: TreeNodeData[]) {
+      for (const n of nodes) {
+        if (n.node.conversationId === anchorId) {
+          for (const c of n.children) {
+            initial.add(c.node.conversationId)
+          }
+          return
+        }
+        expandAnchorChildren(n.children)
+      }
+    }
+    expandAnchorChildren(treeRoots)
+    setExpandedIds(initial)
+  }, [anchorId, treeRoots])
+
+  const toggleExpand = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }, [])
+
+  return (
+    <div className="focus-tree-nav">
+      {treeRoots.map((root) => (
+        <TreeNavItem
+          key={root.node.conversationId}
+          data={root}
+          activeId={activeId}
+          expandedIds={expandedIds}
+          depth={0}
+          onSelect={onSelect}
+          onToggleExpand={toggleExpand}
+        />
+      ))}
+    </div>
+  )
+}
+
+interface TreeNavItemProps {
+  data: TreeNodeData
+  activeId: string
+  expandedIds: Set<string>
+  depth: number
+  onSelect: (id: string) => void
+  onToggleExpand: (id: string) => void
+}
+
+function TreeNavItem({ data, activeId, expandedIds, depth, onSelect, onToggleExpand }: TreeNavItemProps) {
+  const isActive = data.node.conversationId === activeId
+  const isExpanded = expandedIds.has(data.node.conversationId)
+  const hasChildren = data.children.length > 0
+
+  return (
+    <div>
+      <div
+        className={`focus-tree-node ${isActive ? 'focus-tree-node--active' : ''} ${data.isOnPath ? 'focus-tree-node--path' : ''}`}
+        style={{ paddingLeft: depth * 16 }}
+        onClick={() => onSelect(data.node.conversationId)}
+      >
+        {hasChildren && (
+          <button
+            className="focus-tree-node__toggle"
+            onClick={(e) => {
+              e.stopPropagation()
+              onToggleExpand(data.node.conversationId)
+            }}
+          >
+            {isExpanded ? '▼' : '▶'}
+          </button>
+        )}
+        {!hasChildren && <span className="focus-tree-node__spacer" />}
+
+        <span className={`focus-tree-node__dot ${isActive ? 'focus-tree-node__dot--active' : ''}`} />
+
+        <span className="focus-tree-node__label" title={data.node.conversationId}>
+          {summarizeConversation(data.node)}
+        </span>
+
+        {hasChildren && (
+          <span className="focus-tree-node__count">[{data.children.length}]</span>
+        )}
+      </div>
+
+      {hasChildren && isExpanded && (
+        <div>
+          {data.children.map((child) => (
+            <TreeNavItem
+              key={child.node.conversationId}
+              data={child}
+              activeId={activeId}
+              expandedIds={expandedIds}
+              depth={depth + 1}
+              onSelect={onSelect}
+              onToggleExpand={onToggleExpand}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 构建以 anchorId 为锚点的上下文子树。
+ * 向上追溯到 root，向下展开直接子节点。
+ */
+function buildFocusTree(anchorId: string, allNodes: ConversationNode[]): TreeNodeData[] {
+  const nodeMap = new Map(allNodes.map((n) => [n.conversationId, n]))
+
+  // 向上追溯得到祖先链
+  const ancestors: string[] = []
+  let current: string | undefined = anchorId
+  while (current) {
+    ancestors.unshift(current)
+    const node = nodeMap.get(current)
+    current = node?.parentConversationId ?? undefined
+  }
+
+  const ancestorSet = new Set(ancestors)
+
+  const rootId = ancestors[0]
+  if (!rootId) return []
+
+  function build(nodeId: string): TreeNodeData {
+    const node = nodeMap.get(nodeId)!
+    const children = allNodes.filter((n) => n.parentConversationId === nodeId)
+    const isOnPath = ancestorSet.has(nodeId)
+    const shouldExpand = isOnPath || nodeId === anchorId
+
+    return {
+      node,
+      isExpanded: shouldExpand,
+      isOnPath,
+      children: children.map((c) => build(c.conversationId)),
+    }
+  }
+
+  const root = build(rootId)
+
+  const otherRoots = allNodes
+    .filter((n) => !n.parentConversationId && n.conversationId !== rootId)
+    .map((n) => build(n.conversationId))
+
+  return [root, ...otherRoots]
+}
 
 export function buildTreeLayout(conversationNodes: ConversationNode[]) {
   if (conversationNodes.length === 0) {
@@ -596,6 +989,8 @@ function FlowViewport({
   const [focusOriginRect, setFocusOriginRect] = useState<FocusOverlayRect | null>(null)
   const [composerSlideOut, setComposerSlideOut] = useState(false)
   const previousFocusedIdRef = useRef<string | null>(null)
+  // 聚焦态内浏览的节点ID（可独立于聚焦锚点变化）
+  const [focusViewedId, setFocusViewedId] = useState<string | null>(null)
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
@@ -639,6 +1034,9 @@ function FlowViewport({
     const currentViewport = reactFlow.getViewport()
     savedViewportRef.current = { ...currentViewport }
 
+    // 同步聚焦态浏览节点
+    setFocusViewedId(conversationId)
+
     const rect = getNodeScreenRect(conversationId)
 
     if (!rect) {
@@ -673,6 +1071,7 @@ function FlowViewport({
   const exitFocusMode = useCallback((): (() => void) => {
     setOverlayPhase('exiting')
     setComposerSlideOut(false)
+    setFocusViewedId(null)
 
     // 恢复ReactFlow viewport状态
     if (savedViewportRef.current) {
@@ -686,6 +1085,11 @@ function FlowViewport({
 
     return () => window.clearTimeout(timer)
   }, [reactFlow])
+
+  // 聚焦态内节点导航：更新浏览目标
+  const handleFocusNavigateToNode = useCallback((nodeId: string) => {
+    setFocusViewedId(nodeId)
+  }, [])
 
   useEffect(() => {
     const wasFocused = previousFocusedIdRef.current
@@ -886,6 +1290,7 @@ function FlowViewport({
         phase={overlayPhase}
         originRect={focusOriginRect}
         conversation={focusedConversation}
+        conversationNodes={conversationNodes}
         conversationMessages={conversationMessages}
         messagesLoading={messagesLoading}
         messagesError={messagesError}
@@ -896,6 +1301,8 @@ function FlowViewport({
         onSend={onSendMessage}
         onStop={onStopMessage}
         onSwitchToSendTarget={setLockedSendConversationId}
+        focusedConversationId={focusedConversationId}
+        onNavigateToNode={handleFocusNavigateToNode}
       />
 
       <ReactFlow
