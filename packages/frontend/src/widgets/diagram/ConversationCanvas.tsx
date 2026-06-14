@@ -476,23 +476,52 @@ const VERTICAL_GAP = 240
 // ─── 导航路径工具函数 ───
 
 /**
- * 从目标节点向上追溯到根节点，构建完整的导航路径
- * @param targetId 目标节点 ID
+ * 从目标节点构建完整导航路径：
+ * 1. 向上追溯到根节点
+ * 2. 向下自动穿透单子节点（无分支的节点），直到遇到分支或叶子节点
+ *
+ * @param anchorId 锚点节点 ID（用户点击进入聚焦态的节点）
  * @param allNodes 所有对话节点
- * @returns 从根节点到目标节点的路径数组
+ * @returns 从根节点到末端（分支前/叶子）的完整路径数组
  */
-function buildPathToRoot(targetId: string, allNodes: ConversationNode[]): NavigationPathItem[] {
-  const path: NavigationPathItem[] = []
+function buildNavigationPath(anchorId: string, allNodes: ConversationNode[]): NavigationPathItem[] {
   const nodeMap = new Map(allNodes.map((n) => [n.conversationId, n]))
   
-  let current: string | null = targetId
+  // ── 第一步：向上追溯到根节点 ──
+  const upwardPath: string[] = []
+  let current: string | null = anchorId
   while (current) {
-    path.unshift({ conversationId: current })
+    upwardPath.unshift(current)
     const node = nodeMap.get(current)
     current = node?.parentConversationId ?? null
   }
   
-  return path
+  // ── 第二步：向下自动穿透单子节点 ──
+  const fullPath: string[] = [...upwardPath]
+  let tailId = anchorId
+  
+  while (true) {
+    const tailNode = nodeMap.get(tailId)
+    if (!tailNode) break
+    
+    // 查找当前尾节点的所有直接子节点
+    const children = allNodes.filter((n) => n.parentConversationId === tailId)
+    
+    if (children.length === 0) {
+      // 叶子节点：停止延伸
+      break
+    } else if (children.length === 1) {
+      // 单子节点（无分支）：自动加入路径并继续向下
+      tailId = children[0].conversationId
+      fullPath.push(tailId)
+      // 继续循环检查这个单子节点的后代
+    } else {
+      // 多个分支：停止延伸，让用户选择
+      break
+    }
+  }
+  
+  return fullPath.map((conversationId) => ({ conversationId }))
 }
 
 /**
@@ -547,18 +576,49 @@ function FocusView({
     currentIndex: -1,
   })
 
+  // ─── 从 store 获取消息缓存和加载方法（用于内容流中所有节点）───
+  const conversationMessagesCache = useChatWorkbenchStore((state) => state.conversationMessagesCache)
+  const loadConversationMessages = useChatWorkbenchStore((state) => state.loadConversationMessages)
+  const [loadingNodeIds, setLoadingNodeIds] = useState<Set<string>>(new Set())
+
   // 同步外部 conversation 变化（进入/退出聚焦态时）
   useEffect(() => {
     if (conversation?.conversationId) {
       setViewedNodeId(conversation.conversationId)
       // 进入聚焦态时，构建从当前节点到根节点的完整路径
-      const newPath = buildPathToRoot(conversation.conversationId, conversationNodes)
+      const newPath = buildNavigationPath(conversation.conversationId, conversationNodes)
       setNavState({
         path: newPath,
         currentIndex: newPath.length - 1,
       })
     }
   }, [conversation?.conversationId])
+
+  // ─── 预加载路径上所有节点的消息到缓存 ───
+  useEffect(() => {
+    if (navState.path.length === 0) return
+    
+    const preload = async () => {
+      for (const pathItem of navState.path) {
+        const { conversationId } = pathItem
+        // 只加载尚未缓存的节点
+        if (!conversationMessagesCache[conversationId] && !loadingNodeIds.has(conversationId)) {
+          setLoadingNodeIds(prev => new Set(prev).add(conversationId))
+          try {
+            await loadConversationMessages(conversationId)
+          } finally {
+            setLoadingNodeIds(prev => {
+              const next = new Set(prev)
+              next.delete(conversationId)
+              return next
+            })
+          }
+        }
+      }
+    }
+    
+    preload()
+  }, [navState.path])
 
   const viewedNode = useMemo(
     () => conversationNodes.find((n) => n.conversationId === viewedNodeId) ?? conversation ?? null,
@@ -577,24 +637,40 @@ function FocusView({
     [conversationNodes, viewedNodeId],
   )
 
-  // ─── 统一的路径感知导航函数 ───
+  // ─── 统一的路径感知导航函数（滚动+高亮模式） ───
+  const contentFlowRef = useRef<HTMLDivElement>(null)
+  const [activeSectionId, setActiveSectionId] = useState<string>('')
+
   const handleNavigate = useCallback(
     (nodeId: string) => {
       if (nodeId === viewedNodeId) return
 
-      setViewedNodeId(nodeId)
-      
       // 路径感知逻辑：判断目标节点是否在当前路径内
       if (isInNavigationPath(nodeId, navState.path)) {
-        // 目标在路径内：仅移动 currentIndex
+        // 目标在路径内：平滑滚动到对应位置 + 高亮
+        const targetEl = document.getElementById(`flow-section-${nodeId}`)
+        if (targetEl) {
+          targetEl.classList.add('flow-section--highlight')
+          setTimeout(() => targetEl.classList.remove('flow-section--highlight'), 2000)
+          targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        }
+        // 同步 currentIndex
         const newIndex = navState.path.findIndex((item) => item.conversationId === nodeId)
-        setNavState((prev) => ({ ...prev, currentIndex: newIndex }))
+        if (newIndex !== -1) {
+          setNavState((prev) => ({ ...prev, currentIndex: newIndex }))
+        }
       } else {
-        // 目标在路径外：重建完整路径
-        const newPath = buildPathToRoot(nodeId, conversationNodes)
+        // 目标在路径外：重建路径并重新渲染内容流
+        const newPath = buildNavigationPath(nodeId, conversationNodes)
         setNavState({
           path: newPath,
           currentIndex: newPath.length - 1,
+        })
+        setViewedNodeId(nodeId)
+        // 等待 DOM 更新后滚动到新位置
+        requestAnimationFrame(() => {
+          const targetEl = document.getElementById(`flow-section-${nodeId}`)
+          targetEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
         })
       }
 
@@ -603,54 +679,42 @@ function FocusView({
     [viewedNodeId, navState, conversationNodes, onNavigateToNode],
   )
 
-  // ─── 滚轮/触摸滑动导航处理 ───
-  const handleScrollNavigation = useCallback(
-    (direction: 'up' | 'down') => {
-      if (!viewedNode) return
+  // ─── IntersectionObserver: 追踪当前可见的内容块 ───
+  useEffect(() => {
+    if (navState.path.length === 0) return
 
-      if (direction === 'up') {
-        // 上滑：向父节点导航
-        if (navState.currentIndex <= 0) {
-          // 已到达根节点，显示提示
-          console.log('[Navigation] 已到达根节点')
-          return
-        }
-        
-        const prevNode = navState.path[navState.currentIndex - 1]
-        if (prevNode) {
-          setViewedNodeId(prevNode.conversationId)
-          setNavState((prev) => ({ ...prev, currentIndex: prev.currentIndex - 1 }))
-          onNavigateToNode(prevNode.conversationId)
-        }
-      } else {
-        // 下滑：向子节点导航
-        const children = conversationNodes.filter((n) => n.parentConversationId === viewedNode.conversationId)
-        
-        if (children.length === 0) {
-          // 已到达叶子节点（末端）
-          console.log('[Navigation] 已到达末端')
-          return
-        }
-        
-        if (children.length === 1) {
-          // 单个子节点：直接切换
-          handleNavigate(children[0].conversationId)
-        } else {
-          // 多个分支：检查导航栈是否有下一跳
-          const nextInPath = navState.path[navState.currentIndex + 1]
-          if (nextInPath && children.some((c) => c.conversationId === nextInPath.conversationId)) {
-            // 导航栈有下一跳：自动选择
-            setViewedNodeId(nextInPath.conversationId)
-            setNavState((prev) => ({ ...prev, currentIndex: prev.currentIndex + 1 }))
-            onNavigateToNode(nextInPath.conversationId)
-          } else {
-            // 遇到分支且无预设路径：提示用户手动选择
-            console.log('[Navigation] 遇到多个分支，请手动选择')
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const nodeId = entry.target.getAttribute('data-node-id')
+            if (nodeId && nodeId !== activeSectionId) {
+              setActiveSectionId(nodeId)
+              // 同步树导航高亮
+              const index = navState.path.findIndex((item) => item.conversationId === nodeId)
+              if (index !== -1 && index !== navState.currentIndex) {
+                setNavState((prev) => ({ ...prev, currentIndex: index }))
+                // 切换 viewedNodeId 以加载对应消息
+                setViewedNodeId(nodeId)
+              }
+            }
           }
         }
-      }
-    },
-    [viewedNode, navState, conversationNodes, handleNavigate, onNavigateToNode],
+      },
+      { threshold: 0.4 },
+    )
+
+    // 观察所有 flow-section
+    const sections = contentFlowRef.current?.querySelectorAll('.flow-section')
+    sections?.forEach((section) => observer.observe(section))
+
+    return () => observer.disconnect()
+  }, [navState.path])
+
+  // ─── 辅助函数：获取节点的子节点（用于分支选择器） ───
+  const getChildrenForNode = useCallback(
+    (nodeId: string) => conversationNodes.filter((n) => n.parentConversationId === nodeId),
+    [conversationNodes],
   )
 
   // 构建祖先链（用于面包屑）
@@ -666,86 +730,100 @@ function FocusView({
 
   const isMobile = responsive.isMobile
 
+  // 构建节点查找映射
+  const nodeMap = useMemo(() => new Map(conversationNodes.map((n) => [n.conversationId, n])), [conversationNodes])
+
   return (
-    <div 
-      className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}
-      onWheel={(e) => {
-        // 阻止默认滚动行为，用于导航
-        e.preventDefault()
-        // 根据滚动方向触发导航（ deltaY > 0 为向下滚动）
-        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
-          handleScrollNavigation(e.deltaY > 0 ? 'down' : 'up')
-        }
-      }}
-      onTouchStart={(e) => {
-        // 记录触摸起始位置
-        const touch = e.touches[0]
-        ;(e.currentTarget as HTMLElement).dataset.touchStartY = touch.clientY.toString()
-      }}
-      onTouchEnd={(e) => {
-        // 计算滑动方向
-        const touch = e.changedTouches[0]
-        const startY = parseFloat((e.currentTarget as HTMLElement).dataset.touchStartY || '0')
-        const deltaY = touch.clientY - startY
-        
-        // 垂直滑动超过阈值时触发导航
-        if (Math.abs(deltaY) > 50) {
-          handleScrollNavigation(deltaY > 0 ? 'down' : 'up')
-        }
-      }}
-    >
+    <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
       {/* 左侧：树导航 */}
       <div className="focus-view__tree">
         <FocusTreeNav
           anchorId={focusedConversationId ?? ''}
           allNodes={conversationNodes}
-          activeId={viewedNodeId}
+          activeId={activeSectionId || viewedNodeId}
           onSelect={handleNavigate}
         />
       </div>
 
-      {/* 右侧：主内容区 */}
+      {/* 右侧：主内容区（无缝内容流） */}
       <div className="focus-view__main">
         {/* 面包屑 */}
-        <FocusBreadcrumb chain={ancestorChain} activeId={viewedNodeId} onSelect={handleNavigate} />
+        <FocusBreadcrumb chain={ancestorChain} activeId={activeSectionId || viewedNodeId} onSelect={handleNavigate} />
 
-        {/* 标题行 + 兄弟统计 */}
-        <div className="focus-view__header">
-          <Space direction="vertical" size={4}>
-            <Typography.Title level={4} style={{ margin: 0 }}>
-              {viewedNode ? summarizeConversation(viewedNode) : '—'}
-              {siblingCount > 0 && (
-                <Typography.Text type="secondary" style={{ fontWeight: 'normal', fontSize: '0.7em', marginLeft: 6 }}>
-                  · 兄弟: {siblingCount}
-                </Typography.Text>
-              )}
-            </Typography.Title>
-            <Typography.Text type="secondary">{viewedNode?.conversationId ?? '—'}</Typography.Text>
-          </Space>
+        {/* 内容流容器 */}
+        <div className="focus-view__content-flow" ref={contentFlowRef}>
+          {navState.path.length > 0 ? (
+            navState.path.map((pathItem, index) => {
+              const node = nodeMap.get(pathItem.conversationId)
+              if (!node) return null
+
+              const isActive = pathItem.conversationId === (activeSectionId || viewedNodeId)
+              const children = getChildrenForNode(pathItem.conversationId)
+
+              // 从缓存中获取该节点的完整消息
+              const nodeMessages = conversationMessagesCache[pathItem.conversationId] ?? []
+              const isNodeLoading = loadingNodeIds.has(pathItem.conversationId)
+
+              return (
+                <section
+                  key={pathItem.conversationId}
+                  className={`flow-section ${isActive ? 'flow-section--active' : ''}`}
+                  data-node-id={pathItem.conversationId}
+                  id={`flow-section-${pathItem.conversationId}`}
+                >
+                  {/* 节点标题头 */}
+                  <div className="flow-section__header">
+                    {index > 0 && <div className="flow-separator">↓</div>}
+                    <Space direction="vertical" size={2}>
+                      <Typography.Text strong style={{ fontSize: 14 }}>
+                        {summarizeConversation(node)}
+                      </Typography.Text>
+                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+                        {node.conversationId}
+                        {index + 1 < navState.path.length && ` → 第 ${index + 1}/${navState.path.length} 层`}
+                        {nodeMessages.length > 0 && ` · ${nodeMessages.length} 条消息`}
+                      </Typography.Text>
+                    </Space>
+                  </div>
+
+                  {/* 所有节点都显示完整消息列表 */}
+                  {isNodeLoading ? (
+                    <div className="flow-section__loading">
+                      <Spin size="small" />
+                      <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
+                        加载中...
+                      </Typography.Text>
+                    </div>
+                  ) : nodeMessages.length > 0 ? (
+                    <div className="flow-section__messages">
+                      {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list')}
+                    </div>
+                  ) : (
+                    <div className="flow-section__empty-messages">
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        暂无消息
+                      </Typography.Text>
+                    </div>
+                  )}
+
+                  {/* 分支选择器：该节点有多个子节点时显示 */}
+                  {children.length >= 2 && (
+                    <div className="flow-section__branches">
+                      <BranchSelector nodes={children} onSelect={handleNavigate} />
+                    </div>
+                  )}
+                </section>
+              )
+            })
+          ) : (
+            /* 空状态 */
+            <div className="focus-view__empty">
+              <EmptyState description="暂无导航路径" />
+            </div>
+          )}
         </div>
 
-        {/* 路径进度指示器 */}
-        {navState.path.length > 1 && (
-          <div className="focus-view__nav-indicator">
-            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              导航路径: [{navState.currentIndex + 1}/{navState.path.length}]
-              {navState.currentIndex === 0 && ' (根节点)'}
-              {navState.currentIndex === navState.path.length - 1 && navState.path.length > 1 && ' (末端)'}
-            </Typography.Text>
-          </div>
-        )}
-
-        {/* 消息列表 */}
-        <div className="focus-view__messages">
-          {renderMessageList(conversationMessages, messagesLoading, messagesError, conversationError, 'focus-view__messages-list')}
-        </div>
-
-        {/* 分支选择器 */}
-        {childNodes.length >= 2 && (
-          <BranchSelector nodes={childNodes} onSelect={handleNavigate} />
-        )}
-
-        {/* 输入框 */}
+        {/* 输入框固定在底部 */}
         <div className="focus-view__composer">
           <MessageComposer
             selectedConversationId={selectedConversationId}

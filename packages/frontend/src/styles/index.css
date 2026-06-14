@@ -1895,6 +1895,108 @@ button {
   overflow-y: auto;
 }
 
+/* ====== 内容流（Content Flow）样式 ====== */
+
+/* 内容流容器：启用原生滚动 */
+.focus-view__content-flow {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+  padding: 16px 20px;
+}
+
+.focus-view__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+}
+
+/* 每个节点的内容块 */
+.flow-section {
+  position: relative;
+  margin-bottom: 40px;
+  padding: 0;
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+  border-radius: 8px;
+}
+
+.flow-section:last-child {
+  margin-bottom: 24px;
+}
+
+/* 当前可见的活跃内容块（轻微背景高亮） */
+.flow-section--active {
+  background: rgba(22, 119, 255, 0.02);
+  padding: 16px;
+}
+
+/* 导航点击后的高亮动画 */
+.flow-section--highlight {
+  animation: flow-highlight-pulse 2s ease-out forwards;
+}
+
+@keyframes flow-highlight-pulse {
+  0% { box-shadow: inset 0 0 0 3px rgba(22, 119, 255, 0.3), 0 0 12px rgba(22, 119, 255, 0.15); }
+  100% { box-shadow: inset 0 0 0 0 rgba(22, 119, 255, 0), 0 0 0 rgba(22, 119, 255, 0); }
+}
+
+/* 节点标题头 */
+.flow-section__header {
+  margin-bottom: 8px;
+}
+
+/* 节点之间的分隔线 */
+.flow-separator {
+  text-align: center;
+  color: var(--app-border, #d9d9d9);
+  font-size: 14px;
+  line-height: 1;
+  margin-bottom: 12px;
+  letter-spacing: 2px;
+}
+
+/* 活跃节点的消息列表 */
+.flow-section__messages {
+  animation: flow-fade-in 0.25s ease-out;
+}
+
+@keyframes flow-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.flow-section__messages-list {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+/* 非活跃节点的消息加载中 */
+.flow-section__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px 0;
+  gap: 8px;
+}
+
+/* 非活跃节点无消息 */
+.flow-section__empty-messages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+
+/* 分支区域（在内容流中） */
+.flow-section__branches {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px dashed var(--app-border, rgba(0, 0, 0, 0.06));
+}
+
 /* ====== 树导航节点样式 ====== */
 
 .focus-tree-nav {
