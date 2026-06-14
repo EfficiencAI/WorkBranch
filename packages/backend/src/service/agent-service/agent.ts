@@ -174,6 +174,7 @@ export class AgentService {
       );
 
       await messageQueue.publish(msg);
+      console.log('[agent] published msg, mid=', mid, 'type=', blockType);
     };
 
     const context: MessageContext = {

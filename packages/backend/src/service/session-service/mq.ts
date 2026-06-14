@@ -3,6 +3,7 @@ import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Message, SegmentType } from './canonical';
+import { conversationBuffer } from './conversation-buffer';
 import { logger } from '../../core/logging';
 
 interface StreamState {
@@ -168,7 +169,7 @@ class HybridMessageQueue {
     if (this.db) {
       const stmt = this.db.prepare(
         'SELECT MAX(seq) as max_seq FROM message_stream WHERE conversation_id = ?',
-        [conversationId]
+        [conversationId ?? '']
       );
       if (stmt.step()) {
         const row = stmt.getAsObject();
@@ -203,8 +204,8 @@ class HybridMessageQueue {
           message.conversation_id,
           seq,
           message.message_id,
-          message.session_id,
-          message.workspace_id,
+          message.session_id ?? '',
+          message.workspace_id ?? '',
           this.getPrimaryMessageType(message),
           contentBlocks,
           metadata
@@ -238,7 +239,7 @@ class HybridMessageQueue {
     try {
       this.db.run(
         'DELETE FROM message_stream WHERE conversation_id = ?',
-        [conversationId]
+        [conversationId ?? '']
       );
       this.save();
 
@@ -258,12 +259,58 @@ class HybridMessageQueue {
     return message.content_blocks.some(block => block.type === SegmentType.DONE);
   }
 
+  private isErrorMessage(message: Message): boolean {
+    return message.content_blocks.some(block => block.type === SegmentType.ERROR);
+  }
+
+  /** 将消息路由到 conversationBuffer，确保内容最终持久化到 DB */
+  private routeToBuffer(message: Message): void {
+    const mid = message.message_id;
+    const blockType = this.getPrimaryMessageType(message);
+    const fs = require('fs');
+    fs.appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\\\.tmp-debug\\mq-trace.log',
+      `[${new Date().toISOString()}] [mq] routeToBuffer mid=${mid} type=${blockType} isDone=${this.isDoneMessage(message)} isError=${this.isErrorMessage(message)}\n`);
+
+    if (!mid) {
+      this.logEvent('ERROR', 'mq.buffer.no_mid', `Message has no message_id, type=${blockType}`, message.conversation_id);
+      return;
+    }
+
+    if (this.isDoneMessage(message)) {
+      this.logEvent('INFO', 'mq.buffer.route_done', `Routing DONE for mid=${mid}`, message.conversation_id);
+      conversationBuffer.completeMessage(mid).catch(err =>
+        this.logEvent('ERROR', 'mq.buffer.complete_failed', `completeMessage error: ${err}`, message.conversation_id)
+      );
+      return;
+    }
+
+    if (this.isErrorMessage(message)) {
+      this.logEvent('INFO', 'mq.buffer.route_error', `Routing ERROR for mid=${mid}`, message.conversation_id);
+      conversationBuffer.failMessage(mid).catch(err =>
+        this.logEvent('ERROR', 'mq.buffer.fail_failed', `failMessage error: ${err}`, message.conversation_id)
+      );
+      return;
+    }
+
+    // text_delta / thinking_delta 等内容块 → 累积到 buffer draft
+    this.logEvent('INFO', 'mq.buffer.route_consume', `Routing consume for mid=${mid} type=${blockType}`, message.conversation_id);
+    conversationBuffer.consumeMessage(message).catch(err =>
+      this.logEvent('ERROR', 'mq.buffer.consume_failed', `consumeMessage error: ${err}`, message.conversation_id)
+    );
+  }
+
   async publish(message: Message): Promise<boolean> {
+    const fs = require('fs');
+    fs.appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\\\.tmp-debug\\mq-trace.log',
+      `[${new Date().toISOString()}] [mq] publish() mid=${message.message_id} type=${this.getPrimaryMessageType(message)} conv=${message.conversation_id}\n`);
     await this.ensureInit();
 
     try {
       const seq = this.getNextSeq(message.conversation_id);
       this.saveToSqlite(message, seq);
+
+      // 单路径：MQ 统一将消息路由到 buffer，确保内容持久化到 DB
+      this.routeToBuffer(message);
 
       if (this.isDoneMessage(message)) {
         const state = this.streamStates.get(message.conversation_id);
