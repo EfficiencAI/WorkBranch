@@ -52,6 +52,28 @@ interface StatementResult {
   lastInsertRowid: number;
 }
 
+/**
+ * L2 防御：sql.js 无法绑定 JavaScript undefined，统一转 null 并告警。
+ * 当检测到 undefined 参数时输出 warning 日志，帮助开发者定位上游 bug。
+ * DAO 层（L1）应优先使用 ?? 运算符在源头消除 undefined。
+ */
+function sanitizeParams(params: unknown[], sql: string): unknown[] {
+  const safeParams = params.map(p => p === undefined ? null : p);
+  const hasUndefined = params.some(p => p === undefined);
+  if (hasUndefined) {
+    const undefinedIndices = params.reduce<number[]>((acc, p, i) => {
+      if (p === undefined) acc.push(i);
+      return acc;
+    }, []);
+    console.warn(
+      `[DB-PARAM] undefined detected at indices [${undefinedIndices.join(', ')}] ` +
+      `in SQL: ${sql.substring(0, 80)}... ` +
+      `Use ?? operator in DAO layer to fix the source.`
+    );
+  }
+  return safeParams;
+}
+
 class PreparedStatement {
   private db: SqlJsDatabase;
   private sql: string;
@@ -62,7 +84,8 @@ class PreparedStatement {
   }
 
   run(...params: unknown[]): StatementResult {
-    this.db.run(this.sql, params as never[]);
+    const safeParams = sanitizeParams(params, this.sql);
+    this.db.run(this.sql, safeParams as never[]);
     return {
       changes: this.db.getRowsModified(),
       lastInsertRowid: Number(this.db.exec("SELECT last_insert_rowid() as id")[0]?.values[0]?.[0] || 0)
@@ -70,7 +93,8 @@ class PreparedStatement {
   }
 
   get<T = unknown>(...params: unknown[]): T | undefined {
-    const stmt = this.db.prepare(this.sql, params as never[]);
+    const safeParams = sanitizeParams(params, this.sql);
+    const stmt = this.db.prepare(this.sql, safeParams as never[]);
     if (stmt.step()) {
       const row = stmt.getAsObject() as T;
       stmt.free();
@@ -82,7 +106,8 @@ class PreparedStatement {
 
   all<T = unknown>(...params: unknown[]): T[] {
     const results: T[] = [];
-    const stmt = this.db.prepare(this.sql, params as never[]);
+    const safeParams = sanitizeParams(params, this.sql);
+    const stmt = this.db.prepare(this.sql, safeParams as never[]);
     while (stmt.step()) {
       results.push(stmt.getAsObject() as T);
     }
@@ -261,11 +286,42 @@ export class SQLiteDatabase {
     }
   }
 
-  private save(): void {
-    if (!this.db) return;
-    const data = this.db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(this.dbPath, buffer);
+  /** Flush in-memory sql.js DB to disk. Call after writes outside transaction(). */
+  save(): void {
+    const fs_mod = require('fs');
+    console.log(`[DB-SAVE] save() called dbPath=${this.dbPath} hasDb=${!!this.db}`);
+    if (!this.db) { console.log('[DB-SAVE] ABORT: no db'); return; }
+    try {
+      // CRITICAL: Force sql.js to consolidate all in-memory changes before export
+      try { this.db.run('VACUUM'); } catch(vacErr) {
+        console.log(`[DB-SAVE] VACUUM skipped: ${vacErr.message}`);
+      }
+
+      const data = this.db.export();
+      const buffer = Buffer.from(data);
+      const beforeSize = fs_mod.existsSync(this.dbPath) ? fs_mod.statSync(this.dbPath).size : 0;
+      fs_mod.writeFileSync(this.dbPath, buffer);
+      const afterSize = fs_mod.statSync(this.dbPath).size;
+      console.log(`[DB-SAVE] WRITTEN ${buffer.length} bytes to ${this.dbPath} size: ${beforeSize} -> ${afterSize}`);
+
+      // Verify: read back and check conversations count
+      try {
+        const raw = fs_mod.readFileSync(this.dbPath);
+        console.log(`[DB-SAVE] VERIFY: file read back ${raw.length} bytes, matches buffer: ${raw.length === buffer.length}`);
+        // Try to detect if it's a valid SQLite header
+        const header = raw.slice(0, 16).toString('hex');
+        console.log(`[DB-SAVE] VERIFY: file header=${header}`);
+
+        // Also log sql.js in-memory state for comparison
+        try {
+          const convC = this.db.prepare('SELECT COUNT(*) as c FROM conversations').get() as any;
+          const msgC = this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as any;
+          console.log(`[DB-SAVE] VERIFY: mem-state convs=${convC?.c} msgs=${msgC?.c}`);
+        } catch(e2) { /* ignore */ }
+      } catch(vErr) {
+        console.error(`[DB-SAVE] VERIFY error: ${vErr.message}`);
+      }
+    } catch(e) { console.error(`[DB-SAVE] ERROR: ${e.message}`); }
   }
 
   prepare(sql: string): PreparedStatement {
