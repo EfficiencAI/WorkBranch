@@ -224,6 +224,9 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
   const draggingNodeId = useTreeStore((state) => state.draggingNodeId)
   const setDraggingNodeId = useTreeStore((state) => state.setDraggingNodeId)
   const clearDraggingNodeId = useTreeStore((state) => state.clearDraggingNodeId)
+  const focusedConversationId = useTreeStore((state) => state.focusedConversationId)
+  const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
+  const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
   const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
   const reactFlow = useReactFlow()
 
@@ -301,12 +304,19 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
       className={nodeClassName}
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
-      {...longPressHandlers}
+      onClick={(e) => {
+        // 显式触发聚焦态
+        if (focusedConversationId !== conversation.conversationId) {
+          setFocusedConversationId(conversation.conversationId)
+          setLockedSendConversationId(conversation.conversationId)
+        }
+      }}
     >
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
       <Card
         size="small"
         className="conversation-node__card conversation-node__card--assistant"
+        {...longPressHandlers}
       >
         <div className="conversation-node__body-frame">
           <div className="conversation-node__page-shell">

@@ -52,7 +52,15 @@ export function mergeSegments(blocks: ContentBlock[], messageId: string): Merged
 
   for (const block of blocks) {
     const mergedType = DELTA_TYPE_MAP[block.type];
-    if (mergedType === undefined) continue;
+    if (mergedType === undefined) {
+      // 静默兜底点：未知 ContentBlock 类型被跳过
+      console.warn(
+        `[SegmentMerger] 跳过未知的 ContentBlock 类型 "${block.type}"。` +
+        `如需支持此类型，请在 DELTA_TYPE_MAP 中添加映射。` +
+        `\nBlock 内容预览: ${String(block.content ?? '').substring(0, 80)}`
+      );
+      continue;
+    }
 
     if (mergedType !== currentType) {
       flush();
