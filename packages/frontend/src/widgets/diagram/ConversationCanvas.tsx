@@ -35,6 +35,21 @@ type ConversationCanvasProps = {
   onAutoArrange: () => Promise<void>
 }
 
+// ─── 导航路径相关类型定义 ───
+
+/** 导航路径中的单个节点项 */
+interface NavigationPathItem {
+  conversationId: string
+}
+
+/** 导航状态管理 */
+interface NavigationState {
+  /** 完整的导航路径：从根节点到当前节点 */
+  path: NavigationPathItem[]
+  /** 当前聚焦节点在路径中的索引 */
+  currentIndex: number
+}
+
 type FlowNodeData = {
   conversation: ConversationNode
   focused: boolean
@@ -458,6 +473,38 @@ const VERTICAL_GAP = 240
 
 // ─── 聚焦态界面（树导航 + 内容区） ───
 
+// ─── 导航路径工具函数 ───
+
+/**
+ * 从目标节点向上追溯到根节点，构建完整的导航路径
+ * @param targetId 目标节点 ID
+ * @param allNodes 所有对话节点
+ * @returns 从根节点到目标节点的路径数组
+ */
+function buildPathToRoot(targetId: string, allNodes: ConversationNode[]): NavigationPathItem[] {
+  const path: NavigationPathItem[] = []
+  const nodeMap = new Map(allNodes.map((n) => [n.conversationId, n]))
+  
+  let current: string | null = targetId
+  while (current) {
+    path.unshift({ conversationId: current })
+    const node = nodeMap.get(current)
+    current = node?.parentConversationId ?? null
+  }
+  
+  return path
+}
+
+/**
+ * 检查目标节点是否在当前导航路径内
+ * @param targetId 目标节点 ID
+ * @param navPath 当前导航路径
+ * @returns 是否在路径内
+ */
+function isInNavigationPath(targetId: string, navPath: NavigationPathItem[]): boolean {
+  return navPath.some((item) => item.conversationId === targetId)
+}
+
 interface FocusViewProps {
   conversation: ConversationNode | null
   conversationNodes: ConversationNode[]
@@ -493,11 +540,23 @@ function FocusView({
 }: FocusViewProps) {
   const responsive = useResponsive()
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
+  
+  // ─── 导航路径状态管理 ───
+  const [navState, setNavState] = useState<NavigationState>({
+    path: [],
+    currentIndex: -1,
+  })
 
   // 同步外部 conversation 变化（进入/退出聚焦态时）
   useEffect(() => {
     if (conversation?.conversationId) {
       setViewedNodeId(conversation.conversationId)
+      // 进入聚焦态时，构建从当前节点到根节点的完整路径
+      const newPath = buildPathToRoot(conversation.conversationId, conversationNodes)
+      setNavState({
+        path: newPath,
+        currentIndex: newPath.length - 1,
+      })
     }
   }, [conversation?.conversationId])
 
@@ -518,14 +577,80 @@ function FocusView({
     [conversationNodes, viewedNodeId],
   )
 
+  // ─── 统一的路径感知导航函数 ───
   const handleNavigate = useCallback(
     (nodeId: string) => {
-      if (nodeId !== viewedNodeId) {
-        setViewedNodeId(nodeId)
-        onNavigateToNode(nodeId)
+      if (nodeId === viewedNodeId) return
+
+      setViewedNodeId(nodeId)
+      
+      // 路径感知逻辑：判断目标节点是否在当前路径内
+      if (isInNavigationPath(nodeId, navState.path)) {
+        // 目标在路径内：仅移动 currentIndex
+        const newIndex = navState.path.findIndex((item) => item.conversationId === nodeId)
+        setNavState((prev) => ({ ...prev, currentIndex: newIndex }))
+      } else {
+        // 目标在路径外：重建完整路径
+        const newPath = buildPathToRoot(nodeId, conversationNodes)
+        setNavState({
+          path: newPath,
+          currentIndex: newPath.length - 1,
+        })
+      }
+
+      onNavigateToNode(nodeId)
+    },
+    [viewedNodeId, navState, conversationNodes, onNavigateToNode],
+  )
+
+  // ─── 滚轮/触摸滑动导航处理 ───
+  const handleScrollNavigation = useCallback(
+    (direction: 'up' | 'down') => {
+      if (!viewedNode) return
+
+      if (direction === 'up') {
+        // 上滑：向父节点导航
+        if (navState.currentIndex <= 0) {
+          // 已到达根节点，显示提示
+          console.log('[Navigation] 已到达根节点')
+          return
+        }
+        
+        const prevNode = navState.path[navState.currentIndex - 1]
+        if (prevNode) {
+          setViewedNodeId(prevNode.conversationId)
+          setNavState((prev) => ({ ...prev, currentIndex: prev.currentIndex - 1 }))
+          onNavigateToNode(prevNode.conversationId)
+        }
+      } else {
+        // 下滑：向子节点导航
+        const children = conversationNodes.filter((n) => n.parentConversationId === viewedNode.conversationId)
+        
+        if (children.length === 0) {
+          // 已到达叶子节点（末端）
+          console.log('[Navigation] 已到达末端')
+          return
+        }
+        
+        if (children.length === 1) {
+          // 单个子节点：直接切换
+          handleNavigate(children[0].conversationId)
+        } else {
+          // 多个分支：检查导航栈是否有下一跳
+          const nextInPath = navState.path[navState.currentIndex + 1]
+          if (nextInPath && children.some((c) => c.conversationId === nextInPath.conversationId)) {
+            // 导航栈有下一跳：自动选择
+            setViewedNodeId(nextInPath.conversationId)
+            setNavState((prev) => ({ ...prev, currentIndex: prev.currentIndex + 1 }))
+            onNavigateToNode(nextInPath.conversationId)
+          } else {
+            // 遇到分支且无预设路径：提示用户手动选择
+            console.log('[Navigation] 遇到多个分支，请手动选择')
+          }
+        }
       }
     },
-    [viewedNodeId, onNavigateToNode],
+    [viewedNode, navState, conversationNodes, handleNavigate, onNavigateToNode],
   )
 
   // 构建祖先链（用于面包屑）
@@ -542,7 +667,33 @@ function FocusView({
   const isMobile = responsive.isMobile
 
   return (
-    <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
+    <div 
+      className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}
+      onWheel={(e) => {
+        // 阻止默认滚动行为，用于导航
+        e.preventDefault()
+        // 根据滚动方向触发导航（ deltaY > 0 为向下滚动）
+        if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+          handleScrollNavigation(e.deltaY > 0 ? 'down' : 'up')
+        }
+      }}
+      onTouchStart={(e) => {
+        // 记录触摸起始位置
+        const touch = e.touches[0]
+        ;(e.currentTarget as HTMLElement).dataset.touchStartY = touch.clientY.toString()
+      }}
+      onTouchEnd={(e) => {
+        // 计算滑动方向
+        const touch = e.changedTouches[0]
+        const startY = parseFloat((e.currentTarget as HTMLElement).dataset.touchStartY || '0')
+        const deltaY = touch.clientY - startY
+        
+        // 垂直滑动超过阈值时触发导航
+        if (Math.abs(deltaY) > 50) {
+          handleScrollNavigation(deltaY > 0 ? 'down' : 'up')
+        }
+      }}
+    >
       {/* 左侧：树导航 */}
       <div className="focus-view__tree">
         <FocusTreeNav
@@ -572,6 +723,17 @@ function FocusView({
             <Typography.Text type="secondary">{viewedNode?.conversationId ?? '—'}</Typography.Text>
           </Space>
         </div>
+
+        {/* 路径进度指示器 */}
+        {navState.path.length > 1 && (
+          <div className="focus-view__nav-indicator">
+            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
+              导航路径: [{navState.currentIndex + 1}/{navState.path.length}]
+              {navState.currentIndex === 0 && ' (根节点)'}
+              {navState.currentIndex === navState.path.length - 1 && navState.path.length > 1 && ' (末端)'}
+            </Typography.Text>
+          </div>
+        )}
 
         {/* 消息列表 */}
         <div className="focus-view__messages">
