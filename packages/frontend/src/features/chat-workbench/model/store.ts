@@ -213,25 +213,37 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   },
 
   async syncConversationContext(conversationId: string | null) {
+    console.log('[syncConversationContext] called with:', conversationId)
+
     if (!conversationId) {
       set({ conversationDetail: null, workspaceDetail: null, conversationMessages: [], messagesError: null })
       return
     }
 
     await get().loadConversationBundle(conversationId)
-    
+    console.log('[syncConversationContext] bundle loaded')
+
+    // 确保消息已加载（刷新后缓存为空时需要从 API 获取）
+    const cacheKeys = Object.keys(get().conversationMessagesCache)
+    console.log('[syncConversationContext] cache keys:', cacheKeys, 'has target:', cacheKeys.includes(conversationId))
+
+    if (!get().conversationMessagesCache[conversationId]) {
+      console.log('[syncConversationContext] loading messages from API...')
+      await get().loadConversationMessages(conversationId)
+      const loadedMessages = get().conversationMessagesCache[conversationId]
+      console.log('[syncConversationContext] messages loaded:', loadedMessages?.length, 
+        loadedMessages?.[0] ? { userContent: loadedMessages[0].userContent, assistantContent: loadedMessages[0].assistantContent } : 'empty')
+    }
+
     set(state => {
       const cachedMessages = state.conversationMessagesCache[conversationId]
-      return { 
+      console.log('[syncConversationContext] setting messages:', cachedMessages?.length,
+        cachedMessages?.[0] ? { userContent: cachedMessages[0].userContent, assistantContent: cachedMessages[0].assistantContent } : 'empty')
+      return {
         conversationMessages: cachedMessages || [],
-        messagesError: null 
+        messagesError: null
       }
     })
-    
-    // 如果缓存中没有，异步加载
-    if (!get().conversationMessagesCache[conversationId]) {
-      void get().loadConversationMessages(conversationId)
-    }
   },
 
   async enterSessionContext(sessionDetail: SessionDetail | null): Promise<SessionContextResult> {

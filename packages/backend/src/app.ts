@@ -7,8 +7,10 @@ import { requestLogger } from './middleware/request-logger';
 import routes from './routes';
 
 export async function buildApp() {
+  const isBundle = process.env.NODE_ENV === 'production';
+
   const app = fastify({
-    logger: {
+    logger: isBundle ? { level: 'info' } : {
       level: 'info',
       transport: {
         target: 'pino-pretty',
