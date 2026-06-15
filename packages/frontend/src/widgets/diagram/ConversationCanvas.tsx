@@ -571,6 +571,8 @@ function FocusView({
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
   const [treeWidth, setTreeWidth] = useState(200)
   const isResizing = useRef(false)
+  // 树点击锁：树点击后锁定 activeId，直到下次滚动才释放
+  const treeClickLock = useRef(false)
 
   // ─── 拖拽调整树宽度 ───
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -671,7 +673,6 @@ function FocusView({
 
   // ─── 统一的路径感知导航函数（滚动+高亮模式） ───
   const contentFlowRef = useRef<HTMLDivElement>(null)
-  const [activeSectionId, setActiveSectionId] = useState<string>('')
 
   const handleNavigate = useCallback(
     (nodeId: string) => {
@@ -686,10 +687,14 @@ function FocusView({
           setTimeout(() => targetEl.classList.remove('flow-section--highlight'), 2000)
           targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
-        // 同步 currentIndex
+        // 同步 currentIndex 和 viewedNodeId
         const newIndex = navState.path.findIndex((item) => item.conversationId === nodeId)
         if (newIndex !== -1) {
           setNavState((prev) => ({ ...prev, currentIndex: newIndex }))
+          if (nodeId !== viewedNodeId) {
+            setViewedNodeId(nodeId)
+            treeClickLock.current = true
+          }
         }
       } else {
         // 目标在路径外：重建路径并重新渲染内容流
@@ -716,37 +721,62 @@ function FocusView({
     [viewedNodeId, navState, conversationNodes, onNavigateToNode],
   )
 
-  // ─── IntersectionObserver: 追踪当前可见的内容块 ───
+  // ─── 滚动检测：视口中心点归属算法（防抖 + 树点击锁） ───
   useEffect(() => {
     if (navState.path.length === 0) return
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          if (entry.isIntersecting) {
-            const nodeId = entry.target.getAttribute('data-node-id')
-            if (nodeId && nodeId !== activeSectionId) {
-              setActiveSectionId(nodeId)
-              // 同步树导航高亮
-              const index = navState.path.findIndex((item) => item.conversationId === nodeId)
-              if (index !== -1 && index !== navState.currentIndex) {
-                setNavState((prev) => ({ ...prev, currentIndex: index }))
-                // 切换 viewedNodeId 以加载对应消息
-                setViewedNodeId(nodeId)
-              }
-            }
+    const scrollContainer = contentFlowRef.current
+    if (!scrollContainer) return
+
+    let timer: ReturnType<typeof setTimeout> | null = null
+
+    const updateActiveFromScroll = () => {
+      // 如果树点击锁生效，跳过更新（懒更新：等下次滚动才释放）
+      if (treeClickLock.current) {
+        treeClickLock.current = false // 释放锁，下次滚动正常更新
+        return
+      }
+
+      const containerRect = scrollContainer.getBoundingClientRect()
+      const centerY = containerRect.top + containerRect.height / 2
+
+      // 找到视口中心点落在哪个 flow-section 内
+      const sections = scrollContainer.querySelectorAll('.flow-section')
+      let bestNode: string | null = null
+      sections.forEach((section) => {
+        const rect = section.getBoundingClientRect()
+        if (centerY >= rect.top && centerY <= rect.bottom) {
+          const nodeId = section.getAttribute('data-node-id')
+          if (nodeId && navState.path.some((item) => item.conversationId === nodeId)) {
+            bestNode = nodeId
           }
         }
-      },
-      { threshold: 0.4 },
-    )
+      })
 
-    // 观察所有 flow-section
-    const sections = contentFlowRef.current?.querySelectorAll('.flow-section')
-    sections?.forEach((section) => observer.observe(section))
+      if (bestNode && bestNode !== viewedNodeId) {
+        setViewedNodeId(bestNode)
+        const index = navState.path.findIndex((item) => item.conversationId === bestNode)
+        if (index !== -1 && index !== navState.currentIndex) {
+          setNavState((prev) => ({ ...prev, currentIndex: index }))
+        }
+      }
+    }
 
-    return () => observer.disconnect()
-  }, [navState.path])
+    // 使用 scroll 事件 + 防抖替代 IntersectionObserver
+    const handleScroll = () => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(updateActiveFromScroll, 150)
+    }
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    // 初始检测一次
+    updateActiveFromScroll()
+
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll)
+      if (timer) clearTimeout(timer)
+    }
+  }, [navState.path, viewedNodeId])
 
   // ─── 辅助函数：获取节点的子节点（用于分支选择器） ───
   const getChildrenForNode = useCallback(
@@ -777,7 +807,8 @@ function FocusView({
         <FocusTreeNav
           anchorId={focusedConversationId ?? ''}
           allNodes={conversationNodes}
-          activeId={activeSectionId || viewedNodeId}
+          activeId={viewedNodeId}
+          pathIds={new Set(navState.path.map((item) => item.conversationId))}
           onSelect={handleNavigate}
         />
       </div>
@@ -790,7 +821,7 @@ function FocusView({
       {/* 右侧：主内容区（无缝内容流） */}
       <div className="focus-view__main">
         {/* 面包屑 */}
-        <FocusBreadcrumb chain={ancestorChain} activeId={activeSectionId || viewedNodeId} onSelect={handleNavigate} />
+        <FocusBreadcrumb chain={ancestorChain} activeId={viewedNodeId} onSelect={handleNavigate} />
 
         {/* 内容流容器 */}
         <div className="focus-view__content-flow" ref={contentFlowRef}>
@@ -799,7 +830,7 @@ function FocusView({
               const node = nodeMap.get(pathItem.conversationId)
               if (!node) return null
 
-              const isActive = pathItem.conversationId === (activeSectionId || viewedNodeId)
+              const isActive = pathItem.conversationId === viewedNodeId
               const children = getChildrenForNode(pathItem.conversationId)
 
               // 从缓存中获取该节点的完整消息
@@ -955,9 +986,10 @@ function BranchSelector({ nodes, onSelect }: BranchSelectorProps) {
 // ─── 树导航（Git Graph 风格，lane 列分配算法） ───
 
 // ─── Git Graph 常量 ───
-const BRANCH_COLORS = ['#1677ff', '#faad14', '#eb2f96', '#52c41a', '#722ed1', '#13c2c2', '#fa541c']
+const PATH_COLOR = '#faad14'  // 路径高亮色（橙黄）
+const BRANCH_COLOR = '#1677ff' // 分支统一蓝色
 const ROW_HEIGHT = 32
-const LANE_WIDTH = 20
+const LANE_WIDTH = 10
 const DOT_RADIUS = 5
 const PADDING_X = 6
 const PADDING_Y = 4
@@ -970,13 +1002,14 @@ interface LayoutNode {
   color: string       // 分支颜色
   label: string       // 显示文本
   isActive: boolean   // 是否当前活跃节点
-  isOnPath: boolean   // 是否在路径上
+  isInNavPath: boolean // 是否在导航路径上
 }
 
 /** SVG 路径段 */
 interface SvgPath {
   d: string
   color: string
+  isOnPath?: boolean // 是否为路径连线（加粗）
 }
 
 /**
@@ -990,6 +1023,7 @@ function buildLayout(
   startRow: number,
   activeId: string,
   expandedIds: Set<string>,
+  pathIds: Set<string>,
 ): { layoutNodes: LayoutNode[]; paths: SvgPath[]; nextRow: number } {
   const layoutNodes: LayoutNode[] = []
   const paths: SvgPath[] = []
@@ -998,7 +1032,8 @@ function buildLayout(
 
   for (let i = 0; i < nodes.length; i++) {
     const node = nodes[i]
-    const color = node.branchColor || BRANCH_COLORS[0]
+    const isInNavPath = pathIds.has(node.node.conversationId)
+    const color = isInNavPath ? PATH_COLOR : BRANCH_COLOR
     const isActive = node.node.conversationId === activeId
     const x = PADDING_X + currentLane * LANE_WIDTH + LANE_WIDTH / 2
     const y = PADDING_Y + currentRow * ROW_HEIGHT + ROW_HEIGHT / 2
@@ -1011,7 +1046,7 @@ function buildLayout(
       color,
       label: summarizeConversation(node.node),
       isActive,
-      isOnPath: node.isOnPath,
+      isInNavPath,
     })
 
     // 只有展开的节点才画连接线并递归处理子节点
@@ -1019,16 +1054,17 @@ function buildLayout(
     if (isExpanded && node.children.length > 0) {
       // 子节点递归布局
       const childStartLane = currentLane + 1
-      const childResult = buildLayout(node.children, childStartLane, currentRow + 1, activeId, expandedIds)
+      const childResult = buildLayout(node.children, childStartLane, currentRow + 1, activeId, expandedIds, pathIds)
 
       // 合并子节点的布局数据和路径
       layoutNodes.push(...childResult.layoutNodes)
       paths.push(...childResult.paths)
 
-      // 为每个子节点画分叉连接线（├ 或 └）
+      // 为每个子节点画分叉连接线（曲线）
       for (let ci = 0; ci < node.children.length; ci++) {
         const child = node.children[ci]
-        const childColor = child.branchColor || BRANCH_COLORS[0]
+        const childIsInPath = pathIds.has(child.node.conversationId)
+        const childColor = childIsInPath ? PATH_COLOR : BRANCH_COLOR
         const childLayout = childResult.layoutNodes.find((l) => l.id === child.node.conversationId)
         if (!childLayout) continue
         const childX = PADDING_X + childLayout.lane * LANE_WIDTH + LANE_WIDTH / 2
@@ -1038,6 +1074,7 @@ function buildLayout(
         paths.push({
           d: `M ${x} ${y} Q ${x} ${childY} ${childX} ${childY}`,
           color: childColor,
+          isOnPath: childIsInPath,
         })
       }
 
@@ -1071,21 +1108,17 @@ interface TreeNavProps {
   anchorId: string
   allNodes: ConversationNode[]
   activeId: string
+  pathIds: Set<string>   // 导航路径上的节点 ID 集合
   onSelect: (id: string) => void
 }
 
-function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) {
+function FocusTreeNav({ anchorId, allNodes, activeId, pathIds, onSelect }: TreeNavProps) {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
 
   const treeRoots = useMemo(() => {
     if (!anchorId || allNodes.length === 0) return []
     return buildFocusTree(anchorId, allNodes)
   }, [anchorId, allNodes])
-
-  // 分配分支颜色
-  useEffect(() => {
-    assignBranchColors(treeRoots)
-  }, [treeRoots])
 
   // 初始化展开状态
   useEffect(() => {
@@ -1113,20 +1146,28 @@ function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) 
   // 基于 lane 算法计算布局
   const { layoutNodes, paths, svgSize } = useMemo(() => {
     if (treeRoots.length === 0) return { layoutNodes: [] as LayoutNode[], paths: [] as SvgPath[], svgSize: { width: 200, height: 100 } }
-    const result = buildLayout(treeRoots, 0, 0, activeId, expandedIds)
+    const result = buildLayout(treeRoots, 0, 0, activeId, expandedIds, pathIds)
     return {
       layoutNodes: result.layoutNodes,
       paths: result.paths,
       svgSize: calcSvgSize(result.layoutNodes),
     }
-  }, [treeRoots, activeId, expandedIds])
+  }, [treeRoots, activeId, expandedIds, pathIds])
 
   return (
     <div className="focus-tree-nav">
       <svg width={svgSize.width} height={svgSize.height} xmlns="http://www.w3.org/2000/svg" className="git-graph-svg">
-        {/* 连接线 */}
+        {/* 连接线：路径加粗，非路径细 */}
         {paths.map((p, i) => (
-          <path key={`line-${i}`} d={p.d} stroke={p.color} strokeWidth={2} fill="none" opacity={0.5} strokeLinecap="round" />
+          <path
+            key={`line-${i}`}
+            d={p.d}
+            stroke={p.color}
+            strokeWidth={p.isOnPath ? 2.5 : 1.5}
+            fill="none"
+            opacity={p.isOnPath ? 0.7 : 0.35}
+            strokeLinecap="round"
+          />
         ))}
         {/* 节点 */}
         {layoutNodes.map((node) => {
@@ -1134,29 +1175,29 @@ function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) 
           const cy = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2
           return (
             <g key={node.id} onClick={() => onSelect(node.id)} style={{ cursor: 'pointer' }}>
-              {/* 圆点 */}
+              {/* 圆点：选中节点放大 */}
               <circle
                 cx={cx}
                 cy={cy}
                 r={node.isActive ? DOT_RADIUS + 1 : DOT_RADIUS}
                 fill="var(--app-panel-bg, #fff)"
                 stroke={node.color}
-                strokeWidth={node.isActive ? 2.5 : 2}
+                strokeWidth={node.isActive ? 2.5 : 1.8}
               />
-              {/* 活跃节点脉冲动画 */}
+              {/* 活跃节点脉冲动画（仅选中节点） */}
               {node.isActive && (
                 <circle cx={cx} cy={cy} r={DOT_RADIUS + 4} fill="none" stroke={node.color} strokeWidth={1} opacity={0.3}>
                   <animate attributeName="r" values={`${DOT_RADIUS + 4};${DOT_RADIUS + 7};${DOT_RADIUS + 4}`} dur="2s" repeatCount="indefinite" />
                   <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite" />
                 </circle>
               )}
-              {/* 标签文字 */}
+              {/* 标签文字：路径深色，非路径浅色 */}
               <text
                 x={cx + DOT_RADIUS + 8}
                 y={cy + 4}
                 fontSize={13}
-                fill={node.isOnPath ? 'var(--app-text, #333)' : 'var(--app-text-secondary, #666)'}
-                fontWeight={node.isActive ? 500 : 400}
+                fill={node.isInNavPath ? 'var(--app-text, #333)' : 'var(--app-text-secondary, #888)'}
+                fontWeight={node.isActive ? 600 : (node.isInNavPath ? 500 : 400)}
               >
                 {node.label}
               </text>
@@ -1173,16 +1214,6 @@ interface TreeNodeData {
   children: TreeNodeData[]
   isExpanded: boolean
   isOnPath: boolean
-  branchColor: string
-}
-
-/** 为节点分配分支颜色 */
-function assignBranchColors(nodes: TreeNodeData[], parentColorIndex = 0): void {
-  nodes.forEach((n, idx) => {
-    const colorIdx = parentColorIndex === 0 && idx > 0 ? idx : parentColorIndex
-    n.branchColor = BRANCH_COLORS[colorIdx % BRANCH_COLORS.length]
-    assignBranchColors(n.children, colorIdx)
-  })
 }
 
 /**
