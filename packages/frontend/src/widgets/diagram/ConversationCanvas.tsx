@@ -2,7 +2,7 @@ import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewpo
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button, Card, Spin, Space, Typography } from 'antd'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
 import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
@@ -1035,8 +1035,7 @@ interface SvgPath {
 
 /**
  * 核心：为树节点分配 lane（列）和 row（行），生成布局数据。
- * 算法：DFS 遍历，根节点取 lane=0，子节点依次向右分配新 lane。
- * 同一父节点的多个子节点共享同一组 lane 区域。
+ * 算法：迭代式 DFS，lane = depth（深度），同级节点缩进一致。
  */
 function buildLayout(
   nodes: TreeNodeData[],
@@ -1048,21 +1047,39 @@ function buildLayout(
 ): { layoutNodes: LayoutNode[]; paths: SvgPath[]; nextRow: number } {
   const layoutNodes: LayoutNode[] = []
   const paths: SvgPath[] = []
-  let currentRow = startRow
-  let currentLane = startLane
 
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]
+  // 栈帧：记录当前层级的遍历状态
+  interface StackFrame {
+    siblings: TreeNodeData[]   // 当前层剩余待处理的兄弟节点
+    parentInfo: { id: string; x: number; y: number } | null  // 父节点坐标（用于画连线）
+    depth: number              // 当前深度（= lane）
+  }
+
+  const stack: StackFrame[] = [{ siblings: nodes, parentInfo: null, depth: startLane }]
+  let currentRow = startRow
+
+  while (stack.length > 0) {
+    const frame = stack[stack.length - 1]
+
+    if (frame.siblings.length === 0) {
+      // 当前层级遍历完毕，出栈
+      stack.pop()
+      continue
+    }
+
+    // 取出当前层的下一个节点
+    const node = frame.siblings.shift()!
     const isInNavPath = pathIds.has(node.node.conversationId)
     const color = isInNavPath ? PATH_COLOR : BRANCH_COLOR
     const isActive = node.node.conversationId === activeId
-    const x = PADDING_X + currentLane * LANE_WIDTH + LANE_WIDTH / 2
+    const lane = frame.depth
+    const x = PADDING_X + lane * LANE_WIDTH + LANE_WIDTH / 2
     const y = PADDING_Y + currentRow * ROW_HEIGHT + ROW_HEIGHT / 2
 
     // 记录当前节点
     layoutNodes.push({
       id: node.node.conversationId,
-      lane: currentLane,
+      lane,
       row: currentRow,
       color,
       label: summarizeConversation(node.node),
@@ -1070,42 +1087,25 @@ function buildLayout(
       isInNavPath,
     })
 
-    // 只有展开的节点才画连接线并递归处理子节点
+    // 画父→子连线
+    if (frame.parentInfo) {
+      paths.push({
+        d: `M ${frame.parentInfo.x} ${frame.parentInfo.y} Q ${frame.parentInfo.x} ${y} ${x} ${y}`,
+        color,
+        isOnPath: isInNavPath,
+      })
+    }
+
+    currentRow++
+
+    // 展开且有子节点时，将子节点作为新栈帧压入
     const isExpanded = expandedIds.has(node.node.conversationId)
     if (isExpanded && node.children.length > 0) {
-      // 子节点递归布局
-      const childStartLane = currentLane + 1
-      const childResult = buildLayout(node.children, childStartLane, currentRow + 1, activeId, expandedIds, pathIds)
-
-      // 合并子节点的布局数据和路径
-      layoutNodes.push(...childResult.layoutNodes)
-      paths.push(...childResult.paths)
-
-      // 为每个子节点画分叉连接线（曲线）
-      for (let ci = 0; ci < node.children.length; ci++) {
-        const child = node.children[ci]
-        const childIsInPath = pathIds.has(child.node.conversationId)
-        const childColor = childIsInPath ? PATH_COLOR : BRANCH_COLOR
-        const childLayout = childResult.layoutNodes.find((l) => l.id === child.node.conversationId)
-        if (!childLayout) continue
-        const childX = PADDING_X + childLayout.lane * LANE_WIDTH + LANE_WIDTH / 2
-        const childY = PADDING_Y + childLayout.row * ROW_HEIGHT + ROW_HEIGHT / 2
-
-        // 曲线画法：二次贝塞尔曲线 Q，控制点在父节点正下方
-        paths.push({
-          d: `M ${x} ${y} Q ${x} ${childY} ${childX} ${childY}`,
-          color: childColor,
-          isOnPath: childIsInPath,
-        })
-      }
-
-      // 当前行推进到子树结束后的下一行
-      currentRow = childResult.nextRow
-      // lane 推进到子树占用的最大 lane 之后
-      const maxChildLane = Math.max(...childResult.layoutNodes.map((l) => l.lane))
-      currentLane = maxChildLane + 1
-    } else {
-      currentRow++
+      stack.push({
+        siblings: [...node.children],
+        parentInfo: { id: node.node.conversationId, x, y },
+        depth: lane + 1,
+      })
     }
   }
 
@@ -1134,25 +1134,42 @@ interface TreeNavProps {
 }
 
 function FocusTreeNav({ anchorId, allNodes, activeId, pathIds, onSelect }: TreeNavProps) {
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set())
+  // useSyncExternalStore 直接订阅 zustand store，保证数据新鲜（解决 props stale 问题）
+  const storeNodes = useSyncExternalStore(
+    useChatWorkbenchStore.subscribe,
+    () => useChatWorkbenchStore.getState().conversationNodes,
+  )
 
-  const treeRoots = useMemo(() => {
-    if (!anchorId || allNodes.length === 0) return []
-    return buildFocusTree(anchorId, allNodes)
-  }, [anchorId, allNodes])
+  // 带指纹的手动缓存：避免 React StrictMode 双重渲染导致 useMemo 缓存异常，
+  // 同时在父组件频繁 re-render 时避免重复计算
+  const treeCacheRef = useRef<{ fingerprint: string; result: TreeNodeData[] }>({ fingerprint: '', result: [] })
+  const currentFingerprint = `${anchorId ?? ''}-${storeNodes.length}`
 
-  // 初始化展开状态（全量展开）
-  useEffect(() => {
-    const initial = new Set<string>()
-    function collectAllIds(nodes: TreeNodeData[]) {
+  let rawTreeRoots: TreeNodeData[]
+  if (treeCacheRef.current.fingerprint === currentFingerprint && treeCacheRef.current.result.length > 0) {
+    rawTreeRoots = treeCacheRef.current.result // 缓存命中
+  } else {
+    rawTreeRoots = (!anchorId || storeNodes.length === 0) ? [] : buildFocusTree(anchorId, storeNodes)
+    treeCacheRef.current = { fingerprint: currentFingerprint, result: rawTreeRoots }
+  }
+
+  // 导航兜底：resetState 导致 nodes 瞬间为空时使用上次有效结果
+  const lastValidRootsRef = useRef<TreeNodeData[]>([])
+  const treeRoots = rawTreeRoots.length > 0 ? rawTreeRoots : lastValidRootsRef.current
+  if (rawTreeRoots.length > 0) lastValidRootsRef.current = rawTreeRoots
+
+  // 同步收集所有节点 ID 作为展开集合（避免 useState + useEffect 时序竞态）
+  const expandedIds = useMemo(() => {
+    const ids = new Set<string>()
+    function collect(nodes: TreeNodeData[]) {
       for (const n of nodes) {
-        initial.add(n.node.conversationId)
-        collectAllIds(n.children)
+        ids.add(n.node.conversationId)
+        collect(n.children)
       }
     }
-    collectAllIds(treeRoots)
-    setExpandedIds(initial)
-  }, [anchorId, treeRoots])
+    collect(treeRoots)
+    return ids
+  }, [treeRoots])
 
   // 基于 lane 算法计算布局
   const { layoutNodes, paths, svgSize } = useMemo(() => {
