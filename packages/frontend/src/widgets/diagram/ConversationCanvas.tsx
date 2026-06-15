@@ -571,8 +571,8 @@ function FocusView({
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
   const [treeWidth, setTreeWidth] = useState(200)
   const isResizing = useRef(false)
-  // 树点击锁：树点击后锁定 activeId，直到下次滚动才释放
-  const treeClickLock = useRef(false)
+  // 程序化滚动标记：scrollIntoView 动画期间阻止滚动更新选中项
+  const isProgrammaticScroll = useRef(false)
 
   // ─── 拖拽调整树宽度 ───
   const handleResizeStart = useCallback((e: React.MouseEvent) => {
@@ -673,18 +673,25 @@ function FocusView({
 
   // ─── 统一的路径感知导航函数（滚动+高亮模式） ───
   const contentFlowRef = useRef<HTMLDivElement>(null)
+  const userSelectTimeRef = useRef(0) // 记录用户最后点击分支树的时间戳
 
   const handleNavigate = useCallback(
     (nodeId: string) => {
+      console.log('[DEBUG-handleNavigate] nodeId=', nodeId, 'viewedNodeId=', viewedNodeId, 'path=', navState.path.map((i) => i.conversationId))
+      // 标记用户主动选择时间，阻止滚动检测在短时间内覆盖
+      userSelectTimeRef.current = Date.now()
       if (nodeId === viewedNodeId) return
 
       // 路径感知逻辑：判断目标节点是否在当前路径内
-      if (isInNavigationPath(nodeId, navState.path)) {
+      const inPath = isInNavigationPath(nodeId, navState.path)
+      console.log('[DEBUG-handleNavigate] inPath=', inPath)
+      if (inPath) {
         // 目标在路径内：平滑滚动到对应位置 + 高亮
         const targetEl = document.getElementById(`flow-section-${nodeId}`)
         if (targetEl) {
           targetEl.classList.add('flow-section--highlight')
           setTimeout(() => targetEl.classList.remove('flow-section--highlight'), 2000)
+          isProgrammaticScroll.current = true
           targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' })
         }
         // 同步 currentIndex 和 viewedNodeId
@@ -693,7 +700,6 @@ function FocusView({
           setNavState((prev) => ({ ...prev, currentIndex: newIndex }))
           if (nodeId !== viewedNodeId) {
             setViewedNodeId(nodeId)
-            treeClickLock.current = true
           }
         }
       } else {
@@ -712,7 +718,10 @@ function FocusView({
         // 等待 DOM 更新后滚动到新位置
         requestAnimationFrame(() => {
           const targetEl = document.getElementById(`flow-section-${nodeId}`)
-          targetEl?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          if (targetEl) {
+            isProgrammaticScroll.current = true
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }
         })
       }
 
@@ -721,7 +730,7 @@ function FocusView({
     [viewedNodeId, navState, conversationNodes, onNavigateToNode],
   )
 
-  // ─── 滚动检测：视口中心点归属算法（防抖 + 树点击锁） ───
+  // ─── 滚动检测：视口中心点归属算法（防抖 + 程序化滚动标记 + scrollend） ───
   useEffect(() => {
     if (navState.path.length === 0) return
 
@@ -731,12 +740,13 @@ function FocusView({
     let timer: ReturnType<typeof setTimeout> | null = null
 
     const updateActiveFromScroll = () => {
-      // 如果树点击锁生效，跳过更新（懒更新：等下次滚动才释放）
-      if (treeClickLock.current) {
-        treeClickLock.current = false // 释放锁，下次滚动正常更新
+      console.log('[DEBUG-scroll] isProgrammaticScroll=', isProgrammaticScroll.current)
+      // 检查是否有最近用户主动选择（1秒内不覆盖）
+      const timeSinceUserSelect = Date.now() - userSelectTimeRef.current
+      if (timeSinceUserSelect < 1000) {
+        console.log('[DEBUG-scroll] SKIPPED - user select', timeSinceUserSelect, 'ms ago')
         return
       }
-
       const containerRect = scrollContainer.getBoundingClientRect()
       const centerY = containerRect.top + containerRect.height / 2
 
@@ -753,7 +763,9 @@ function FocusView({
         }
       })
 
+      console.log('[DEBUG-scroll] bestNode=', bestNode, 'viewedNodeId=', viewedNodeId)
       if (bestNode && bestNode !== viewedNodeId) {
+        console.log('[DEBUG-scroll] UPDATING viewedNodeId to', bestNode)
         setViewedNodeId(bestNode)
         const index = navState.path.findIndex((item) => item.conversationId === bestNode)
         if (index !== -1 && index !== navState.currentIndex) {
@@ -762,18 +774,27 @@ function FocusView({
       }
     }
 
-    // 使用 scroll 事件 + 防抖替代 IntersectionObserver
+    // scroll 事件：程序化滚动期间跳过，用户滚动时防抖懒更新
     const handleScroll = () => {
+      // 程序化滚动（scrollIntoView smooth）期间，不更新选中项
+      if (isProgrammaticScroll.current) return
       if (timer) clearTimeout(timer)
       timer = setTimeout(updateActiveFromScroll, 150)
     }
 
+    // scrollend 事件：动画完全停止后清除标记，恢复正常检测
+    const handleScrollEnd = () => {
+      isProgrammaticScroll.current = false
+    }
+
     scrollContainer.addEventListener('scroll', handleScroll, { passive: true })
+    scrollContainer.addEventListener('scrollend', handleScrollEnd, { passive: true })
     // 初始检测一次
     updateActiveFromScroll()
 
     return () => {
       scrollContainer.removeEventListener('scroll', handleScroll)
+      scrollContainer.removeEventListener('scrollend', handleScrollEnd)
       if (timer) clearTimeout(timer)
     }
   }, [navState.path, viewedNodeId])
@@ -805,7 +826,7 @@ function FocusView({
       {/* 左侧：树导航 */}
       <div className="focus-view__tree" style={{ width: treeWidth }}>
         <FocusTreeNav
-          anchorId={focusedConversationId ?? ''}
+          anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? focusedConversationId ?? ''}
           allNodes={conversationNodes}
           activeId={viewedNodeId}
           pathIds={new Set(navState.path.map((item) => item.conversationId))}
@@ -1120,26 +1141,16 @@ function FocusTreeNav({ anchorId, allNodes, activeId, pathIds, onSelect }: TreeN
     return buildFocusTree(anchorId, allNodes)
   }, [anchorId, allNodes])
 
-  // 初始化展开状态
+  // 初始化展开状态（全量展开）
   useEffect(() => {
     const initial = new Set<string>()
-    function collectPathIds(nodes: TreeNodeData[]) {
+    function collectAllIds(nodes: TreeNodeData[]) {
       for (const n of nodes) {
-        if (n.isOnPath) initial.add(n.node.conversationId)
-        collectPathIds(n.children)
+        initial.add(n.node.conversationId)
+        collectAllIds(n.children)
       }
     }
-    collectPathIds(treeRoots)
-    function expandAnchorChildren(nodes: TreeNodeData[]) {
-      for (const n of nodes) {
-        if (n.node.conversationId === anchorId) {
-          for (const c of n.children) initial.add(c.node.conversationId)
-          return
-        }
-        expandAnchorChildren(n.children)
-      }
-    }
-    expandAnchorChildren(treeRoots)
+    collectAllIds(treeRoots)
     setExpandedIds(initial)
   }, [anchorId, treeRoots])
 
@@ -1223,41 +1234,29 @@ interface TreeNodeData {
 function buildFocusTree(anchorId: string, allNodes: ConversationNode[]): TreeNodeData[] {
   const nodeMap = new Map(allNodes.map((n) => [n.conversationId, n]))
 
-  // 向上追溯得到祖先链
-  const ancestors: string[] = []
-  let current: string | undefined = anchorId
-  while (current) {
-    ancestors.unshift(current)
-    const node = nodeMap.get(current)
-    current = node?.parentConversationId ?? undefined
-  }
+  // 全量：找到所有根节点
+  const allRoots = allNodes.filter((n) => !n.parentConversationId)
+  if (allRoots.length === 0) return []
 
-  const ancestorSet = new Set(ancestors)
-
-  const rootId = ancestors[0]
-  if (!rootId) return []
+  // 路径高亮仍基于锚点计算（用于橙黄连线）
+  const pathSet = new Set(
+    buildNavigationPath(anchorId, allNodes).map((item) => item.conversationId),
+  )
 
   function build(nodeId: string): TreeNodeData {
     const node = nodeMap.get(nodeId)!
     const children = allNodes.filter((n) => n.parentConversationId === nodeId)
-    const isOnPath = ancestorSet.has(nodeId)
-    const shouldExpand = isOnPath || nodeId === anchorId
+    const isOnPath = pathSet.has(nodeId)
 
     return {
       node,
-      isExpanded: shouldExpand,
+      isExpanded: true,
       isOnPath,
       children: children.map((c) => build(c.conversationId)),
     }
   }
 
-  const root = build(rootId)
-
-  const otherRoots = allNodes
-    .filter((n) => !n.parentConversationId && n.conversationId !== rootId)
-    .map((n) => build(n.conversationId))
-
-  return [root, ...otherRoots]
+  return allRoots.map((r) => build(r.conversationId))
 }
 
 export function buildTreeLayout(conversationNodes: ConversationNode[]) {
