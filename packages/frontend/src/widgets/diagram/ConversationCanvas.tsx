@@ -612,9 +612,6 @@ function FocusView({
   const loadConversationMessages = useChatWorkbenchStore((state) => state.loadConversationMessages)
   const [loadingNodeIds, setLoadingNodeIds] = useState<Set<string>>(new Set())
 
-  // 已解决的分支：记录哪些节点的分支已被用户选择过，选择后该节点的 BranchSelector 消失
-  const [resolvedBranches, setResolvedBranches] = useState<Set<string>>(new Set())
-
   // 同步外部 conversation 变化（进入/退出聚焦态时）
   useEffect(() => {
     if (conversation?.conversationId) {
@@ -710,11 +707,6 @@ function FocusView({
           currentIndex: newPath.length - 1,
         })
         setViewedNodeId(nodeId)
-        // 标记目标节点的父节点为"已解决"（隐藏其 BranchSelector）
-        const targetNode = conversationNodes.find((n) => n.conversationId === nodeId)
-        if (targetNode?.parentConversationId) {
-          setResolvedBranches((prev) => new Set(prev).add(targetNode.parentConversationId))
-        }
         // 等待 DOM 更新后滚动到新位置
         requestAnimationFrame(() => {
           const targetEl = document.getElementById(`flow-section-${nodeId}`)
@@ -903,8 +895,8 @@ function FocusView({
                     </div>
                   )}
 
-                  {/* 分支选择器：该节点有多个子节点且尚未选择时显示 */}
-                  {children.length >= 2 && !resolvedBranches.has(pathItem.conversationId) && (
+                  {/* 分支选择器：仅在路径底部节点有多个子节点时显示 */}
+                  {index === navState.path.length - 1 && children.length >= 2 && (
                     <div className="flow-section__branches">
                       <BranchSelector nodes={children} onSelect={handleNavigate} />
                     </div>
