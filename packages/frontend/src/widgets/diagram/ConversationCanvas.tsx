@@ -869,9 +869,12 @@ function FocusView({
                   <div className="flow-section__header">
                     {index > 0 && <div className="flow-separator">↓</div>}
                     <Space direction="vertical" size={2}>
-                      <Typography.Text strong style={{ fontSize: 14 }}>
-                        {summarizeConversation(node)}
-                      </Typography.Text>
+                      <Space align="center" size={9} wrap>
+                        <Typography.Text strong style={{ fontSize: 14 }}>
+                          {summarizeConversation(node)}
+                        </Typography.Text>
+                        {isActive && <span className="active-indicator-dot" />}
+                      </Space>
                       <Typography.Text type="secondary" style={{ fontSize: 11 }}>
                         {node.conversationId}
                         {index + 1 < navState.path.length && ` → 第 ${index + 1}/${navState.path.length} 层`}
@@ -1203,22 +1206,15 @@ function FocusTreeNav({ anchorId, allNodes, activeId, pathIds, onSelect }: TreeN
           const cy = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2
           return (
             <g key={node.id} onClick={() => onSelect(node.id)} style={{ cursor: 'pointer' }}>
-              {/* 圆点：选中节点放大 */}
+              {/* 圆点：active 节点为实心，其他为空心 */}
               <circle
                 cx={cx}
                 cy={cy}
                 r={node.isActive ? DOT_RADIUS + 1 : DOT_RADIUS}
-                fill="var(--app-panel-bg, #fff)"
-                stroke={node.color}
-                strokeWidth={node.isActive ? 2.5 : 1.8}
+                fill={node.isActive ? node.color : 'var(--app-panel-bg, #fff)'}
+                stroke={node.isActive ? 'none' : node.color}
+                strokeWidth={node.isActive ? 0 : 1.8}
               />
-              {/* 活跃节点脉冲动画（仅选中节点） */}
-              {node.isActive && (
-                <circle cx={cx} cy={cy} r={DOT_RADIUS + 4} fill="none" stroke={node.color} strokeWidth={1} opacity={0.3}>
-                  <animate attributeName="r" values={`${DOT_RADIUS + 4};${DOT_RADIUS + 7};${DOT_RADIUS + 4}`} dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite" />
-                </circle>
-              )}
               {/* 标签文字：路径深色，非路径浅色 */}
               <text
                 x={cx + DOT_RADIUS + 8}

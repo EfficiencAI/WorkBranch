@@ -1867,9 +1867,11 @@ button {
 }
 
 .focus-view__branch-cards {
-  display: flex;
+  display: flex !important;
+  flex-direction: row !important;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap !important;
+  overflow-x: auto;
 }
 
 .focus-view__branch-card {
@@ -1940,10 +1942,26 @@ button {
   margin-bottom: 24px;
 }
 
-/* 当前可见的活跃内容块（轻微背景高亮） */
+/* 当前可见的活跃内容块 */
 .flow-section--active {
-  background: rgba(22, 119, 255, 0.02);
-  padding: 16px;
+  /* 移除背景高亮和额外内边距，改用标题旁绿点指示 */
+}
+
+/* 聚焦态活跃节点指示器：绿色呼吸发光点 */
+.active-indicator-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  box-shadow: 0 0 6px 2px rgba(34, 197, 94, 0.4);
+  animation: active-dot-breathe 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes active-dot-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(0.9); box-shadow: 0 0 4px 1px rgba(34, 197, 94, 0.3); }
+  50% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 10px 3px rgba(34, 197, 94, 0.5); }
 }
 
 /* 导航点击后的高亮动画 */
