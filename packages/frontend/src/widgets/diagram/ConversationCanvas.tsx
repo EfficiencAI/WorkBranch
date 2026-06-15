@@ -79,7 +79,7 @@ function summarizeConversation(conversation: ConversationNode) {
   }
 
   if (conversation.messageCount > 0) {
-    return `未命名对话 · ${conversation.messageCount} 条消息`
+    return `未命名对话`
   }
 
   return '空对话'
@@ -569,6 +569,35 @@ function FocusView({
 }: FocusViewProps) {
   const responsive = useResponsive()
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
+  const [treeWidth, setTreeWidth] = useState(200)
+  const isResizing = useRef(false)
+
+  // ─── 拖拽调整树宽度 ───
+  const handleResizeStart = useCallback((e: React.MouseEvent) => {
+    e.preventDefault()
+    isResizing.current = true
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
+
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!isResizing.current) return
+      setTreeWidth(Math.max(120, Math.min(e.clientX, 500)))
+    }
+    const handleMouseUp = () => {
+      if (!isResizing.current) return
+      isResizing.current = false
+      document.body.style.cursor = ''
+      document.body.style.userSelect = ''
+    }
+    document.addEventListener('mousemove', handleMouseMove)
+    document.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove)
+      document.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [])
   
   // ─── 导航路径状态管理 ───
   const [navState, setNavState] = useState<NavigationState>({
@@ -744,7 +773,7 @@ function FocusView({
   return (
     <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
       {/* 左侧：树导航 */}
-      <div className="focus-view__tree">
+      <div className="focus-view__tree" style={{ width: treeWidth }}>
         <FocusTreeNav
           anchorId={focusedConversationId ?? ''}
           allNodes={conversationNodes}
@@ -752,6 +781,11 @@ function FocusView({
           onSelect={handleNavigate}
         />
       </div>
+
+      {/* 拖拽调整手柄 */}
+      {!isMobile && (
+        <div className="focus-view__resize-handle" onMouseDown={handleResizeStart} />
+      )}
 
       {/* 右侧：主内容区（无缝内容流） */}
       <div className="focus-view__main">
@@ -918,13 +952,119 @@ function BranchSelector({ nodes, onSelect }: BranchSelectorProps) {
   )
 }
 
-// ─── 树导航 ───
+// ─── 树导航（Git Graph 风格，lane 列分配算法） ───
 
-interface TreeNodeData {
-  node: ConversationNode
-  children: TreeNodeData[]
-  isExpanded: boolean
-  isOnPath: boolean
+// ─── Git Graph 常量 ───
+const BRANCH_COLORS = ['#1677ff', '#faad14', '#eb2f96', '#52c41a', '#722ed1', '#13c2c2', '#fa541c']
+const ROW_HEIGHT = 32
+const LANE_WIDTH = 20
+const DOT_RADIUS = 5
+const PADDING_X = 6
+const PADDING_Y = 4
+
+/** 布局节点：每个节点分配一个 lane（列）和 row（行） */
+interface LayoutNode {
+  id: string
+  lane: number        // 第几列（0 开始）
+  row: number         // 第几行（0 开始）
+  color: string       // 分支颜色
+  label: string       // 显示文本
+  isActive: boolean   // 是否当前活跃节点
+  isOnPath: boolean   // 是否在路径上
+}
+
+/** SVG 路径段 */
+interface SvgPath {
+  d: string
+  color: string
+}
+
+/**
+ * 核心：为树节点分配 lane（列）和 row（行），生成布局数据。
+ * 算法：DFS 遍历，根节点取 lane=0，子节点依次向右分配新 lane。
+ * 同一父节点的多个子节点共享同一组 lane 区域。
+ */
+function buildLayout(
+  nodes: TreeNodeData[],
+  startLane: number,
+  startRow: number,
+  activeId: string,
+  expandedIds: Set<string>,
+): { layoutNodes: LayoutNode[]; paths: SvgPath[]; nextRow: number } {
+  const layoutNodes: LayoutNode[] = []
+  const paths: SvgPath[] = []
+  let currentRow = startRow
+  let currentLane = startLane
+
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]
+    const color = node.branchColor || BRANCH_COLORS[0]
+    const isActive = node.node.conversationId === activeId
+    const x = PADDING_X + currentLane * LANE_WIDTH + LANE_WIDTH / 2
+    const y = PADDING_Y + currentRow * ROW_HEIGHT + ROW_HEIGHT / 2
+
+    // 记录当前节点
+    layoutNodes.push({
+      id: node.node.conversationId,
+      lane: currentLane,
+      row: currentRow,
+      color,
+      label: summarizeConversation(node.node),
+      isActive,
+      isOnPath: node.isOnPath,
+    })
+
+    // 只有展开的节点才画连接线并递归处理子节点
+    const isExpanded = expandedIds.has(node.node.conversationId)
+    if (isExpanded && node.children.length > 0) {
+      // 子节点递归布局
+      const childStartLane = currentLane + 1
+      const childResult = buildLayout(node.children, childStartLane, currentRow + 1, activeId, expandedIds)
+
+      // 合并子节点的布局数据和路径
+      layoutNodes.push(...childResult.layoutNodes)
+      paths.push(...childResult.paths)
+
+      // 为每个子节点画分叉连接线（├ 或 └）
+      for (let ci = 0; ci < node.children.length; ci++) {
+        const child = node.children[ci]
+        const childColor = child.branchColor || BRANCH_COLORS[0]
+        const childLayout = childResult.layoutNodes.find((l) => l.id === child.node.conversationId)
+        if (!childLayout) continue
+        const childX = PADDING_X + childLayout.lane * LANE_WIDTH + LANE_WIDTH / 2
+        const childY = PADDING_Y + childLayout.row * ROW_HEIGHT + ROW_HEIGHT / 2
+
+        // 曲线画法：二次贝塞尔曲线 Q，控制点在父节点正下方
+        paths.push({
+          d: `M ${x} ${y} Q ${x} ${childY} ${childX} ${childY}`,
+          color: childColor,
+        })
+      }
+
+      // 当前行推进到子树结束后的下一行
+      currentRow = childResult.nextRow
+      // lane 推进到子树占用的最大 lane 之后
+      const maxChildLane = Math.max(...childResult.layoutNodes.map((l) => l.lane))
+      currentLane = maxChildLane + 1
+    } else {
+      currentRow++
+    }
+  }
+
+  return { layoutNodes, paths, nextRow: currentRow }
+}
+
+/** 计算 SVG 画布尺寸 */
+function calcSvgSize(layoutNodes: LayoutNode[]): { width: number; height: number } {
+  if (layoutNodes.length === 0) return { width: 200, height: 100 }
+  const maxLane = Math.max(...layoutNodes.map((n) => n.lane))
+  const maxRow = Math.max(...layoutNodes.map((n) => n.row))
+  // 宽度：lane 区域 + 标签区域（按最长标签估算，不再固定 +200）
+  // 高度：最后一行底部 + padding
+  return {
+    width: PADDING_X + (maxLane + 1) * LANE_WIDTH + LANE_WIDTH + 160,
+    height: PADDING_Y + (maxRow + 1) * ROW_HEIGHT + PADDING_Y,
+  }
 }
 
 interface TreeNavProps {
@@ -942,7 +1082,12 @@ function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) 
     return buildFocusTree(anchorId, allNodes)
   }, [anchorId, allNodes])
 
-  // 初始化展开状态：路径上的节点 + anchor 的直接子节点默认展开
+  // 分配分支颜色
+  useEffect(() => {
+    assignBranchColors(treeRoots)
+  }, [treeRoots])
+
+  // 初始化展开状态
   useEffect(() => {
     const initial = new Set<string>()
     function collectPathIds(nodes: TreeNodeData[]) {
@@ -952,13 +1097,10 @@ function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) 
       }
     }
     collectPathIds(treeRoots)
-
     function expandAnchorChildren(nodes: TreeNodeData[]) {
       for (const n of nodes) {
         if (n.node.conversationId === anchorId) {
-          for (const c of n.children) {
-            initial.add(c.node.conversationId)
-          }
+          for (const c of n.children) initial.add(c.node.conversationId)
           return
         }
         expandAnchorChildren(n.children)
@@ -968,94 +1110,79 @@ function FocusTreeNav({ anchorId, allNodes, activeId, onSelect }: TreeNavProps) 
     setExpandedIds(initial)
   }, [anchorId, treeRoots])
 
-  const toggleExpand = useCallback((id: string) => {
-    setExpandedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }, [])
+  // 基于 lane 算法计算布局
+  const { layoutNodes, paths, svgSize } = useMemo(() => {
+    if (treeRoots.length === 0) return { layoutNodes: [] as LayoutNode[], paths: [] as SvgPath[], svgSize: { width: 200, height: 100 } }
+    const result = buildLayout(treeRoots, 0, 0, activeId, expandedIds)
+    return {
+      layoutNodes: result.layoutNodes,
+      paths: result.paths,
+      svgSize: calcSvgSize(result.layoutNodes),
+    }
+  }, [treeRoots, activeId, expandedIds])
 
   return (
     <div className="focus-tree-nav">
-      {treeRoots.map((root) => (
-        <TreeNavItem
-          key={root.node.conversationId}
-          data={root}
-          activeId={activeId}
-          expandedIds={expandedIds}
-          depth={0}
-          onSelect={onSelect}
-          onToggleExpand={toggleExpand}
-        />
-      ))}
+      <svg width={svgSize.width} height={svgSize.height} xmlns="http://www.w3.org/2000/svg" className="git-graph-svg">
+        {/* 连接线 */}
+        {paths.map((p, i) => (
+          <path key={`line-${i}`} d={p.d} stroke={p.color} strokeWidth={2} fill="none" opacity={0.5} strokeLinecap="round" />
+        ))}
+        {/* 节点 */}
+        {layoutNodes.map((node) => {
+          const cx = PADDING_X + node.lane * LANE_WIDTH + LANE_WIDTH / 2
+          const cy = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2
+          return (
+            <g key={node.id} onClick={() => onSelect(node.id)} style={{ cursor: 'pointer' }}>
+              {/* 圆点 */}
+              <circle
+                cx={cx}
+                cy={cy}
+                r={node.isActive ? DOT_RADIUS + 1 : DOT_RADIUS}
+                fill="var(--app-panel-bg, #fff)"
+                stroke={node.color}
+                strokeWidth={node.isActive ? 2.5 : 2}
+              />
+              {/* 活跃节点脉冲动画 */}
+              {node.isActive && (
+                <circle cx={cx} cy={cy} r={DOT_RADIUS + 4} fill="none" stroke={node.color} strokeWidth={1} opacity={0.3}>
+                  <animate attributeName="r" values={`${DOT_RADIUS + 4};${DOT_RADIUS + 7};${DOT_RADIUS + 4}`} dur="2s" repeatCount="indefinite" />
+                  <animate attributeName="opacity" values="0.3;0.1;0.3" dur="2s" repeatCount="indefinite" />
+                </circle>
+              )}
+              {/* 标签文字 */}
+              <text
+                x={cx + DOT_RADIUS + 8}
+                y={cy + 4}
+                fontSize={13}
+                fill={node.isOnPath ? 'var(--app-text, #333)' : 'var(--app-text-secondary, #666)'}
+                fontWeight={node.isActive ? 500 : 400}
+              >
+                {node.label}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
     </div>
   )
 }
 
-interface TreeNavItemProps {
-  data: TreeNodeData
-  activeId: string
-  expandedIds: Set<string>
-  depth: number
-  onSelect: (id: string) => void
-  onToggleExpand: (id: string) => void
+interface TreeNodeData {
+  node: ConversationNode
+  children: TreeNodeData[]
+  isExpanded: boolean
+  isOnPath: boolean
+  branchColor: string
 }
 
-function TreeNavItem({ data, activeId, expandedIds, depth, onSelect, onToggleExpand }: TreeNavItemProps) {
-  const isActive = data.node.conversationId === activeId
-  const isExpanded = expandedIds.has(data.node.conversationId)
-  const hasChildren = data.children.length > 0
-
-  return (
-    <div>
-      <div
-        className={`focus-tree-node ${isActive ? 'focus-tree-node--active' : ''} ${data.isOnPath ? 'focus-tree-node--path' : ''}`}
-        style={{ paddingLeft: depth * 16 }}
-        onClick={() => onSelect(data.node.conversationId)}
-      >
-        {hasChildren && (
-          <button
-            className="focus-tree-node__toggle"
-            onClick={(e) => {
-              e.stopPropagation()
-              onToggleExpand(data.node.conversationId)
-            }}
-          >
-            {isExpanded ? '▼' : '▶'}
-          </button>
-        )}
-        {!hasChildren && <span className="focus-tree-node__spacer" />}
-
-        <span className={`focus-tree-node__dot ${isActive ? 'focus-tree-node__dot--active' : ''}`} />
-
-        <span className="focus-tree-node__label" title={data.node.conversationId}>
-          {summarizeConversation(data.node)}
-        </span>
-
-        {hasChildren && (
-          <span className="focus-tree-node__count">[{data.children.length}]</span>
-        )}
-      </div>
-
-      {hasChildren && isExpanded && (
-        <div>
-          {data.children.map((child) => (
-            <TreeNavItem
-              key={child.node.conversationId}
-              data={child}
-              activeId={activeId}
-              expandedIds={expandedIds}
-              depth={depth + 1}
-              onSelect={onSelect}
-              onToggleExpand={onToggleExpand}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
+/** 为节点分配分支颜色 */
+function assignBranchColors(nodes: TreeNodeData[], parentColorIndex = 0): void {
+  nodes.forEach((n, idx) => {
+    const colorIdx = parentColorIndex === 0 && idx > 0 ? idx : parentColorIndex
+    n.branchColor = BRANCH_COLORS[colorIdx % BRANCH_COLORS.length]
+    assignBranchColors(n.children, colorIdx)
+  })
 }
 
 /**

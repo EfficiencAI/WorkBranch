@@ -1767,13 +1767,26 @@ button {
 
 /* 左侧树导航 */
 .focus-view__tree {
-  width: 200px;
   flex-shrink: 0;
   border-right: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
   padding: 16px 12px;
   overflow-y: auto;
   overflow-x: hidden;
   background: rgba(0, 0, 0, 0.01);
+}
+
+/* 拖拽调整手柄 */
+.focus-view__resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+
+.focus-view__resize-handle:hover,
+.focus-view__resize-handle:active {
+  background: var(--app-primary, #1677ff);
 }
 
 /* 右侧主内容区 */
@@ -1997,91 +2010,17 @@ button {
   border-top: 1px dashed var(--app-border, rgba(0, 0, 0, 0.06));
 }
 
-/* ====== 树导航节点样式 ====== */
+/* ====== Git Graph 树导航样式（lane 算法 + SVG 渲染） ====== */
 
 .focus-tree-nav {
   font-size: 13px;
   user-select: none;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
-.focus-tree-node {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 6px;
-  border-radius: 4px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background 0.12s;
-  line-height: 1.6;
-}
-
-.focus-tree-node:hover {
-  background: rgba(22, 119, 255, 0.06);
-}
-
-.focus-tree-node--active {
-  background: rgba(22, 119, 255, 0.1);
-  font-weight: 500;
-}
-
-.focus-tree-node--path .focus-tree-node__label {
-  color: var(--app-text, #333);
-}
-
-.focus-tree-node__toggle {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 9px;
-  color: var(--app-text-muted, #999);
-  line-height: 1;
-  flex-shrink: 0;
-}
-
-.focus-tree-node__spacer {
-  width: 14px;
-  flex-shrink: 0;
-  display: inline-block;
-}
-
-.focus-tree-node__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--app-text-muted, #bbb);
-  flex-shrink: 0;
-  transition: background 0.15s;
-}
-
-.focus-tree-node__dot--active {
-  background: var(--app-primary, #1677ff);
-  box-shadow: 0 0 0 3px rgba(22, 119, 255, 0.15);
-}
-
-.focus-tree-node--active .focus-tree-node__dot {
-  background: var(--app-primary, #1677ff);
-}
-
-.focus-tree-node__label {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--app-text-secondary, #666);
-  flex: 1;
-  min-width: 0;
-}
-
-.focus-tree-node__count {
-  font-size: 10px;
-  color: var(--app-text-muted, #999);
-  opacity: 0.7;
-  flex-shrink: 0;
+.git-graph-svg {
+  display: block;
 }
 
 /* 移动端适配 */
@@ -2105,13 +2044,7 @@ button {
     gap: 4px;
     flex-wrap: nowrap;
   }
-
-  .focus-tree-node {
-    padding: 4px 8px;
-    border: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
-    border-radius: 12px;
-    font-size: 12px;
-  }
+}
 
   .focus-view__main {
     padding: 12px 16px;
