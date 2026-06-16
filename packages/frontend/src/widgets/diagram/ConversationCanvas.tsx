@@ -820,7 +820,7 @@ function FocusView({
   return (
     <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
       {/* 左侧：树导航 */}
-      <div className="focus-view__tree" style={{ width: treeWidth }}>
+      <div className="focus-view__tree" style={isMobile ? undefined : { width: treeWidth }}>
         <FocusTreeNav
           anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? focusedConversationId ?? ''}
           allNodes={conversationNodes}
@@ -1399,7 +1399,6 @@ function FlowViewport({
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const viewportRef = useRef<HTMLDivElement | null>(null)
-  const composerRef = useRef<HTMLDivElement | null>(null)
   const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
@@ -1409,7 +1408,6 @@ function FlowViewport({
 
   const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>('idle')
   const [focusOriginRect, setFocusOriginRect] = useState<FocusOverlayRect | null>(null)
-  const [composerSlideOut, setComposerSlideOut] = useState(false)
   const previousFocusedIdRef = useRef<string | null>(null)
   // 聚焦态内浏览的节点ID（可独立于聚焦锚点变化）
   const [focusViewedId, setFocusViewedId] = useState<string | null>(null)
@@ -1467,7 +1465,6 @@ function FlowViewport({
         if (retryRect) {
           setFocusOriginRect(retryRect)
           setOverlayPhase('entering')
-          setComposerSlideOut(true)
 
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -1481,7 +1478,6 @@ function FlowViewport({
 
     setFocusOriginRect(rect)
     setOverlayPhase('entering')
-    setComposerSlideOut(true)
 
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -1492,7 +1488,6 @@ function FlowViewport({
 
   const exitFocusMode = useCallback((): (() => void) => {
     setOverlayPhase('exiting')
-    setComposerSlideOut(false)
     setFocusViewedId(null)
 
     // 恢复ReactFlow viewport状态
@@ -1698,12 +1693,6 @@ function FlowViewport({
     refreshMaskVisible ? 'conversation-canvas__viewport--refreshing' : null,
   ].filter(Boolean).join(' ')
 
-  const composerShellClassName = [
-    'conversation-canvas__composer-shell',
-    focusedConversation ? 'conversation-canvas__composer-shell--focused' : null,
-    composerSlideOut ? 'conversation-canvas__composer-shell--slide-out' : null,
-  ].filter(Boolean).join(' ')
-
   return (
     <div className={viewportClassName} onContextMenu={handleContextMenu} ref={viewportRef}>
       {initialLoading ? (
@@ -1781,20 +1770,6 @@ function FlowViewport({
         </div>
       ) : null}
 
-      <div className={composerShellClassName} ref={composerRef}>
-        <div className={focusedConversation ? 'conversation-node conversation-node--composer conversation-node--composer-focused' : 'conversation-node conversation-node--composer'}>
-          <Card size="small" className="conversation-node__card conversation-node__card--composer">
-            <MessageComposer
-              selectedConversationId={selectedConversation?.conversationId ?? null}
-              selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
-              sending={sending}
-              allowCreateOnSend={canCreateConversationOnSend}
-              onSend={onSendMessage}
-              onStop={onStopMessage}
-            />
-          </Card>
-        </div>
-      </div>
     </div>
   )
 }

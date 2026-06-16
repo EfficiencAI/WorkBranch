@@ -577,19 +577,6 @@ button {
   transform: translate(-50%, -50%);
 }
 
-.conversation-canvas__composer-shell {
-  position: absolute;
-  left: 50%;
-  bottom: 24px;
-  z-index: 4;
-  width: min(580px, calc(100vw - 48px));
-  transform: translateX(-50%);
-}
-
-.conversation-canvas__composer-shell--focused {
-  width: calc((100vw - 32px) * 0.96);
-}
-
 
 .conversation-node {
   position: relative;
@@ -681,22 +668,12 @@ button {
 }
 
 .conversation-canvas__flow--focused .conversation-node--focused:hover,
-.conversation-canvas__flow--focused .conversation-node--focused:focus-visible,
-.conversation-canvas__composer-shell--focused .conversation-node--composer:hover,
-.conversation-canvas__composer-shell--focused .conversation-node--composer:focus-visible {
+.conversation-canvas__flow--focused .conversation-node--focused:focus-visible {
   transform: none;
 }
 
 .conversation-node--focused {
   width: 320px;
-}
-
-.conversation-node--composer {
-  width: 580px;
-}
-
-.conversation-node--composer-focused {
-  width: 100%;
 }
 
 .conversation-node__body-frame {
@@ -843,12 +820,6 @@ button {
 
 .conversation-node__card--assistant {
   border-color: rgba(168, 85, 247, 0.34);
-}
-
-.conversation-node__card--composer {
-  border-color: rgba(34, 197, 94, 0.4);
-  background: var(--app-card-bg-strong);
-  border-radius: 5px;
 }
 
 .conversation-node__summary.ant-typography {
@@ -1310,23 +1281,8 @@ button {
     width: 320px;
   }
 
-  .conversation-node--composer {
-    width: 520px;
-  }
-
   .conversation-canvas__focused-empty-state {
     width: min(380px, calc(100vw - 32px));
-  }
-
-  .conversation-canvas__composer-shell {
-    left: 50%;
-    right: auto;
-    width: min(520px, calc(100vw - 32px));
-    transform: translateX(-50%);
-  }
-
-  .conversation-canvas__composer-shell--focused {
-    width: calc((100vw - 24px) * 0.96);
   }
 
   .detail-panel {
@@ -1413,22 +1369,8 @@ button {
     width: 280px;
   }
 
-  .conversation-node--composer {
-    width: 460px;
-  }
-
   .conversation-canvas__focused-empty-state {
     width: min(340px, calc(100vw - 32px));
-  }
-
-  .conversation-canvas__composer-shell {
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(460px, calc(100vw - 32px));
-  }
-
-  .conversation-canvas__composer-shell--focused {
-    width: calc((100vw - 20px) * 0.96);
   }
 
   .conversation-canvas__hint {
@@ -1625,22 +1567,6 @@ button {
     width: 280px;
   }
 
-  .conversation-node--composer {
-    width: calc(100vw - 32px);
-    max-width: 460px;
-  }
-
-  .conversation-canvas__composer-shell {
-    left: 50%;
-    transform: translateX(-50%);
-    width: calc(100vw - 32px);
-    max-width: 460px;
-  }
-
-  .conversation-canvas__composer-shell--focused {
-    width: calc(100vw - 32px);
-  }
-
   .conversation-canvas__exit-focus-button {
     width: 100%;
     min-height: 48px;
@@ -1670,13 +1596,8 @@ button {
     width: 300px;
   }
 
-  .conversation-node--focused,
-  .conversation-node--composer {
+  .conversation-node--focused {
     width: 480px;
-  }
-
-  .conversation-canvas__composer-shell {
-    width: min(480px, calc(100vw - 32px));
   }
 }
 
@@ -2054,13 +1975,17 @@ button {
     border-bottom: 1px solid var(--app-border, rgba(0, 0, 0, 0.08));
     padding: 8px 12px;
     overflow-x: auto;
-    overflow-y: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
   }
 
   .focus-tree-nav {
     display: flex;
     gap: 4px;
     flex-wrap: nowrap;
+    min-width: min-content;
+    overflow-x: auto;
+    overflow-y: auto;
   }
 }
 
