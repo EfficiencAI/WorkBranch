@@ -1,4 +1,4 @@
-import { App, Button, Checkbox, Input, Space, Typography } from 'antd'
+import { Button, Checkbox, Input, Space, Typography } from 'antd'
 import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
@@ -8,36 +8,29 @@ import { useResponsive } from '../../shared/lib'
 type MessageComposerProps = {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
-  focusedConversationId: string | null
-  focusedConversationLabel: string | null
   sending: boolean
   allowCreateOnSend?: boolean
   onSend: (message: string, enableContext: boolean) => Promise<void>
   onStop?: () => Promise<void> | void
-  onSwitchToSendTarget?: (conversationId: string) => void
 }
 
 export function MessageComposer({
   selectedConversationId,
   selectedConversationLabel,
-  focusedConversationId,
-  focusedConversationLabel,
   sending,
   allowCreateOnSend = false,
   onSend,
   onStop,
-  onSwitchToSendTarget,
 }: MessageComposerProps) {
   const { settings } = useSettings()
   const responsive = useResponsive()
-  const { message: messageApi } = App.useApp()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
   const [enableContext, setEnableContext] = useState(false)
   const [thinkMode, setThinkMode] = useState(false)
   const [netMode, setNetMode] = useState(false)
   const [btnStyle, setBtnStyle] = useState<CSSProperties>({})
-  const isFocused = focusedConversationId !== null
+  const hasSendTarget = selectedConversationId !== null
   const toolbarRef = useRef<HTMLDivElement>(null)
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
@@ -46,7 +39,7 @@ export function MessageComposer({
 
   const calcBtnSize = useCallback(() => {
     const el = toolbarRef.current
-    if (!el || !isFocused) return
+    if (!el || !hasSendTarget) return
     const containerWidth = el.clientWidth
     const btnCount = 6
     const gapCount = 5
@@ -66,15 +59,15 @@ export function MessageComposer({
       height: `${height}px`,
       fontSize: `${fontSize}px`,
     })
-  }, [isFocused])
+  }, [hasSendTarget])
 
   useEffect(() => {
-    if (!isFocused) return
+    if (!hasSendTarget) return
     calcBtnSize()
     const observer = new ResizeObserver(calcBtnSize)
     if (toolbarRef.current) observer.observe(toolbarRef.current)
     return () => observer.disconnect()
-  }, [isFocused, calcBtnSize])
+  }, [hasSendTarget, calcBtnSize])
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -102,13 +95,6 @@ export function MessageComposer({
       return
     }
 
-    // 检查选中节点是否是聚焦节点
-    if (focusedConversationId && selectedConversationId !== focusedConversationId) {
-      event.preventDefault()
-      void messageApi.warning('当前聚焦节点不是被选中的消息发送节点，快捷键已被禁用')
-      return
-    }
-
     event.preventDefault()
     void handleSend()
   }
@@ -126,7 +112,7 @@ export function MessageComposer({
     )
   }
 
-  if (isFocused) {
+  if (hasSendTarget) {
     return (
       <div className="message-composer message-composer--focused">
         <Input.TextArea
@@ -250,39 +236,6 @@ export function MessageComposer({
                   >
                     停止
                   </Button>
-                ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
-                  <Tooltip
-                    title={
-                      <Space direction="vertical" size={4}>
-                        <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
-                        <Typography.Text type="secondary">
-                          发送目标: {selectedConversationLabel ?? selectedConversationId}
-                        </Typography.Text>
-                        <Typography.Text type="secondary">
-                          聚焦节点: {focusedConversationLabel ?? focusedConversationId}
-                        </Typography.Text>
-                        <Button
-                          size="small"
-                          type="primary"
-                          onClick={() => onSwitchToSendTarget(focusedConversationId)}
-                        >
-                          切换到聚焦节点
-                        </Button>
-                      </Space>
-                    }
-                  >
-                    <span>
-                      <Button
-                        type="primary"
-                        size={responsive.composerConfig.buttonSize}
-                        icon={<SendOutlined />}
-                        disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
-                        onClick={() => void handleSend()}
-                      >
-                        发送
-                      </Button>
-                    </span>
-                  </Tooltip>
                 ) : (
                   <Button
                     type="primary"
@@ -321,38 +274,6 @@ export function MessageComposer({
                   >
                     停止
                   </Button>
-                ) : focusedConversationId && focusedConversationId !== selectedConversationId && onSwitchToSendTarget ? (
-                  <Tooltip
-                    title={
-                      <Space direction="vertical" size={4}>
-                        <Typography.Text>当前发送目标与聚焦节点不一致</Typography.Text>
-                        <Typography.Text type="secondary">
-                          发送目标: {selectedConversationLabel ?? selectedConversationId}
-                        </Typography.Text>
-                        <Typography.Text type="secondary">
-                          聚焦节点: {focusedConversationLabel ?? focusedConversationId}
-                        </Typography.Text>
-                        <Button
-                          size="small"
-                          type="primary"
-                          onClick={() => onSwitchToSendTarget(focusedConversationId)}
-                        >
-                          切换到聚焦节点
-                        </Button>
-                      </Space>
-                    }
-                  >
-                    <span>
-                      <Button
-                        type="primary"
-                        icon={<SendOutlined />}
-                        disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
-                        onClick={() => void handleSend()}
-                      >
-                        发送
-                      </Button>
-                    </span>
-                  </Tooltip>
                 ) : (
                   <Button
                     type="primary"

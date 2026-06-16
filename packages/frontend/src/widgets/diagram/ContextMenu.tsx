@@ -76,13 +76,22 @@ export function ContextMenuProvider({ children }: ContextMenuProviderProps) {
 }
 
 type ContextMenuProps = {
+  lockedSendConversationId: string | null
   onSelectConversation: (conversationId: string) => void
+  onUnlockConversation: () => void
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
   onAutoArrange: () => Promise<void>
 }
 
-export function ContextMenu({ onSelectConversation, onCreateConversation, onDeleteConversation, onAutoArrange }: ContextMenuProps) {
+export function ContextMenu({
+  lockedSendConversationId,
+  onSelectConversation,
+  onUnlockConversation,
+  onCreateConversation,
+  onDeleteConversation,
+  onAutoArrange,
+}: ContextMenuProps) {
   const { contextMenu, setContextMenu } = useContextMenu()
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -99,8 +108,10 @@ export function ContextMenu({ onSelectConversation, onCreateConversation, onDele
       const menuKey = key as MenuKey
       handleClose()
 
-      if (menuKey === 'select-conversation-for-send' && contextMenu.conversationId) {
+      if (menuKey === 'lock-conversation-for-send' && contextMenu.conversationId) {
         onSelectConversation(contextMenu.conversationId)
+      } else if (menuKey === 'unlock-conversation-for-send') {
+        onUnlockConversation()
       } else if (menuKey === 'create-root-conversation') {
         await onCreateConversation(null)
       } else if (menuKey === 'create-child-conversation' && contextMenu.conversationId) {
@@ -116,7 +127,20 @@ export function ContextMenu({ onSelectConversation, onCreateConversation, onDele
 
   if (!contextMenu) return null
 
-  const menuItems: MenuProps['items'] = getMenuItems(contextMenu.type)
+  const menuItems: MenuProps['items'] = (() => {
+    const baseItems = getMenuItems(contextMenu.type)
+    if (contextMenu.type !== 'node' || !contextMenu.conversationId) return baseItems
+
+    return baseItems.map((item) => {
+      if (item?.key === 'lock-conversation-for-send' && lockedSendConversationId === contextMenu.conversationId) {
+        return { ...item, key: 'unlock-conversation-for-send' as MenuKey, label: '取消发送节点锁定' }
+      }
+      if (item?.key === 'lock-conversation-for-send' && lockedSendConversationId) {
+        return { ...item, label: '切换锁定到此节点' }
+      }
+      return item
+    })
+  })()
 
   return (
     <div

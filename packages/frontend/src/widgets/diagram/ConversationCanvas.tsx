@@ -33,6 +33,7 @@ type ConversationCanvasProps = {
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
   onAutoArrange: () => Promise<void>
+  onNavPathTailChange?: (tailConversationId: string | null) => void
 }
 
 // ─── 导航路径相关类型定义 ───
@@ -362,9 +363,8 @@ function FocusOverlay({
   selectedConversationLabel,
   onSend,
   onStop,
-  onSwitchToSendTarget,
-  focusedConversationId,
   onNavigateToNode,
+  onNavPathTailChange,
 }: {
   phase: OverlayPhase
   originRect: FocusOverlayRect | null
@@ -379,9 +379,8 @@ function FocusOverlay({
   selectedConversationLabel: string | null
   onSend: (message: string, enableContext: boolean) => Promise<void>
   onStop: () => Promise<void>
-  onSwitchToSendTarget: (conversationId: string) => void
-  focusedConversationId: string | null
   onNavigateToNode: (nodeId: string) => void
+  onNavPathTailChange?: (tailConversationId: string | null) => void
 }) {
   if (phase === 'idle' || !originRect || !conversation) {
     return null
@@ -456,11 +455,10 @@ function FocusOverlay({
           sending={sending}
           selectedConversationId={selectedConversationId}
           selectedConversationLabel={selectedConversationLabel}
-          focusedConversationId={focusedConversationId}
           onSend={onSend}
           onStop={onStop}
-          onSwitchToSendTarget={onSwitchToSendTarget}
           onNavigateToNode={onNavigateToNode}
+          onNavPathTailChange={onNavPathTailChange}
         />
       </div>
     </div>
@@ -544,11 +542,10 @@ interface FocusViewProps {
   sending: boolean
   selectedConversationId: string | null
   selectedConversationLabel: string | null
-  focusedConversationId: string | null
   onSend: (message: string, enableContext: boolean) => Promise<void>
   onStop: () => Promise<void>
-  onSwitchToSendTarget: (conversationId: string) => void
   onNavigateToNode: (nodeId: string) => void
+  onNavPathTailChange?: (tailConversationId: string | null) => void
 }
 
 function FocusView({
@@ -561,11 +558,10 @@ function FocusView({
   sending,
   selectedConversationId,
   selectedConversationLabel,
-  focusedConversationId,
   onSend,
   onStop,
-  onSwitchToSendTarget,
   onNavigateToNode,
+  onNavPathTailChange,
 }: FocusViewProps) {
   const responsive = useResponsive()
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
@@ -624,6 +620,14 @@ function FocusView({
       })
     }
   }, [conversation?.conversationId])
+
+  // ─── 上报选择链尾节点 ID 给父组件 ───
+  useEffect(() => {
+    const tailId = navState.path.length > 0
+      ? navState.path[navState.path.length - 1].conversationId
+      : null
+    onNavPathTailChange?.(tailId)
+  }, [navState.path, onNavPathTailChange])
 
   // ─── 预加载路径上所有节点的消息到缓存 ───
   useEffect(() => {
@@ -917,12 +921,9 @@ function FocusView({
           <MessageComposer
             selectedConversationId={selectedConversationId}
             selectedConversationLabel={selectedConversationLabel}
-            focusedConversationId={viewedNode?.conversationId ?? null}
-            focusedConversationLabel={viewedNode ? summarizeConversation(viewedNode) : null}
             sending={sending}
             onSend={onSend}
             onStop={onStop}
-            onSwitchToSendTarget={onSwitchToSendTarget}
           />
         </div>
       </div>
@@ -1389,6 +1390,7 @@ function FlowViewport({
   onSendMessage,
   onStopMessage,
   onCreateConversation,
+  onNavPathTailChange,
 }: ConversationCanvasProps) {
   const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
@@ -1723,9 +1725,8 @@ function FlowViewport({
         selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
         onSend={onSendMessage}
         onStop={onStopMessage}
-        onSwitchToSendTarget={setLockedSendConversationId}
-        focusedConversationId={focusedConversationId}
         onNavigateToNode={handleFocusNavigateToNode}
+        onNavPathTailChange={onNavPathTailChange}
       />
 
       <ReactFlow
@@ -1786,13 +1787,10 @@ function FlowViewport({
             <MessageComposer
               selectedConversationId={selectedConversation?.conversationId ?? null}
               selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
-              focusedConversationId={focusedConversation?.conversationId ?? null}
-              focusedConversationLabel={focusedConversation ? summarizeConversation(focusedConversation) : null}
               sending={sending}
               allowCreateOnSend={canCreateConversationOnSend}
               onSend={onSendMessage}
               onStop={onStopMessage}
-              onSwitchToSendTarget={setLockedSendConversationId}
             />
           </Card>
         </div>
@@ -1816,6 +1814,7 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
         <ContextMenuProvider>
           <FlowViewport {...props} />
           <ContextMenu
+            lockedSendConversationId={lockedSendConversationId}
             onSelectConversation={(conversationId) => {
               frontendLogger.info('switch_conversation', {
                 extra: {
@@ -1825,6 +1824,15 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
                 },
               })
               setLockedSendConversationId(conversationId)
+            }}
+            onUnlockConversation={() => {
+              frontendLogger.info('unlock_send_target', {
+                extra: {
+                  previous_conversation_id: lockedSendConversationId,
+                  trigger: 'context_menu_action',
+                },
+              })
+              setLockedSendConversationId(null)
             }}
             onCreateConversation={props.onCreateConversation}
             onDeleteConversation={props.onDeleteConversation}

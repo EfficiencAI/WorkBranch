@@ -75,6 +75,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
+  const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
@@ -102,7 +103,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     [conversationNodes, focusedConversationId],
   )
   const viewedConversationId = focusedConversationId ?? selectedConversationId ?? null
-  const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? null
+  const sendTargetConversationId = lockedSendConversationId ?? selectedConversationId ?? navPathTailId ?? null
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
   const isStreamingViewedConversation = viewedConversationId !== null && streamingConversationIds.has(viewedConversationId)
@@ -395,6 +396,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}
           onAutoArrange={handleAutoArrange}
+          onNavPathTailChange={setNavPathTailId}
         />
 
         <div className={navClassName}>

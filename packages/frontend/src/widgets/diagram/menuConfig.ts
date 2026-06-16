@@ -1,7 +1,8 @@
 import type { MenuProps } from 'antd'
 
 export type MenuKey =
-  | 'select-conversation-for-send'
+  | 'lock-conversation-for-send'
+  | 'unlock-conversation-for-send'
   | 'create-root-conversation'
   | 'create-child-conversation'
   | 'delete-conversation'
@@ -25,8 +26,8 @@ export const MENU_CONFIG: Record<'canvas' | 'node', MenuItem[]> = {
   ],
   node: [
     {
-      key: 'select-conversation-for-send',
-      label: '选中为消息发送节点',
+      key: 'lock-conversation-for-send',
+      label: '锁定为消息发送节点',
     },
     {
       key: 'create-child-conversation',
