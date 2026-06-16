@@ -1662,6 +1662,9 @@ function FlowViewport({
     (event: React.MouseEvent) => {
       event.preventDefault()
 
+      // 聚焦态下不显示预览态的右键菜单
+      if (focusedConversationId) return
+
       const target = event.target as HTMLElement
       const nodeElement = target.closest('[data-conversation-id]')
 
@@ -1683,7 +1686,7 @@ function FlowViewport({
         })
       }
     },
-    [setContextMenu],
+    [setContextMenu, focusedConversationId],
   )
 
 

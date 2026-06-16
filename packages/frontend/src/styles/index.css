@@ -19,7 +19,7 @@
   --app-space-6: calc(20px * var(--app-ui-scale));
   --app-radius-sm: calc(10px * var(--app-ui-scale));
   --app-radius-md: calc(12px * var(--app-ui-scale));
-  --app-radius-lg: calc(20px * var(--app-ui-scale));
+  --app-radius-lg: calc(10px * var(--app-ui-scale));
   --app-radius-xl: calc(24px * var(--app-ui-scale));
   --app-control-height: calc(40px * var(--app-ui-scale));
   --app-control-height-lg: calc(48px * var(--app-ui-scale));

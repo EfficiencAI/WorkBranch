@@ -1,5 +1,4 @@
 import { Button, Checkbox, Drawer, Modal, Space, Typography } from 'antd'
-import { CloseOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -405,7 +404,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
             data-testid="exit-focus-button"
             className={`diagram-shell__exit-focus-overlay ${!isFocused ? 'diagram-shell__exit-focus-overlay--hidden' : ''}`}
             aria-label="退出聚焦"
-            icon={<CloseOutlined />}
+            icon={
+              <svg viewBox="0 0 1024 1024" width="16" height="16" fill="currentColor">
+                <path d="M256 768v128H128V768h128m64-64H64v256h256V704zM576 768v128H448V768h128m64-64H384v256h256V704zM896 768v128H768V768h128m64-64H704v256h256V704zM607.7 127.9v191.5H416.3V127.9h191.4m64-64H352.3v319.5h96.4V448H126.1v64h1.9v128h63.3V512h257.4v128H576V512h256v128h63.3V512h0.7v-64H576v-64.6h95.7V63.9z" />
+              </svg>
+            }
             onClick={() => setFocusedConversationId(null)}
           />
           <div className="diagram-shell__nav-head">
