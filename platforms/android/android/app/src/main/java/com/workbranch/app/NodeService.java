@@ -9,6 +9,11 @@ import android.system.Os;
 import android.system.ErrnoException;
 import android.util.Log;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
+
 import java.io.*;
 import java.util.ArrayList;
 
@@ -208,6 +213,20 @@ public class NodeService extends Service {
     @Override
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "NodeService onDestroy");
+        Log.d(TAG, "NodeService onDestroy - notifying backend to shutdown");
+        new Thread(() -> {
+            try {
+                URL url = new URL("http://127.0.0.1:3000/api/system/shutdown");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(2000);
+                conn.setReadTimeout(3000);
+                int code = conn.getResponseCode();
+                Log.d(TAG, "NodeService shutdown request sent, response=" + code);
+                conn.disconnect();
+            } catch (Exception e) {
+                Log.w(TAG, "NodeService shutdown notification failed (backend may already be dead): " + e.getMessage());
+            }
+        }).start();
     }
 }
