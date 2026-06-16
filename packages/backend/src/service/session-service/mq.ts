@@ -49,8 +49,9 @@ class HybridMessageQueue {
 
   private streamStates: Map<string, StreamState> = new Map();
 
-  constructor(dbPath: string = 'data/mq.db', _maxSize: number = 1000) {
-    this.dbPath = dbPath;
+  constructor(dbPath?: string, _maxSize: number = 1000) {
+    const dataDir = process.env.FILES_DIR || process.cwd();
+    this.dbPath = dbPath || path.join(dataDir, 'data', 'mq.db');
     this.initPromise = this.init();
   }
 

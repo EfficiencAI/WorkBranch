@@ -26,7 +26,7 @@ async function build() {
     format: 'cjs',
     sourcemap: true,
     external: [
-      'sql.js',
+      // sql.js 已移除 external，由 esbuild 内联打包以支持 Android 嵌入式环境
     ],
     define: {
       'process.env.NODE_ENV': '"production"',

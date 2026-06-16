@@ -10,7 +10,7 @@ export class CompressionCache {
   constructor(
     l1MaxSize: number = 100,
     l1TtlSeconds: number = 3600,
-    l2DbPath: string = 'data/compression_cache.db'
+    l2DbPath?: string
   ) {
     this.l1Cache = new LRUCache(l1MaxSize, l1TtlSeconds);
     this.l2Cache = new SQLiteCacheBackend(l2DbPath);

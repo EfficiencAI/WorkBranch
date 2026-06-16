@@ -26,8 +26,22 @@ public class NodeService extends Service {
     private String nodePath;
 
     static {
-        System.loadLibrary("nodejs-mobile-cordova-native-lib");
-        System.loadLibrary("node");
+        Log.d(TAG, "=== NodeService: STATIC INIT START ===");
+        try {
+            System.loadLibrary("nodejs-mobile-cordova-native-lib");
+            Log.d(TAG, "=== NodeService: loaded nodejs-mobile-cordova-native-lib OK ===");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "=== NodeService: FAILED to load nodejs-mobile-cordova-native-lib ===", e);
+            throw e;
+        }
+        try {
+            System.loadLibrary("node");
+            Log.d(TAG, "=== NodeService: loaded node OK ===");
+        } catch (UnsatisfiedLinkError e) {
+            Log.e(TAG, "=== NodeService: FAILED to load node ===", e);
+            throw e;
+        }
+        Log.d(TAG, "=== NodeService: STATIC INIT OK ===");
     }
 
     public native Integer startNodeWithArguments(String[] arguments, String nodePath, boolean redirectOutputToLogcat);
@@ -42,7 +56,7 @@ public class NodeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.d(TAG, "NodeService onCreate");
+        Log.d(TAG, "=== NodeService.onCreate START ===");
 
         try {
             Os.setenv("TMPDIR", getCacheDir().getAbsolutePath(), true);
@@ -51,13 +65,20 @@ public class NodeService extends Service {
         }
 
         filesDir = getFilesDir().getAbsolutePath();
+        Log.d(TAG, "NodeService: filesDir=" + filesDir);
+
         registerNodeDataDirPath(filesDir);
+        Log.d(TAG, "NodeService: registerNodeDataDirPath done");
 
         nodeAppRootAbsolutePath = filesDir + "/" + PROJECT_ROOT;
         nodePath = nodeAppRootAbsolutePath + ":" + filesDir + "/" + BUILTIN_MODULES;
 
+        Log.d(TAG, "NodeService: about to copyNodeAssets");
         copyNodeAssets();
+        Log.d(TAG, "NodeService: copyNodeAssets done, about to startNodeJS");
+
         startNodeJS();
+        Log.d(TAG, "=== NodeService.onCreate OK ===");
     }
 
     private void copyNodeAssets() {
@@ -126,46 +147,51 @@ public class NodeService extends Service {
             Log.w(TAG, "Node.js was already started once, not restarting to avoid mutex issues");
             return;
         }
-        
+
         if (isNodeRunning) {
             Log.w(TAG, "Node.js is already running");
             return;
         }
-        
+
         isNodeRunning = true;
         nodeStartedOnce = true;
-        
+
+        Log.d(TAG, "=== NodeService.startNodeJS: creating thread ===");
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
+                    Log.d(TAG, "=== Node thread: START ===");
                     File entryFile = new File(nodeAppRootAbsolutePath + "/index.js");
                     if (!entryFile.exists()) {
-                        Log.e(TAG, "index.js not found at " + entryFile.getAbsolutePath());
+                        Log.e(TAG, "=== Node thread: index.js NOT FOUND at " + entryFile.getAbsolutePath() + " ===");
                         isNodeRunning = false;
                         return;
                     }
+                    Log.d(TAG, "=== Node thread: index.js FOUND at " + entryFile.getAbsolutePath() + " ===");
 
                     Os.setenv("FILES_DIR", filesDir, true);
                     Os.setenv("NODE_PATH", nodePath, true);
 
-                    Log.d(TAG, "Starting Node.js with script: " + entryFile.getAbsolutePath());
-                    Log.d(TAG, "FILES_DIR: " + filesDir);
-                    Log.d(TAG, "NODE_PATH: " + nodePath);
-                    
+                    Log.d(TAG, "=== Node thread: about to call startNodeWithArguments ===");
+                    Log.d(TAG, "=== Node thread: script=" + entryFile.getAbsolutePath() + " ===");
+                    Log.d(TAG, "=== Node thread: FILES_DIR=" + filesDir + " ===");
+                    Log.d(TAG, "=== Node thread: NODE_PATH=" + nodePath + " ===");
+
                     Integer result = startNodeWithArguments(
                         new String[]{"node", entryFile.getAbsolutePath()},
                         nodePath,
                         true
                     );
-                    Log.d(TAG, "Node.js exited with code: " + result);
+                    Log.d(TAG, "=== Node thread: Node.js exited with code: " + result + " ===");
                     isNodeRunning = false;
                 } catch (Exception e) {
-                    Log.e(TAG, "Failed to start Node.js", e);
+                    Log.e(TAG, "=== Node thread: EXCEPTION ===", e);
                     isNodeRunning = false;
                 }
             }
         }).start();
+        Log.d(TAG, "=== NodeService.startNodeJS: thread started ===");
     }
 
     @Override

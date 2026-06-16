@@ -20,7 +20,7 @@ if (restored) {
 
 async function bootstrap() {
   await waitForBackendReady()
-  
+
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <App />

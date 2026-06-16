@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { conversationDAO } from '../../data';
 import { db } from '../../core/database';
 import { SegmentType } from './canonical';
@@ -120,9 +121,10 @@ class ConversationBuffer {
       }
 
       const fs_mod = require('fs');
-      const beforeSize = fs_mod.existsSync('data/workbranch.db') ? fs_mod.statSync('data/workbranch.db').size : 0;
+      const _dbPath = path.join(process.env.FILES_DIR || process.cwd(), 'data', 'workbranch.db');
+      const beforeSize = fs_mod.existsSync(_dbPath) ? fs_mod.statSync(_dbPath).size : 0;
       db.save();
-      const afterSize = fs_mod.existsSync('data/workbranch.db') ? fs_mod.statSync('data/workbranch.db').size : 0;
+      const afterSize = fs_mod.existsSync(_dbPath) ? fs_mod.statSync(_dbPath).size : 0;
       _stepLog(`db.save() DONE size: ${beforeSize} -> ${afterSize}`);
     } catch(saveErr) {
       _stepLog(`db.save() ERROR: ${saveErr.message}`);

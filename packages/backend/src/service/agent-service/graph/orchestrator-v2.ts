@@ -49,7 +49,8 @@ class PersistenceServiceImpl {
   private basePath: string;
 
   constructor(basePath?: string) {
-    this.basePath = basePath || path.join(process.cwd(), '.agent_states');
+    const cwd = process.env.FILES_DIR || process.cwd();
+    this.basePath = basePath || path.join(cwd, '.agent_states');
     if (!fs.existsSync(this.basePath)) {
       fs.mkdirSync(this.basePath, { recursive: true });
     }

@@ -21,8 +21,9 @@ export class SQLiteCacheBackend {
   private SQL: SqlJsStatic | null = null;
   private initPromise: Promise<void>;
 
-  constructor(dbPath: string = 'data/compression_cache.db') {
-    this.dbPath = dbPath;
+  constructor(dbPath?: string) {
+    const dataDir = process.env.FILES_DIR || process.cwd();
+    this.dbPath = dbPath || path.join(dataDir, 'data', 'compression_cache.db');
     this.initPromise = this.init();
   }
 

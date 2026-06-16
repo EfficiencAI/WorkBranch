@@ -122,6 +122,7 @@ export class SQLiteDatabase {
   private dbPath: string;
   private static instance: SQLiteDatabase | null = null;
   private initialized = false;
+  private autoSaveTimer: NodeJS.Timeout | null = null;
 
   private constructor(dbPath: string) {
     this.dbPath = dbPath;
@@ -188,6 +189,7 @@ export class SQLiteDatabase {
 
     this.initialize();
     this.initialized = true;
+    this.startAutoSave();
   }
 
   private initInBackground(): void {
@@ -286,6 +288,22 @@ export class SQLiteDatabase {
     }
   }
 
+  private startAutoSave(): void {
+    if (this.autoSaveTimer) return;
+    this.autoSaveTimer = setInterval(() => {
+      if (this.db && this.initialized) {
+        this.save();
+      }
+    }, 5000);
+  }
+
+  private stopAutoSave(): void {
+    if (this.autoSaveTimer) {
+      clearInterval(this.autoSaveTimer);
+      this.autoSaveTimer = null;
+    }
+  }
+
   /** Flush in-memory sql.js DB to disk. Call after writes outside transaction(). */
   save(): void {
     const fs_mod = require('fs');
@@ -301,6 +319,14 @@ export class SQLiteDatabase {
       const buffer = Buffer.from(data);
       const beforeSize = fs_mod.existsSync(this.dbPath) ? fs_mod.statSync(this.dbPath).size : 0;
       fs_mod.writeFileSync(this.dbPath, buffer);
+      // Force flush to physical storage to survive process kill on Android
+      try {
+        const fd = fs_mod.openSync(this.dbPath, 'r+');
+        fs_mod.fsyncSync(fd);
+        fs_mod.closeSync(fd);
+      } catch (syncErr) {
+        console.log(`[DB-SAVE] fsync skipped: ${syncErr.message}`);
+      }
       const afterSize = fs_mod.statSync(this.dbPath).size;
       console.log(`[DB-SAVE] WRITTEN ${buffer.length} bytes to ${this.dbPath} size: ${beforeSize} -> ${afterSize}`);
 
@@ -356,6 +382,7 @@ export class SQLiteDatabase {
   }
 
   close(): void {
+    this.stopAutoSave();
     if (this.db) {
       this.save();
       this.db.close();
