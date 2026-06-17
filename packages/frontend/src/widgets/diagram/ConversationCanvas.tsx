@@ -32,6 +32,7 @@ type ConversationCanvasProps = {
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
+  onCreateSession?: () => Promise<void>
   onAutoArrange: () => Promise<void>
   onNavPathTailChange?: (tailConversationId: string | null) => void
 }
@@ -1390,6 +1391,8 @@ function FlowViewport({
   onSendMessage,
   onStopMessage,
   onCreateConversation,
+  onDeleteConversation,
+  onCreateSession,
   onNavPathTailChange,
 }: ConversationCanvasProps) {
   const { settings } = useSettings()
@@ -1763,6 +1766,16 @@ function FlowViewport({
               sessionDetail ? (
                 <Button onClick={() => void onCreateConversation(null)}>
                   创建第一个对话节点
+                </Button>
+              ) : onCreateSession ? (
+                <Button
+                  type="primary"
+                  onClick={async () => {
+                    await onCreateSession()
+                    await onCreateConversation(null)
+                  }}
+                >
+                  创建新会话
                 </Button>
               ) : undefined
             }

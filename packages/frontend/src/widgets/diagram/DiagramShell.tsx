@@ -395,6 +395,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}
+          onCreateSession={handleCreateSession}
           onAutoArrange={handleAutoArrange}
           onNavPathTailChange={setNavPathTailId}
         />

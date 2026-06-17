@@ -18,7 +18,7 @@ export function EmptyState({ title, description, action }: EmptyStateProps) {
         </Space>
       }
     >
-      {action ? action : <Button type="default">稍后完善</Button>}
+      {action ? action : null}
     </Empty>
   )
 }
