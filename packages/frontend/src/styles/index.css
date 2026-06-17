@@ -975,9 +975,188 @@ button {
   text-overflow: ellipsis;
 }
 
+/* ====== Session Sidebar 样式系统 ====== */
+
 .session-sidebar {
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-5);
 }
+
+/* 用户资料区 */
+.session-sidebar__profile {
+  display: flex;
+  align-items: center;
+  gap: var(--app-space-4);
+  padding: var(--app-space-4);
+  border-radius: var(--app-radius-lg);
+  background: var(--app-panel-bg-soft);
+  border: 1px solid var(--app-border);
+  transition: background 200ms ease;
+}
+
+.session-sidebar__profile:hover {
+  background: var(--app-hover-bg);
+}
+
+.session-sidebar__user-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 操作区：搜索 + 新建按钮 */
+.session-sidebar__actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-3);
+}
+
+.session-sidebar__search .ant-input-affix-wrapper {
+  border-radius: var(--app-radius-sm);
+  background: var(--app-input-bg);
+  border-color: var(--app-border);
+  transition: all 180ms ease;
+}
+
+.session-sidebar__search .ant-input-affix-wrapper:focus-within {
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+}
+
+.session-sidebar__create-btn {
+  height: var(--app-control-height);
+  border-radius: var(--app-radius-sm);
+  font-weight: 500;
+  transition: all 180ms ease;
+}
+
+/* 会话列表区 */
+.session-sidebar__list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
+  /* Firefox 滚动条 */
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border-strong) transparent;
+}
+
+/* WebKit 滚动条 (Chrome/Edge/Safari) */
+.session-sidebar__list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.session-sidebar__list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.session-sidebar__list::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 3px;
+}
+
+.session-sidebar__list::-webkit-scrollbar-thumb:hover {
+  background: var(--app-text-soft);
+}
+
+.session-sidebar__list .ant-list-item {
+  padding: 0 !important;
+  margin-bottom: var(--app-space-3);
+}
+
+/* 会话项 - 使用高优先级选择器覆盖 antd 默认样式 */
+.session-sidebar .ant-list-item.session-sidebar__item,
+.session-sidebar__list .session-sidebar__item {
+  position: relative;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 26px !important;
+  border-radius: var(--app-radius-lg) !important;
+  border: 1px solid transparent !important;
+  background: var(--app-item-bg) !important;
+  cursor: pointer;
+  transition: all 180ms ease;
+  overflow: hidden;
+}
+
+/* 左侧激活指示条 */
+.session-sidebar__item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 0;
+  background: linear-gradient(180deg, #22c55e, #16a34a);
+  border-radius: 0 2px 2px 0;
+  transition: height 200ms ease;
+}
+
+/* 悬停状态 */
+.session-sidebar__item:hover {
+  background: var(--app-hover-bg) !important;
+  border-color: var(--app-border) !important;
+  transform: translateX(2px);
+}
+
+.session-sidebar__item:hover .session-sidebar__delete-btn {
+  opacity: 1;
+}
+
+/* 激活状态 */
+.session-sidebar__item--active {
+  background: rgba(22, 163, 74, 0.08) !important;
+  border-color: rgba(34, 197, 94, 0.32) !important;
+  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.08) !important;
+}
+
+.session-sidebar__item--active::before {
+  height: 60%;
+}
+
+.session-sidebar__item--active:hover {
+  transform: none;
+}
+
+/* 删除按钮（悬停显示） */
+.session-sidebar__delete-btn {
+  opacity: 0;
+  transition: opacity 150ms ease;
+  flex-shrink: 0;
+}
+
+/* 会话项内容区 */
+.session-sidebar__item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--app-space-1);
+}
+
+.session-sidebar__item-title.ant-typography {
+  font-size: var(--app-font-size-lg);
+  font-weight: 600;
+  color: var(--app-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 !important;
+}
+
+.session-sidebar__item-time.ant-typography {
+  font-size: var(--app-font-size-sm);
+  color: var(--app-text-muted);
+  margin: 0 !important;
+}
+
+/* ====== Diagram Shell & Settings 样式 ====== */
 
 .diagram-shell__settings {
   width: 100%;
@@ -1019,39 +1198,7 @@ button {
   border-top-color: var(--app-border);
 }
 
-.session-sidebar__profile,
-.session-sidebar__shortcut-card,
-.session-sidebar__item,
-.detail-panel__note,
-.detail-panel__section {
-  border-radius: 20px;
-}
-
-.session-sidebar__list {
-  max-height: min(44vh, 420px);
-  overflow: auto;
-}
-
-.session-sidebar__item {
-  padding: var(--app-space-5);
-  border: 1px solid var(--app-border);
-  background: var(--app-item-bg);
-}
-
-.session-sidebar__item + .session-sidebar__item {
-  margin-top: var(--app-space-4);
-}
-
-.session-sidebar__item--active {
-  border-color: rgba(34, 197, 94, 0.42);
-  background: rgba(22, 163, 74, 0.12);
-  box-shadow: inset 0 0 0 1px rgba(34, 197, 94, 0.12);
-}
-
-.session-sidebar__preview.ant-typography {
-  margin: 0;
-}
-
+/* Detail Panel */
 .detail-panel {
   position: fixed;
   inset: 5vh 5vw;
@@ -1079,7 +1226,6 @@ button {
 }
 
 .detail-panel .ant-card,
-.session-sidebar .ant-card,
 .conversation-node__card.ant-card {
   border-color: var(--app-border);
 }
