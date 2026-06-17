@@ -1,5 +1,4 @@
-import initSqlJs from 'sql.js';
-import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { Message, SegmentType } from './canonical';
@@ -38,10 +37,49 @@ interface SubscribeOptions {
   lastSeq?: number;
 }
 
+/**
+ * 写透代理：sql.js + 自动持久化（与 sqlite.ts 同构）
+ */
+class MqPersistentDatabase {
+  private _db: SqlJsDatabase;
+  private dbPath: string;
+  private saveTimer: NodeJS.Timeout | null = null;
+  private dirty = false;
+  private fd: number | null = null;
+  private closed = false;
+
+  constructor(db: SqlJsDatabase, dbPath: string) {
+    this._db = db; this.dbPath = dbPath;
+    try { this.fd = fs.openSync(fs.existsSync(dbPath) ? dbPath : (fs.writeFileSync(dbPath, ''), dbPath), 'r+'); } catch { /* ignore */ }
+  }
+
+  exec(sql: string): void {
+    if (this.closed) throw new Error('Database is closed');
+    this._db.exec(sql);
+    if (/^(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|TRUNCATE)\b/i.test(sql.trim())) this.scheduleSave();
+  }
+
+  prepare(sql: string): MqStatementProxy { if (this.closed) throw new Error('closed'); return new MqStatementProxy(this, sql); }
+  pragma(cmd: string): unknown[] { if (this.closed) throw new Error('closed'); const r = this._db.exec(`PRAGMA ${cmd}`); return r.length > 0 ? r[0].values : []; }
+  close(): void { if (this.closed) return; this.closed = true; this.forceSave(); if (this.fd !== null) { try { fs.closeSync(this.fd); } catch {} this.fd = null; } this._db.close(); }
+
+  /** @internal 供 MqStatementProxy 使用 */
+  get rawDb(): SqlJsDatabase { return this._db; }
+  scheduleSave(): void { this.dirty = true; if (!this.saveTimer) this.saveTimer = setTimeout(() => this.forceSave(), 50); }
+  forceSave(): void { if (!this.dirty || this.closed) return; try { fs.writeFileSync(this.dbPath, Buffer.from(this._db.export())); if (this.fd !== null) fs.fsyncSync(this.fd); } catch {} this.dirty = false; if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; } }
+}
+
+class MqStatementProxy {
+  private owner: MqPersistentDatabase; private sql: string;
+  constructor(o: MqPersistentDatabase, s: string) { this.owner = o; this.sql = s; }
+  run(...params: unknown[]): { changes: number; lastInsertRowid: number } { const r = this.owner.rawDb.run(this.sql, params); this.owner.scheduleSave(); return { changes: r.changes, lastInsertRowid: Number(r.lastInsertRowid) }; }
+  get<T = unknown>(...params: unknown[]): T | undefined { const stmt = this.owner.rawDb.prepare(this.sql); if (params?.length) stmt.bind(params); if (stmt.step()) { const r = stmt.getAsObject() as T; stmt.free(); return r; } stmt.free(); return undefined; }
+  all<T = unknown>(...params: unknown[]): T[] { const results: T[] = []; const stmt = this.owner.rawDb.prepare(this.sql); if (params?.length) stmt.bind(params); while (stmt.step()) results.push(stmt.getAsObject() as T); stmt.free(); return results; }
+}
+
 class HybridMessageQueue {
   private dbPath: string;
-  private db: SqlJsDatabase | null = null;
-  private SQL: SqlJsStatic | null = null;
+  private db: MqPersistentDatabase | null = null;
   private initPromise: Promise<void>;
 
   private subscribers: Map<string, Set<MessageCallback>> = new Map();
@@ -61,40 +99,17 @@ class HybridMessageQueue {
       fs.mkdirSync(dbDir, { recursive: true });
     }
 
-    const cwd = process.cwd();
-    const isAndroid = cwd === '/' || cwd === '/system';
-    const filesDir = process.env.FILES_DIR || '/data/data/com.workbranch.app/files';
-
-    this.SQL = await initSqlJs({
-      locateFile: (file: string) => {
-        if (isAndroid) {
-          const androidPath = path.join(filesDir, 'www', 'nodejs-project', file);
-          if (fs.existsSync(androidPath)) {
-            return androidPath;
-          }
-        }
-        const devPath = path.join(__dirname, '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
-        if (fs.existsSync(devPath)) {
-          return devPath;
-        }
-        const bundlePath = path.join(__dirname, file);
-        if (fs.existsSync(bundlePath)) {
-          return bundlePath;
-        }
-        const androidPath = path.join(__dirname, '..', '..', 'sql-wasm.wasm');
-        if (fs.existsSync(androidPath)) {
-          return androidPath;
-        }
-        return file;
-      }
-    });
-
+    const SQL = await initSqlJs();
+    let db: SqlJsDatabase;
     if (fs.existsSync(this.dbPath)) {
-      const buffer = fs.readFileSync(this.dbPath);
-      this.db = new this.SQL.Database(buffer);
+      db = new SQL.Database(fs.readFileSync(this.dbPath));
     } else {
-      this.db = new this.SQL.Database();
+      db = new SQL.Database();
     }
+
+    this.db = new MqPersistentDatabase(db, this.dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = FULL');
 
     this.initDb();
   }
@@ -102,7 +117,7 @@ class HybridMessageQueue {
   private initDb(): void {
     if (!this.db) return;
 
-    this.db.run(`
+    this.db.exec(`
       CREATE TABLE IF NOT EXISTS message_stream (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         conversation_id TEXT NOT NULL,
@@ -118,19 +133,10 @@ class HybridMessageQueue {
       )
     `);
 
-    this.db.run(`
+    this.db.exec(`
       CREATE INDEX IF NOT EXISTS idx_conv_seq 
       ON message_stream(conversation_id, seq)
     `);
-
-    this.save();
-  }
-
-  private save(): void {
-    if (!this.db) return;
-    const data = this.db.export();
-    const buffer = Buffer.from(data);
-    fs.writeFileSync(this.dbPath, buffer);
   }
 
   private logEvent(
@@ -168,15 +174,10 @@ class HybridMessageQueue {
 
     let maxSeq = 0;
     if (this.db) {
-      const stmt = this.db.prepare(
-        'SELECT MAX(seq) as max_seq FROM message_stream WHERE conversation_id = ?',
-        [conversationId ?? '']
-      );
-      if (stmt.step()) {
-        const row = stmt.getAsObject();
-        maxSeq = (row.max_seq as number) || 0;
-      }
-      stmt.free();
+      const row = this.db.prepare(
+        'SELECT MAX(seq) as max_seq FROM message_stream WHERE conversation_id = ?'
+      ).get(conversationId ?? '') as any;
+      maxSeq = (row?.max_seq as number) || 0;
     }
 
     const nextSeq = maxSeq + 1;
@@ -197,22 +198,20 @@ class HybridMessageQueue {
       const contentBlocks = JSON.stringify(message.content_blocks);
       const metadata = JSON.stringify(message.metadata || {});
 
-      this.db.run(
+      this.db.prepare(
         `INSERT INTO message_stream
          (conversation_id, seq, message_id, session_id, workspace_id, message_type, content, metadata)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          message.conversation_id,
-          seq,
-          message.message_id,
-          message.session_id ?? '',
-          message.workspace_id ?? '',
-          this.getPrimaryMessageType(message),
-          contentBlocks,
-          metadata
-        ]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        message.conversation_id,
+        seq,
+        message.message_id,
+        message.session_id ?? '',
+        message.workspace_id ?? '',
+        this.getPrimaryMessageType(message),
+        contentBlocks,
+        metadata
       );
-      this.save();
 
       this.logEvent('INFO', 'mq.message.saved', 'Message saved to SQLite', message.conversation_id, {
         seq,
@@ -238,11 +237,9 @@ class HybridMessageQueue {
     if (!this.db) return;
 
     try {
-      this.db.run(
-        'DELETE FROM message_stream WHERE conversation_id = ?',
-        [conversationId ?? '']
-      );
-      this.save();
+      this.db.prepare(
+        'DELETE FROM message_stream WHERE conversation_id = ?'
+      ).run(conversationId ?? '');
 
       const state = this.streamStates.get(conversationId);
       if (state) {
@@ -268,9 +265,6 @@ class HybridMessageQueue {
   private routeToBuffer(message: Message): void {
     const mid = message.message_id;
     const blockType = this.getPrimaryMessageType(message);
-    const fs = require('fs');
-    fs.appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\\\.tmp-debug\\mq-trace.log',
-      `[${new Date().toISOString()}] [mq] routeToBuffer mid=${mid} type=${blockType} isDone=${this.isDoneMessage(message)} isError=${this.isErrorMessage(message)}\n`);
 
     if (!mid) {
       this.logEvent('ERROR', 'mq.buffer.no_mid', `Message has no message_id, type=${blockType}`, message.conversation_id);
@@ -301,9 +295,6 @@ class HybridMessageQueue {
   }
 
   async publish(message: Message): Promise<boolean> {
-    const fs = require('fs');
-    fs.appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\\\.tmp-debug\\mq-trace.log',
-      `[${new Date().toISOString()}] [mq] publish() mid=${message.message_id} type=${this.getPrimaryMessageType(message)} conv=${message.conversation_id}\n`);
     await this.ensureInit();
 
     try {
@@ -371,17 +362,14 @@ class HybridMessageQueue {
   getMessagesAfter(conversationId: string, lastSeq: number): Array<{ message: Message; seq: number }> {
     if (!this.db) return [];
 
-    const messages: Array<{ message: Message; seq: number }> = [];
-    const stmt = this.db.prepare(
+    const rows = this.db.prepare(
       `SELECT seq, message_id, session_id, workspace_id, message_type, content, metadata
        FROM message_stream
        WHERE conversation_id = ? AND seq > ?
-       ORDER BY seq ASC`,
-      [conversationId, lastSeq]
-    );
+       ORDER BY seq ASC`
+    ).all(conversationId, lastSeq) as unknown as MessageRecord[];
 
-    while (stmt.step()) {
-      const row = stmt.getAsObject() as unknown as MessageRecord;
+    return rows.map(row => {
       try {
         const contentBlocks = JSON.parse(row.content || '[]');
         const metadata = JSON.parse(row.metadata || '{}');
@@ -396,13 +384,12 @@ class HybridMessageQueue {
           timestamp: row.created_at,
           metadata
         };
-        messages.push({ message, seq: row.seq });
+        return { message, seq: row.seq };
       } catch (e) {
         this.logEvent('ERROR', 'mq.parse.failed', `Failed to parse message: ${e}`, conversationId);
+        return null as any;
       }
-    }
-    stmt.free();
-    return messages;
+    }).filter(Boolean);
   }
 
   getStreamState(conversationId: string): StreamState {
@@ -412,16 +399,14 @@ class HybridMessageQueue {
     }
 
     if (this.db) {
-      const stmt = this.db.prepare(
+      const row = this.db.prepare(
         `SELECT MAX(seq) as max_seq, message_type, session_id, workspace_id
          FROM message_stream
          WHERE conversation_id = ?
-         ORDER BY seq DESC LIMIT 1`,
-        [conversationId]
-      );
-      if (stmt.step()) {
-        const row = stmt.getAsObject();
-        stmt.free();
+         ORDER BY seq DESC LIMIT 1`
+      ).get(conversationId) as any;
+
+      if (row) {
         return {
           conversation_id: conversationId,
           last_seq: (row.max_seq as number) || 0,
@@ -430,7 +415,6 @@ class HybridMessageQueue {
           workspace_id: (row.workspace_id as string) || ''
         };
       }
-      stmt.free();
     }
 
     return {
@@ -581,7 +565,8 @@ class HybridMessageQueue {
     this.subscriberQueues.clear();
     this.streamStates.clear();
     if (this.db) {
-      this.save();
+      this.db.close();
+      this.db = null;
     }
   }
 

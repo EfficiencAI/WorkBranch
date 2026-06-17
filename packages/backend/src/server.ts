@@ -21,7 +21,7 @@ async function start() {
     app.post('/api/system/shutdown', async (request, reply) => {
       console.log('[SHUTDOWN] Received shutdown request, closing database...');
       try {
-        const db = SQLiteDatabase.getInstance();
+        const db = await SQLiteDatabase.getInstance();
         db.close();
         console.log('[SHUTDOWN] Database closed, exiting process');
       } catch (e) {

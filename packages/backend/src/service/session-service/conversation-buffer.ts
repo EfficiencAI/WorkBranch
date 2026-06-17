@@ -1,6 +1,4 @@
-import * as path from 'path';
 import { conversationDAO } from '../../data';
-import { db } from '../../core/database';
 import { SegmentType } from './canonical';
 
 interface DraftMessage {
@@ -66,7 +64,7 @@ class ConversationBuffer {
     require('fs').appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\step-trace.log',
       `[${new Date().toISOString()}] [STEP-TRACE] completeMessage ENTER mid=${messageId} draft=${!!draft}\n`);
 
-    const _stepLog = (msg) => require('fs').appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\step-trace.log',
+    const _stepLog = (msg: string) => require('fs').appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\step-trace.log',
       `[${new Date().toISOString()}] [STEP-TRACE] ${msg}\n`);
 
     if (!draft) {
@@ -84,51 +82,14 @@ class ConversationBuffer {
         draft.thinking_content ?? null
       );
       _stepLog('STEP2: updateMessageAssistant DONE');
-    } catch(daoErr) {
-      _stepLog(`STEP2-ERR: ${daoErr.message}`);
+    } catch(daoErr: unknown) {
+      _stepLog(`STEP2-ERR: ${daoErr instanceof Error ? daoErr.message : String(daoErr)}`);
       throw daoErr;
     }
 
-    // CRITICAL: Flush sql.js in-memory DB to disk
-    _stepLog('STEP3: calling db.save()');
-    try {
-      // VERIFY: Check what's actually in sql.js memory BEFORE save
-      const _verifyDb = require('../../core/database').db;
-      _stepLog(`VERIFY: same db instance? ${_verifyDb === require('../../core/database').db}`);
-      try {
-        // Try to count conversations in sql.js memory
-        const verifyStmt = _verifyDb.prepare('SELECT COUNT(*) as cnt FROM conversations');
-        const verifyRow = verifyStmt.get();
-        _stepLog(`VERIFY sql.js mem: conversations=${(verifyRow as any)?.cnt}`);
-        verifyStmt.free();
-
-        const msgStmt = _verifyDb.prepare('SELECT COUNT(*) as cnt FROM messages');
-        const msgRow = msgStmt.get();
-        _stepLog(`VERIFY sql.js mem: messages=${(msgRow as any)?.cnt}`);
-        msgStmt.free();
-
-        // Find our specific message
-        const findMsg = _verifyDb.prepare('SELECT id, status, length(assistant_content) as alen FROM messages WHERE id = ?').get(messageId);
-        _stepLog(`VERIFY our msg in sql.js mem: ${!!findMsg} | ${JSON.stringify(findMsg)}`);
-
-        // Find our conversation
-        const findConv = _verifyDb.prepare('SELECT id FROM conversations WHERE id = ?').get(
-          (draft as any).conversation_id || ''
-        );
-        _stepLog(`VERIFY our conv in sql.js mem: ${!!findConv}`);
-      } catch(vErr) {
-        _stepLog(`VERIFY error: ${vErr.message}`);
-      }
-
-      const fs_mod = require('fs');
-      const _dbPath = path.join(process.env.FILES_DIR || process.cwd(), 'data', 'workbranch.db');
-      const beforeSize = fs_mod.existsSync(_dbPath) ? fs_mod.statSync(_dbPath).size : 0;
-      db.save();
-      const afterSize = fs_mod.existsSync(_dbPath) ? fs_mod.statSync(_dbPath).size : 0;
-      _stepLog(`db.save() DONE size: ${beforeSize} -> ${afterSize}`);
-    } catch(saveErr) {
-      _stepLog(`db.save() ERROR: ${saveErr.message}`);
-    }
+    // 写透代理已自动处理持久化（每次写操作后 50ms 内自动 save + fsync）
+    // 无需手动调用 db.save()
+    _stepLog('STEP3: auto-save handled by write-through proxy');
 
     this.drafts.delete(messageId);
     _stepLog(`SUCCESS for mid=${messageId}`);

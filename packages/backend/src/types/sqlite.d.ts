@@ -29,3 +29,44 @@ declare module 'sqlite' {
 
   export function open(options: OpenOptions): Promise<Database>;
 }
+
+declare module 'sql.js' {
+  interface SqlJsStatic {
+    Database: new (data?: ArrayLike<number>) => Database;
+  }
+
+  interface Database {
+    run(sql: string, params?: unknown[]): SqlJsRunResult;
+    exec(sql: string): SqlJsExecResult[];
+    prepare(sql: string): SqlJsStatement;
+    close(): void;
+    export(): Uint8Array;
+    getRowsModified(): number;
+  }
+
+  interface SqlJsStatement {
+    bind(params?: unknown[]): boolean;
+    step(): boolean;
+    getAsObject(): Record<string, unknown>;
+    free(): void;
+  }
+
+  interface SqlJsExecResult {
+    columns: string[];
+    values: unknown[][];
+  }
+
+  interface SqlJsRunResult {
+    changes: number;
+    lastInsertRowid: number | BigInt;
+  }
+
+  interface SqlJsConfig {
+    locateFile?: (file: string, path: string) => string;
+  }
+
+  function initSqlJs(config?: SqlJsConfig): Promise<SqlJsStatic>;
+
+  export default initSqlJs;
+  export { Database };
+}

@@ -1,5 +1,4 @@
-import initSqlJs from 'sql.js';
-import type { Database as SqlJsDatabase, SqlJsStatic } from 'sql.js';
+import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from '../logging';
@@ -53,8 +52,155 @@ interface StatementResult {
 }
 
 /**
- * L2 防御：sql.js 无法绑定 JavaScript undefined，统一转 null 并告警。
- * 当检测到 undefined 参数时输出 warning 日志，帮助开发者定位上游 bug。
+ * 写透代理：包装 sql.js，实现类似 better-sqlite3 的即时持久化能力。
+ *
+ * 核心机制：
+ * - 每次写操作（run/exec）后自动触发 save() + fsync()
+ * - 50ms 防抖：短时间内多次写入只保存一次
+ * - 强制同步点：事务提交、close() 时立即 fsync
+ */
+class PersistentDatabase {
+  private _db: SqlJsDatabase;
+  private dbPath: string;
+  private saveTimer: NodeJS.Timeout | null = null;
+  private dirty = false;
+  private fd: number | null = null;
+  private closed = false;
+
+  constructor(db: SqlJsDatabase, dbPath: string) {
+    this._db = db;
+    this.dbPath = dbPath;
+    // 保持文件描述符打开用于 fsync
+    try {
+      if (fs.existsSync(dbPath)) {
+        this.fd = fs.openSync(dbPath, 'r+');
+      } else {
+        this.fd = fs.openSync(dbPath, 'w');
+      }
+    } catch {
+      logger.warn(`Cannot open fd for fsync: ${dbPath}`);
+    }
+  }
+
+  exec(sql: string): void {
+    this.ensureOpen();
+    this._db.exec(sql);
+    if (this.isWriteOperation(sql)) {
+      this.scheduleSave();
+    }
+  }
+
+  run(sql: string, params?: unknown[]): StatementResult {
+    this.ensureOpen();
+    const result = this._db.run(sql, params);
+    this.scheduleSave();
+    return { changes: result.changes, lastInsertRowid: Number(result.lastInsertRowid) };
+  }
+
+  pragma(cmd: string): unknown[] {
+    this.ensureOpen();
+    const results = this._db.exec(`PRAGMA ${cmd}`);
+    if (results.length === 0) return [];
+    return results[0].values || [];
+  }
+
+  prepare(sql: string): PreparedStatementProxy {
+    this.ensureOpen();
+    return new PreparedStatementProxy(this, sql);
+  }
+
+  transaction<T>(fn: () => T): T {
+    this.ensureOpen();
+    this.exec('BEGIN');
+    try {
+      const result = fn();
+      this.exec('COMMIT');
+      this.forceSave(); // 事务提交是强同步点
+      return result;
+    } catch (e) {
+      this.exec('ROLLBACK');
+      throw e;
+    }
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    this.forceSave(); // 关闭前强制保存
+    if (this.fd !== null) {
+      try { fs.closeSync(this.fd); } catch { /* ignore */ }
+      this.fd = null;
+    }
+    this._db.close();
+  }
+
+  scheduleSave(): void {
+    this.dirty = true;
+    if (this.saveTimer) return;
+    this.saveTimer = setTimeout(() => { this.forceSave(); }, 50);
+  }
+
+  forceSave(): void {
+    if (!this.dirty || this.closed) return;
+    try {
+      const data = this._db.export();
+      fs.writeFileSync(this.dbPath, Buffer.from(data));
+      if (this.fd !== null) fs.fsyncSync(this.fd);
+    } catch (e) {
+      logger.error(`PersistentDatabase forceSave failed: ${e}`);
+    }
+    this.dirty = false;
+    if (this.saveTimer) { clearTimeout(this.saveTimer); this.saveTimer = null; }
+  }
+
+  private ensureOpen(): void {
+    if (this.closed) throw new Error('Database is closed');
+  }
+
+  private isWriteOperation(sql: string): boolean {
+    const trimmed = sql.trim().toUpperCase();
+    return /^(INSERT|UPDATE|DELETE|CREATE|DROP|ALTER|REPLACE|TRUNCATE)\b/.test(trimmed);
+  }
+
+  /** @internal 供 PreparedStatementProxy 使用 */
+  get rawDb(): SqlJsDatabase { return this._db; }
+}
+
+class PreparedStatementProxy {
+  private owner: PersistentDatabase;
+  private sql: string;
+
+  constructor(owner: PersistentDatabase, sql: string) {
+    this.owner = owner;
+    this.sql = sql;
+  }
+
+  run(...params: unknown[]): StatementResult {
+    return this.owner.run(this.sql, params);
+  }
+
+  get<T = unknown>(...params: unknown[]): T | undefined {
+    const stmt = this.owner.rawDb.prepare(this.sql);
+    if (params?.length) stmt.bind(params);
+    if (stmt.step()) { const row = stmt.getAsObject() as T; stmt.free(); return row; }
+    stmt.free();
+    return undefined;
+  }
+
+  all<T = unknown>(...params: unknown[]): T[] {
+    const results: T[] = [];
+    const stmt = this.owner.rawDb.prepare(this.sql);
+    if (params?.length) stmt.bind(params);
+    while (stmt.step()) results.push(stmt.getAsObject() as T);
+    stmt.free();
+    return results;
+  }
+
+  get source(): string { return this.sql; }
+}
+
+/**
+ * L2 防御：统一转 undefined 为 null 并告警。
  * DAO 层（L1）应优先使用 ?? 运算符在源头消除 undefined。
  */
 function sanitizeParams(params: unknown[], sql: string): unknown[] {
@@ -75,54 +221,34 @@ function sanitizeParams(params: unknown[], sql: string): unknown[] {
 }
 
 class PreparedStatement {
-  private db: SqlJsDatabase;
-  private sql: string;
+  private stmt: PreparedStatementProxy;
 
-  constructor(db: SqlJsDatabase, sql: string) {
-    this.db = db;
-    this.sql = sql;
+  constructor(stmt: PreparedStatementProxy) {
+    this.stmt = stmt;
   }
 
   run(...params: unknown[]): StatementResult {
-    const safeParams = sanitizeParams(params, this.sql);
-    this.db.run(this.sql, safeParams as never[]);
-    return {
-      changes: this.db.getRowsModified(),
-      lastInsertRowid: Number(this.db.exec("SELECT last_insert_rowid() as id")[0]?.values[0]?.[0] || 0)
-    };
+    const safeParams = sanitizeParams(params, this.stmt.source);
+    return this.stmt.run(...safeParams);
   }
 
   get<T = unknown>(...params: unknown[]): T | undefined {
-    const safeParams = sanitizeParams(params, this.sql);
-    const stmt = this.db.prepare(this.sql, safeParams as never[]);
-    if (stmt.step()) {
-      const row = stmt.getAsObject() as T;
-      stmt.free();
-      return row;
-    }
-    stmt.free();
-    return undefined;
+    const safeParams = sanitizeParams(params, this.stmt.source);
+    return this.stmt.get<T>(...(safeParams as never[]));
   }
 
   all<T = unknown>(...params: unknown[]): T[] {
-    const results: T[] = [];
-    const safeParams = sanitizeParams(params, this.sql);
-    const stmt = this.db.prepare(this.sql, safeParams as never[]);
-    while (stmt.step()) {
-      results.push(stmt.getAsObject() as T);
-    }
-    stmt.free();
-    return results;
+    const safeParams = sanitizeParams(params, this.stmt.source);
+    return this.stmt.all<T>(...(safeParams as never[]));
   }
 }
 
 export class SQLiteDatabase {
-  private db: SqlJsDatabase | null = null;
-  private SQL: SqlJsStatic | null = null;
+  private db: PersistentDatabase | null = null;
   private dbPath: string;
   private static instance: SQLiteDatabase | null = null;
   private initialized = false;
-  private autoSaveTimer: NodeJS.Timeout | null = null;
+  private initPromise: Promise<void> | null = null;
 
   private constructor(dbPath: string) {
     this.dbPath = dbPath;
@@ -146,50 +272,41 @@ export class SQLiteDatabase {
 
   private async init(): Promise<void> {
     if (this.initialized) return;
+    if (this.initPromise) return this.initPromise;
 
+    this.initPromise = this.doInit();
+    await this.initPromise;
+  }
+
+  private async doInit(): Promise<void> {
     const dir = path.dirname(this.dbPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
 
-    const cwd = process.cwd();
-    const isAndroid = cwd === '/' || cwd === '/system';
-    const filesDir = process.env.FILES_DIR || '/data/data/com.workbranch.app/files';
+    // 初始化 sql.js WASM 引擎
+    const SQL = await initSqlJs();
 
-    this.SQL = await initSqlJs({
-      locateFile: (file: string) => {
-        if (isAndroid) {
-          const androidPath = path.join(filesDir, 'www', 'nodejs-project', file);
-          if (fs.existsSync(androidPath)) {
-            return androidPath;
-          }
-        }
-        const devPath = path.join(__dirname, '..', '..', '..', 'node_modules', 'sql.js', 'dist', file);
-        if (fs.existsSync(devPath)) {
-          return devPath;
-        }
-        const bundlePath = path.join(__dirname, file);
-        if (fs.existsSync(bundlePath)) {
-          return bundlePath;
-        }
-        const androidPath = path.join(__dirname, '..', '..', 'sql-wasm.wasm');
-        if (fs.existsSync(androidPath)) {
-          return androidPath;
-        }
-        return file;
-      }
-    });
-
+    // 尝试从文件加载已有数据库
+    let db: SqlJsDatabase;
     if (fs.existsSync(this.dbPath)) {
-      const buffer = fs.readFileSync(this.dbPath);
-      this.db = new this.SQL.Database(buffer);
+      const fileBuffer = fs.readFileSync(this.dbPath);
+      db = new SQL.Database(fileBuffer);
     } else {
-      this.db = new this.SQL.Database();
+      db = new SQL.Database();
     }
+
+    // 包装为写透代理
+    this.db = new PersistentDatabase(db, this.dbPath);
+
+    // 配置持久化（sql.js 内存中模拟 WAL）
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('synchronous = FULL');
 
     this.initialize();
     this.initialized = true;
-    this.startAutoSave();
+
+    logger.info(`Database opened at ${this.dbPath} (sql.js + write-through proxy, sync=FULL)`);
   }
 
   private initInBackground(): void {
@@ -261,130 +378,51 @@ export class SQLiteDatabase {
       CREATE INDEX IF NOT EXISTS idx_conversations_parent_conversation_id ON conversations(parent_conversation_id);
     `;
 
-    this.db.run(createTables);
-    this.save();
+    this.db.exec(createTables);
     logger.info('Database tables created');
 
     this.migrateAddWorkspaceId();
 
-    this.db.run('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)', [1, 'Default User']);
-    this.save();
+    this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)').run(1, 'Default User');
   }
 
   private migrateAddWorkspaceId(): void {
     if (!this.db) return;
 
-    const result = this.db.exec("PRAGMA table_info(sessions)");
-    const columns = result[0]?.values.map((v: unknown[]) => v[1] as string) || [];
-    const hasWorkspaceId = columns.includes('workspace_id');
-
-    if (!hasWorkspaceId) {
-      this.db.run('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
-      this.db.run('DELETE FROM messages');
-      this.db.run('DELETE FROM conversations');
-      this.db.run('DELETE FROM sessions');
-      this.save();
-      logger.info('Migrated sessions table: added workspace_id column, cleared existing data');
-    }
-  }
-
-  private startAutoSave(): void {
-    if (this.autoSaveTimer) return;
-    this.autoSaveTimer = setInterval(() => {
-      if (this.db && this.initialized) {
-        this.save();
-      }
-    }, 5000);
-  }
-
-  private stopAutoSave(): void {
-    if (this.autoSaveTimer) {
-      clearInterval(this.autoSaveTimer);
-      this.autoSaveTimer = null;
-    }
-  }
-
-  /** Flush in-memory sql.js DB to disk. Call after writes outside transaction(). */
-  save(): void {
-    const fs_mod = require('fs');
-    console.log(`[DB-SAVE] save() called dbPath=${this.dbPath} hasDb=${!!this.db}`);
-    if (!this.db) { console.log('[DB-SAVE] ABORT: no db'); return; }
     try {
-      // CRITICAL: Force sql.js to consolidate all in-memory changes before export
-      try { this.db.run('VACUUM'); } catch(vacErr) {
-        console.log(`[DB-SAVE] VACUUM skipped: ${vacErr.message}`);
-      }
+      const columns = this.db.pragma('table_info(sessions)');
+      const hasWorkspaceId = columns.some((col: any) => col.name === 'workspace_id');
 
-      const data = this.db.export();
-      const buffer = Buffer.from(data);
-      const beforeSize = fs_mod.existsSync(this.dbPath) ? fs_mod.statSync(this.dbPath).size : 0;
-      fs_mod.writeFileSync(this.dbPath, buffer);
-      // Force flush to physical storage to survive process kill on Android
-      try {
-        const fd = fs_mod.openSync(this.dbPath, 'r+');
-        fs_mod.fsyncSync(fd);
-        fs_mod.closeSync(fd);
-      } catch (syncErr) {
-        console.log(`[DB-SAVE] fsync skipped: ${syncErr.message}`);
+      if (!hasWorkspaceId) {
+        this.db.exec('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
+        this.db.exec('DELETE FROM messages');
+        this.db.exec('DELETE FROM conversations');
+        this.db.exec('DELETE FROM sessions');
+        logger.info('Migrated sessions table: added workspace_id column, cleared existing data');
       }
-      const afterSize = fs_mod.statSync(this.dbPath).size;
-      console.log(`[DB-SAVE] WRITTEN ${buffer.length} bytes to ${this.dbPath} size: ${beforeSize} -> ${afterSize}`);
-
-      // Verify: read back and check conversations count
-      try {
-        const raw = fs_mod.readFileSync(this.dbPath);
-        console.log(`[DB-SAVE] VERIFY: file read back ${raw.length} bytes, matches buffer: ${raw.length === buffer.length}`);
-        // Try to detect if it's a valid SQLite header
-        const header = raw.slice(0, 16).toString('hex');
-        console.log(`[DB-SAVE] VERIFY: file header=${header}`);
-
-        // Also log sql.js in-memory state for comparison
-        try {
-          const convC = this.db.prepare('SELECT COUNT(*) as c FROM conversations').get() as any;
-          const msgC = this.db.prepare('SELECT COUNT(*) as c FROM messages').get() as any;
-          console.log(`[DB-SAVE] VERIFY: mem-state convs=${convC?.c} msgs=${msgC?.c}`);
-        } catch(e2) { /* ignore */ }
-      } catch(vErr) {
-        console.error(`[DB-SAVE] VERIFY error: ${vErr.message}`);
-      }
-    } catch(e) { console.error(`[DB-SAVE] ERROR: ${e.message}`); }
+    } catch (e) {
+      // 列已存在时 sql.js 会抛错，忽略即可（幂等迁移）
+      logger.warn(`migrateAddWorkspaceId skipped: ${e instanceof Error ? e.message : e}`);
+    }
   }
 
   prepare(sql: string): PreparedStatement {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
-    return new PreparedStatement(this.db, sql);
+    if (!this.db) throw new Error('Database not initialized');
+    return new PreparedStatement(this.db.prepare(sql));
   }
 
   transaction<T>(fn: () => T): T {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
-    this.db.run('BEGIN TRANSACTION');
-    try {
-      const result = fn();
-      this.db.run('COMMIT');
-      this.save();
-      return result;
-    } catch (err) {
-      this.db.run('ROLLBACK');
-      throw err;
-    }
+    if (!this.db) throw new Error('Database not initialized');
+    return this.db.transaction(fn);
   }
 
   exec(sql: string): void {
-    if (!this.db) {
-      throw new Error('Database not initialized');
-    }
-    this.db.run(sql);
-    this.save();
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec(sql);
   }
 
   close(): void {
-    this.stopAutoSave();
     if (this.db) {
-      this.save();
       this.db.close();
       this.db = null;
     }

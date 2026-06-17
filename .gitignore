@@ -51,6 +51,9 @@ dev-tools/
 # CMake/Native build artifacts
 packages/backend/build-android-*/
 packages/backend/build-vscode-*/
+packages/backend/_build_temp/
+packages/backend/native/
+*.node
 
 # npm lock files (project uses pnpm)
 packages/backend/package-lock.json

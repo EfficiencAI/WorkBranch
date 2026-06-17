@@ -9,6 +9,42 @@ const androidAssetsDir = path.join(
   backendDir, '..', '..', 'platforms', 'android', 'android', 'app', 'src', 'main', 'assets', 'www', 'nodejs-project'
 );
 
+/**
+ * Copy a node_modules package (selected files only) to Android assets.
+ */
+function copyNativeModule(pkgName, files) {
+  const srcPkg = path.join(backendDir, '..', '..', 'node_modules', pkgName);
+  const destPkg = path.join(androidAssetsDir, pkgName);
+  if (!fs.existsSync(srcPkg)) {
+    console.warn(`WARNING: ${pkgName} not found at ${srcPkg}`);
+    return;
+  }
+  fs.mkdirSync(destPkg, { recursive: true });
+  for (const f of files) {
+    const src = path.join(srcPkg, f);
+    const dest = path.join(destPkg, f);
+    if (fs.statSync(src).isDirectory()) {
+      copyDir(src, dest);
+    } else {
+      fs.copyFileSync(src, dest);
+    }
+  }
+  console.log(`  Copied ${pkgName} (${files.join(', ')})`);
+}
+
+function copyDir(src, dest) {
+  fs.mkdirSync(dest, { recursive: true });
+  for (const entry of fs.readdirSync(src)) {
+    const srcPath = path.join(src, entry);
+    const destPath = path.join(dest, entry);
+    if (fs.statSync(srcPath).isDirectory()) {
+      copyDir(srcPath, destPath);
+    } else {
+      fs.copyFileSync(srcPath, destPath);
+    }
+  }
+}
+
 async function build() {
   console.log('Building backend with esbuild...');
 
@@ -26,7 +62,7 @@ async function build() {
     format: 'cjs',
     sourcemap: true,
     external: [
-      // sql.js 已移除 external，由 esbuild 内联打包以支持 Android 嵌入式环境
+      'sql.js',
     ],
     define: {
       'process.env.NODE_ENV': '"production"',
@@ -55,16 +91,6 @@ async function build() {
 
   console.log('Build complete!');
 
-  console.log('Copying sql.js WASM file...');
-  const sqlJsWasmSrc = path.join(backendDir, '..', '..', 'node_modules', 'sql.js', 'dist', 'sql-wasm.wasm');
-  const sqlJsWasmDest = path.join(distDir, 'sql-wasm.wasm');
-  if (fs.existsSync(sqlJsWasmSrc)) {
-    fs.copyFileSync(sqlJsWasmSrc, sqlJsWasmDest);
-    console.log('Copied sql-wasm.wasm to dist');
-  } else {
-    console.warn('Warning: sql-wasm.wasm not found');
-  }
-
   console.log('Copying to Android assets...');
   if (fs.existsSync(androidAssetsDir)) {
     const destDistDir = path.join(androidAssetsDir, 'dist');
@@ -77,11 +103,13 @@ async function build() {
       path.join(distDir, 'server.bundle.js'),
       path.join(destDistDir, 'server.bundle.js')
     );
-    
-    if (fs.existsSync(sqlJsWasmDest)) {
-      fs.copyFileSync(sqlJsWasmDest, path.join(androidAssetsDir, 'sql-wasm.wasm'));
-    }
-    
+
+    // Copy sql.js runtime files (JS + WASM)
+    copyNativeModule('sql.js', [
+      'dist', 'package.json',
+    ]);
+    console.log('Copied sql.js to Android assets');
+
     console.log('Copied to Android assets');
   }
 
