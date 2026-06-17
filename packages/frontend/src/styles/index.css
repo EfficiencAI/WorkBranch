@@ -981,7 +981,7 @@ button {
 
 .diagram-shell__settings {
   width: 100%;
-  max-height: min(62vh, 720px);
+  height: 100%;
   overflow: auto;
   padding-right: 4px;
 }
