@@ -3,6 +3,7 @@ import { sessionService } from '../service/session-service';
 import { messageQueue } from '../service/session-service/mq';
 import { messageToDict, SegmentType } from '../service/session-service/canonical';
 import { success } from './result';
+import { logger } from '../core/logging';
 
 const STREAM_MAX_TIMEOUT_TICKS = 300;
 
@@ -128,12 +129,13 @@ export class ConversationController {
 
     // SSE 连接断开时联动取消对话，防止僵尸 running 状态
     const onConnectionClosed = async () => {
+      logger.info({ conversationId }, 'SSE connection closed, initiating cancel');
       clearInterval(checkInterval);
       unsubscribe();
       try {
         await sessionService.cancelConversation(conversationId);
       } catch (cancelErr) {
-        console.error('[ConversationController] Cancel on disconnect failed:', cancelErr);
+        logger.error({ err: cancelErr, conversationId }, 'Cancel on disconnect failed');
       }
     };
     reply.raw.on('close', onConnectionClosed);

@@ -501,7 +501,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
                       const updatedMessages = [...currentMessages]
                       updatedMessages[updatedMessages.length - 1] = {
                         ...lastMessage,
-                        status: 'error'
+                        status: 'error',
+                        assistantContent: block.content || lastMessage.assistantContent,
                       }
                       const updatedNodes = state.conversationNodes.map(node =>
                         node.conversationId === conversationId

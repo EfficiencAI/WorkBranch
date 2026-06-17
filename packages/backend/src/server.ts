@@ -54,7 +54,10 @@ start();
 async function gracefulShutdown(signal: string): Promise<void> {
   logger.info(`Received ${signal}, starting graceful shutdown...`);
   try {
-    await sessionService.recoverStaleConversations();
+    const recoveredCount = await sessionService.recoverStaleConversations();
+    if (recoveredCount > 0) {
+      logger.info(`Graceful shutdown: recovered ${recoveredCount} stale conversations before exit`);
+    }
     const db = await SQLiteDatabase.getInstance();
     db.close();
     logger.info('Graceful shutdown complete, exiting process');

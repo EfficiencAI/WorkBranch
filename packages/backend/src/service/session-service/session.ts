@@ -2,6 +2,7 @@ import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
 import { agentService } from '../agent-service/agent';
 import { workspaceService } from '../agent-service/service/workspace-service';
+import { logger } from '../../core/logging';
 
 export enum ConversationState {
   PENDING = 'pending',
@@ -173,11 +174,11 @@ export class SessionService {
         message
       ).catch(async (err) => {
         const errorMsg = String(err);
-        console.error('[SessionService] Agent run failed:', errorMsg);
+        logger.error({ err: errorMsg, conversationId }, 'Agent run failed');
         try {
           await this.failConversation(conversationId, errorMsg);
         } catch (cleanupErr) {
-          console.error('[SessionService] Failed to mark conversation as failed:', cleanupErr);
+          logger.error({ err: cleanupErr, conversationId }, 'Failed to mark conversation as failed');
         }
       });
     });
@@ -212,10 +213,14 @@ export class SessionService {
   }
 
   async cancelConversation(conversationId: string): Promise<boolean> {
+    logger.info({ conversationId }, 'Cancelling conversation');
     const convInfo = this.conversations.get(conversationId);
     if (!convInfo) {
       const persisted = conversationDAO.getConversationById(conversationId);
-      if (!persisted) return false;
+      if (!persisted) {
+        logger.info({ conversationId }, 'Conversation not found in memory or DB, skip cancel');
+        return false;
+      }
     }
 
     if (convInfo) {
@@ -224,6 +229,7 @@ export class SessionService {
         state: ConversationState.CANCELLED,
         ended_at: new Date().toISOString(),
       });
+      logger.info({ conversationId, state: ConversationState.CANCELLED }, 'Conversation state updated');
     }
 
     conversationBuffer.clear(conversationId);
@@ -397,6 +403,7 @@ export class SessionService {
     let recovered = 0;
 
     for (const conv of staleConvs) {
+      logger.info({ conversationId: conv.id, sessionId: conv.session_id }, 'Recovering stale running conversation');
       conversationDAO.updateConversation(conv.id, {
         state: ConversationState.FAILED,
         error: 'Recovered from stale state on startup',
@@ -406,12 +413,12 @@ export class SessionService {
     }
 
     if (recovered > 0) {
-      console.log(`[SessionService] Recovered ${recovered} stale running conversations`);
+      logger.info({ recovered }, 'Recovered stale running conversations');
     }
 
     const fixedMessages = conversationDAO.updateMessagesStatusByStatus('streaming', 'failed');
     if (fixedMessages > 0) {
-      console.log(`[SessionService] Fixed ${fixedMessages} stale streaming messages to failed`);
+      logger.info({ fixedMessages }, 'Fixed stale streaming messages to failed');
     }
 
     return recovered;
