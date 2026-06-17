@@ -126,18 +126,41 @@ export class ConversationController {
       user_content: message,
     })}\n\n`);
 
-    const checkInterval = setInterval(() => {
-      if (doneReceived) {
+    // SSE 连接断开时联动取消对话，防止僵尸 running 状态
+    const onConnectionClosed = async () => {
+      clearInterval(checkInterval);
+      unsubscribe();
+      try {
+        await sessionService.cancelConversation(conversationId);
+      } catch (cancelErr) {
+        console.error('[ConversationController] Cancel on disconnect failed:', cancelErr);
+      }
+    };
+    reply.raw.on('close', onConnectionClosed);
+
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (!cleanedUp) {
+        cleanedUp = true;
         clearInterval(checkInterval);
         unsubscribe();
+        reply.raw.removeListener('close', onConnectionClosed);
+      }
+    };
+
+    const checkInterval = setInterval(() => {
+      if (doneReceived) {
+        cleanup();
         reply.raw.end();
         return;
       }
 
       timeoutCounter++;
       if (timeoutCounter >= STREAM_MAX_TIMEOUT_TICKS) {
-        clearInterval(checkInterval);
-        unsubscribe();
+        cleanup();
+        sessionService.cancelConversation(conversationId).catch((cancelErr) => {
+          console.error('[ConversationController] Cancel on timeout failed:', cancelErr);
+        });
         reply.raw.write(`data: ${JSON.stringify({ type: 'error', message_id: messageId, content: 'Timeout' })}\n\n`);
         reply.raw.end();
       } else {

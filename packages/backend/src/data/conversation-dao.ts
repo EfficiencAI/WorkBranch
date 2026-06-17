@@ -140,7 +140,7 @@ export class ConversationDAO {
 
   listConversationsBySession(sessionId: number): Conversation[] {
     const stmt = db.prepare(`
-      SELECT id, session_id, workspace_id, parent_conversation_id, title, state, 
+      SELECT id, session_id, workspace_id, parent_conversation_id, title, state,
              created_at, updated_at, ended_at, message_count, error, position_x, position_y
       FROM conversations
       WHERE session_id = ?
@@ -148,6 +148,23 @@ export class ConversationDAO {
     `);
     const rows = stmt.all(sessionId) as ConversationRow[];
     return rows.map((row) => this.rowToConversation(row));
+  }
+
+  findConversationsByState(state: string): Conversation[] {
+    const stmt = db.prepare(`
+      SELECT id, session_id, workspace_id, parent_conversation_id, title, state,
+             created_at, updated_at, ended_at, message_count, error, position_x, position_y
+      FROM conversations
+      WHERE state = ?
+    `);
+    const rows = stmt.all(state) as ConversationRow[];
+    return rows.map((row) => this.rowToConversation(row));
+  }
+
+  updateMessagesStatusByStatus(oldStatus: string, newStatus: string): number {
+    const stmt = db.prepare('UPDATE messages SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE status = ?');
+    const result = stmt.run(newStatus, oldStatus);
+    return result.changes;
   }
 
   updateConversationPositions(sessionId: number, positions: Array<{ conversation_id: string; x: number; y: number }>): void {

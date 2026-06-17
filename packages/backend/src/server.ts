@@ -1,6 +1,7 @@
 import { buildApp } from './app';
 import { logger } from './core/logging';
 import { SQLiteDatabase } from './core/database/sqlite';
+import { sessionService } from './service/session-service';
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -49,3 +50,19 @@ async function start() {
 
 console.log('[DEBUG-SERVER] about to call start()');
 start();
+
+async function gracefulShutdown(signal: string): Promise<void> {
+  logger.info(`Received ${signal}, starting graceful shutdown...`);
+  try {
+    await sessionService.recoverStaleConversations();
+    const db = await SQLiteDatabase.getInstance();
+    db.close();
+    logger.info('Graceful shutdown complete, exiting process');
+  } catch (e) {
+    logger.error(`Error during graceful shutdown: ${e}`);
+  }
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
