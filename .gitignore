@@ -8,6 +8,8 @@ setting.json
 .playwright-cli/
 *.yaml
 
+!pnpm-workspace.yaml
+
 __pycache__/
 .agent_states/
 *.py[cod]
