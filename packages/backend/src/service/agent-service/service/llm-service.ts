@@ -38,7 +38,7 @@ class LLMServiceImpl {
     }
 
     return new ChatOpenAI({
-      openAIApiKey: apiKey,
+      apiKey: apiKey,
       configuration: {
         baseURL: baseUrl,
       },

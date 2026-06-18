@@ -78,12 +78,17 @@ public class NodeService extends Service {
         nodeAppRootAbsolutePath = filesDir + "/" + PROJECT_ROOT;
         nodePath = nodeAppRootAbsolutePath + ":" + filesDir + "/" + BUILTIN_MODULES;
 
-        Log.d(TAG, "NodeService: about to copyNodeAssets");
-        copyNodeAssets();
-        Log.d(TAG, "NodeService: copyNodeAssets done, about to startNodeJS");
-
-        startNodeJS();
-        Log.d(TAG, "=== NodeService.onCreate OK ===");
+        Log.d(TAG, "NodeService: about to copyNodeAssets (async)");
+        // 异步执行文件复制，避免阻塞主线程导致 ANR (72MB / 3789 files)
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                copyNodeAssets();
+                Log.d(TAG, "NodeService: copyNodeAssets done (async), about to startNodeJS");
+                startNodeJS();
+            }
+        }).start();
+        Log.d(TAG, "=== NodeService.onCreate OK (async copy started) ===");
     }
 
     private void copyNodeAssets() {
