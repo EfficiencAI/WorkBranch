@@ -46,6 +46,9 @@ dist/
 (android|platforms/android)/**/app/src/main/assets/capacitor.plugins.json
 (android|platforms/android)/**/app/src/main/res/xml/config.xml
 
+# Android web assets (built by esbuild / cap sync)
+(android|platforms/android)/**/app/src/main/assets/www/
+
 # Capacitor plugins (auto-generated, managed by cap sync)
 (android|platforms/android)/capacitor-cordova-android-plugins/
 packages/backend/workspaces
