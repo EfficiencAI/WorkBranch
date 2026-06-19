@@ -26,26 +26,28 @@ tests/
 dist/
 *.tsbuildinfo
 
-platforms/android/android/app/build/
-platforms/android/android/app/libs/cdvnodejsmobile/libnode/
-platforms/android/android/.gradle/
-platforms/android/android/app/src/main/assets/
-platforms/android/android/app/src/main/gen/
-platforms/android/android/app/src/androidTest/
-platforms/android/android/app/src/test/
-platforms/android/android/.idea/
-platforms/android/android/captures/
-platforms/android/android/local.properties
-platforms/android/android/*.iml
-platforms/android/android/app/*.iml
-platforms/android/android/app/src/main/res/
-platforms/android/android/gradle/
-platforms/android/android/gradlew
-platforms/android/android/gradlew.bat
-platforms/android/app/
-platforms/android/capacitor.config.ts
-platforms/android/package.json
-platforms/android/scripts/
+# Android build artifacts (covers both android/ and platforms/android/)
+(android|platforms/android)/app/build/
+(android|platforms/android)/.gradle/
+(android|platforms/android)/local.properties
+(android|platforms/android)/build/
+(android|platforms/android)/.cxx/
+(android|platforms/android)/captures/
+(android|platforms/android)/*.iml
+(android|platforms/android)/app/*.iml
+(android|platforms/android)/.idea/
+
+# Android native libs (large binaries, extracted from npm at build time)
+(android|platforms/android)/**/libs/cdvnodejsmobile/libnode/
+
+# Android generated assets
+(android|platforms/android)/**/app/src/main/assets/public
+(android|platforms/android)/**/app/src/main/assets/capacitor.config.json
+(android|platforms/android)/**/app/src/main/assets/capacitor.plugins.json
+(android|platforms/android)/**/app/src/main/res/xml/config.xml
+
+# Capacitor plugins (auto-generated, managed by cap sync)
+(android|platforms/android)/capacitor-cordova-android-plugins/
 packages/backend/workspaces
 
 dev-tools/
