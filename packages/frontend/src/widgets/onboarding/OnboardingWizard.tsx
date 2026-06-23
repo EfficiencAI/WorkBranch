@@ -36,12 +36,7 @@ export function OnboardingWizard() {
   const { patchSettings, settings } = useSettings()
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
-  const [stepIndex, setStepIndex] = useState(0)
-
-  useEffect(() => {
-    const idx = STEP_LIST.findIndex((s) => s.key === currentStep)
-    if (idx >= 0) setStepIndex(idx)
-  }, [currentStep])
+  const stepIndex = STEP_LIST.findIndex((s) => s.key === currentStep)
 
   useEffect(() => {
     if (visible && settings?.llm) {
@@ -76,7 +71,7 @@ export function OnboardingWizard() {
       await patchSettings({ llm: values })
       message.success('配置已保存')
       completeOnboarding()
-    } catch (err) {
+    } catch {
       message.error('保存失败，请检查输入')
     } finally {
       setSubmitting(false)

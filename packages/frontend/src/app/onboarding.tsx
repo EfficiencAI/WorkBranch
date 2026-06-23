@@ -76,6 +76,7 @@ export function OnboardingProvider({ children }: PropsWithChildren) {
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- OnboardingProvider and useOnboarding intentionally share one module
 export function useOnboarding() {
   const ctx = useContext(OnboardingContext)
   if (!ctx) throw new Error('useOnboarding must be used within OnboardingProvider')
