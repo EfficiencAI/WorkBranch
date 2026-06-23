@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { SessionId } from '../../../entities'
+import type { SessionId, SessionConversationSummary } from '../../../entities'
 import {
   createConversation,
   createSession as createSessionRequest,
@@ -128,8 +128,21 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const detail = await createSessionRequest(title)
       const nextSessions = await fetchSessions()
 
-      set({ sessionList: nextSessions, currentSessionId: detail.id })
-      return await get().loadSessionDetail(detail.id)
+      // 后端创建session接口可能返回id为null/0，
+      // 使用fetchSessions列表中最后一个（最新创建的）session id作为fallback。
+      const createdSession = nextSessions[nextSessions.length - 1]
+      const resolvedId = (detail.id && detail.id !== 0) ? detail.id : (createdSession?.id ?? detail.id)
+
+      if (!detail.id || detail.id === 0) {
+        console.warn('[createSession] API返回无效ID:', detail.id, '使用列表fallback:', resolvedId)
+      }
+
+      set({ sessionList: nextSessions, currentSessionId: resolvedId })
+
+      // 不在此处调用 loadSessionDetail：新创建的 session 还没有对话，
+      // 拿到的 conversations=[] 会导致 enterSessionContext 立即重置为空状态。
+      // 延迟到创建对话后再统一加载完整 detail。
+      return { ...detail, id: resolvedId, conversations: [] }
     } catch (caughtError) {
       set({ sessionError: getErrorMessage(caughtError, '会话创建失败') })
       return null
@@ -172,15 +185,40 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   },
 
   async ensureConversationForCurrentSession(options = {}) {
-    const { currentSessionId } = get()
-    if (!currentSessionId) {
+    const { currentSessionId, currentSessionDetail } = get()
+
+    // 使用严格检查避免数字0被误判为falsy
+    if (currentSessionId === null || currentSessionId === undefined) {
       return null
     }
 
     const created = await createConversation(currentSessionId, options.parentConversationId ?? null)
     const detail = await get().loadSessionDetail(currentSessionId)
-    set({ currentSessionDetail: detail })
 
-    return created.conversationId
+    // loadSessionDetail 内部 fetchSessionConversations 可能 404（后端时序问题），
+    // 此时用已有的 session 信息 + 新创建的对话构造 fallback detail，确保调用链不中断。
+    if (!detail && currentSessionDetail) {
+      const newConversation: SessionConversationSummary = {
+        conversationId: created.conversationId,
+        parentConversationId: created.parentConversationId,
+        title: null,
+        state: 'active',
+        messageCount: 0,
+        position: null,
+      }
+      const fallbackDetail = {
+        ...currentSessionDetail,
+        conversations: [...(currentSessionDetail.conversations ?? []), newConversation],
+      }
+      set({ currentSessionDetail: fallbackDetail })
+      return { conversationId: created.conversationId, detail: fallbackDetail }
+    }
+
+    if (detail) {
+      set({ currentSessionDetail: detail })
+      return { conversationId: created.conversationId, detail }
+    }
+
+    return null
   },
 }))

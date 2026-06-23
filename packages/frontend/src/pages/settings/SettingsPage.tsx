@@ -12,6 +12,7 @@ import {
   Switch,
   Typography,
 } from 'antd'
+import { ReloadOutlined } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -282,7 +283,7 @@ type SettingsPageProps = {
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const { message } = AntdApp.useApp()
-  const { settings, settingsMetadata, loading, error, patchSettings } = useSettings()
+  const { settings, settingsMetadata, loading, error, patchSettings, reloadSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [draftRoot, setDraftRoot] = useState<SettingValue | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -852,45 +853,46 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               onChange={(checked) => void toggleBooleanLeaf(rootKey, path, checked)}
             />
           ) : isEditingLeaf ? (
-            <>
+            <div className="settings-leaf-editor-wrapper">
               {isArrayEditorKind(editing.kind) ? (
                 <>
                   {renderEditor()}
                   <div className="settings-leaf-footer-actions">
-                    <Space>
-                      <Button size="small" disabled={saving} onClick={cancelEditing}>
-                        取消
-                      </Button>
-                      <Button type="primary" size="small" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void saveLeaf()}>
-                        保存
-                      </Button>
-                    </Space>
+                    <Button size="small" disabled={saving} onClick={cancelEditing}>
+                      取消
+                    </Button>
+                    <Button type="primary" size="small" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void saveLeaf()}>
+                      保存
+                    </Button>
                   </div>
                 </>
               ) : (
-                <Space.Compact block className="settings-leaf-inline-editor">
-                  {renderEditor()}
-                  <Button size="small" disabled={saving} onClick={cancelEditing}>
-                    取消
-                  </Button>
-                </Space.Compact>
+                <>
+                  <Space.Compact block className="settings-leaf-inline-editor">
+                    {renderEditor()}
+                  </Space.Compact>
+                  <div className="settings-leaf-footer-actions">
+                    <Button size="small" disabled={saving} onClick={cancelEditing}>
+                      取消
+                    </Button>
+                    <Button type="primary" size="small" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void saveLeaf()}>
+                      保存
+                    </Button>
+                  </div>
+                </>
               )}
-
-              {!isArrayEditorKind(editing.kind) ? (
-                <div className="settings-leaf-footer-actions">
-                  <Button type="primary" size="small" loading={saving} disabled={!hasUnsavedChanges} onClick={() => void saveLeaf()}>
-                    保存
-                  </Button>
-                </div>
-              ) : null}
-            </>
+            </div>
           ) : typeof value === 'string' ? (
-            <Space.Compact block className="settings-leaf-inline-editor">
-              <Input value={value} disabled />
-              <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
-                编辑
-              </Button>
-            </Space.Compact>
+            <>
+              <Space.Compact block className="settings-leaf-inline-editor">
+                <Input value={value} disabled />
+              </Space.Compact>
+              <div className="settings-leaf-footer-actions">
+                <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
+                  编辑
+                </Button>
+              </div>
+            </>
           ) : typeof value === 'number' && isDirectControl ? (
             <>
               {renderNumberEditor(value, metadata ?? undefined, (nextValue) => {
@@ -901,12 +903,16 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               })}
             </>
           ) : typeof value === 'number' ? (
-            <Space.Compact block className="settings-leaf-inline-editor">
-              <InputNumber value={value} disabled style={{ width: '100%' }} />
-              <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
-                编辑
-              </Button>
-            </Space.Compact>
+            <>
+              <Space.Compact block className="settings-leaf-inline-editor">
+                <InputNumber value={value} disabled style={{ width: '100%' }} />
+              </Space.Compact>
+              <div className="settings-leaf-footer-actions">
+                <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
+                  编辑
+                </Button>
+              </div>
+            </>
           ) : Array.isArray(value) ? (
             <>
               <Space direction="vertical" size="small" style={{ width: '100%' }} className="settings-array-readonly">
@@ -920,7 +926,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                 ))}
                 {value.length === 0 ? <Typography.Text type="secondary">当前数组为空</Typography.Text> : null}
               </Space>
-              <div style={{ marginTop: 12 }}>
+              <div className="settings-leaf-footer-actions">
                 <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
                   编辑数组
                 </Button>
@@ -929,7 +935,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           ) : (
             <>
               {renderReadonlyValue(fullPath, value)}
-              <div style={{ marginTop: 12 }}>
+              <div className="settings-leaf-footer-actions">
                 <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
                   编辑
                 </Button>
@@ -955,12 +961,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}
     >
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
-        <div>
-          <Typography.Title level={embedded ? 3 : 2}>设置</Typography.Title>
-          <Typography.Paragraph type="secondary">
-            当前页面根据后端返回的树形设置 JSON 动态生成，支持叶子节点编辑与提交。
-          </Typography.Paragraph>
-        </div>
+        <Flex align="center" gap={12}>
+          <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>设置</Typography.Title>
+          <Button icon={<ReloadOutlined />} onClick={() => void reloadSettings()} loading={loading} title="刷新设置" />
+        </Flex>
         <StatusTag
           label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'}
           tone={loading || saving ? 'processing' : error ? 'error' : 'success'}

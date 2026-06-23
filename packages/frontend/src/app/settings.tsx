@@ -4,6 +4,8 @@ import type { SettingMetadataNode, SettingNode } from '../entities'
 import { get, getErrorMessage, patch } from '../shared/api'
 import { settingsConfig } from '../shared/config/settings'
 
+import { cloneDeepJson } from '../shared/lib'
+
 type SettingsContextValue = {
   settings: SettingNode | null
   settingsMetadata: SettingMetadataNode | null
@@ -46,9 +48,17 @@ export function SettingsProvider({ children }: PropsWithChildren) {
   const patchSettings = useCallback(
     async (updates: Partial<SettingNode>) => {
       await patch<void, Partial<SettingNode>>(settingsConfig.endpoint, updates)
-      await reloadSettings()
+      // 乐观更新：将变更合并到本地状态，避免全量重载导致页面闪烁
+      setSettings((prev) => {
+        if (!prev) return prev
+        const merged = cloneDeepJson(prev)
+        for (const [key, value] of Object.entries(updates)) {
+          ;(merged as Record<string, unknown>)[key] = cloneDeepJson(value)
+        }
+        return merged
+      })
     },
-    [reloadSettings],
+    [],
   )
 
   const value = useMemo<SettingsContextValue>(

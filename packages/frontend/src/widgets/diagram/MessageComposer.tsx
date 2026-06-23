@@ -127,21 +127,25 @@ export function MessageComposer({
         <div className="message-composer__focused-toolbar" ref={toolbarRef}>
           <div className="message-composer__toolbar-left">
             <Space size={8} align="center" wrap={false}>
-              <Button
-                type="text"
-                shape="round"
-                className="message-composer__tool-btn"
-                style={btnStyle}
-                icon={<PlusOutlined />}
-              />
+              {!responsive.isMobile && (
+                <>
+                  <Button
+                    type="text"
+                    shape="round"
+                    className="message-composer__tool-btn"
+                    style={btnStyle}
+                    icon={<PlusOutlined />}
+                  />
 
-              <Button
-                shape="round"
-                className="message-composer__tool-btn"
-                style={btnStyle}
-              >
-                模式
-              </Button>
+                  <Button
+                    shape="round"
+                    className="message-composer__tool-btn"
+                    style={btnStyle}
+                  >
+                    模式
+                  </Button>
+                </>
+              )}
 
               <Button
                 type="text"
@@ -151,7 +155,7 @@ export function MessageComposer({
                 icon={<BulbOutlined />}
                 onClick={() => setThinkMode(!thinkMode)}
               >
-                思考
+                {!responsive.isMobile && '思考'}
               </Button>
 
               <Button
@@ -162,7 +166,7 @@ export function MessageComposer({
                 icon={<GlobalOutlined />}
                 onClick={() => setNetMode(!netMode)}
               >
-                联网
+                {!responsive.isMobile && '联网'}
               </Button>
             </Space>
           </div>

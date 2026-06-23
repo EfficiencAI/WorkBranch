@@ -912,7 +912,7 @@ function FocusView({
           ) : (
             /* 空状态 */
             <div className="focus-view__empty">
-              <EmptyState description="暂无导航路径" />
+              <EmptyState title="暂无导航" description="暂无导航路径" />
             </div>
           )}
         </div>

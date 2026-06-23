@@ -15,6 +15,11 @@ export type SessionState = {
   deletingSessionId: SessionId | null
 }
 
+export type EnsureConversationResult = {
+  conversationId: string
+  detail: SessionDetail
+}
+
 export type SessionActions = {
   loadSessions: (preferredSessionId?: SessionId | null) => Promise<void>
   loadSessionDetail: (sessionId: SessionId) => Promise<SessionDetail | null>
@@ -22,7 +27,7 @@ export type SessionActions = {
 
   createSession: (title?: string) => Promise<SessionDetail | null>
   deleteSession: (sessionId: SessionId) => Promise<SessionDetail | null>
-  ensureConversationForCurrentSession: (options?: EnsureConversationOptions) => Promise<string | null>
+  ensureConversationForCurrentSession: (options?: EnsureConversationOptions) => Promise<EnsureConversationResult | null>
 
   setSessionDetail: (detail: SessionDetail | null) => void
   clearSessionError: () => void

@@ -49,6 +49,9 @@ dist/
 # Android web assets (built by esbuild / cap sync)
 (android|platforms/android)/**/app/src/main/assets/www/
 
+# Android all assets (完整忽略，由cap sync生成)
+(android|platforms/android)/**/app/src/main/assets/
+
 # Capacitor plugins (auto-generated, managed by cap sync)
 (android|platforms/android)/capacitor-cordova-android-plugins/
 packages/backend/workspaces
@@ -69,16 +72,27 @@ packages/backend/package-lock.json
 # 🚫 防止调试文件污染（临时测试文件）
 # ============================================
 
-# 手动测试脚本（test-debug.js, test-exit-button.js等）
+# 手动测试脚本
 test-*.js
+debug-session.spec.ts
 
-# 测试截图（test-mobile-initial.png, test-fail.png等）
+# 测试截图和结果截图
 test-*.png
+debug-*.png
+final-*.png
+e2e-result*.png
+screenshot_*.png
 
 # 调试数据文件（DOM诊断、验证报告等）
 debug-*.json
 verification-*.json
 full-diagnosis.json
+debug-*.txt
+pw-output.txt
+ui_dump.xml
+
+# Playwright 测试结果
+test-results/
 
 # 临时调试输出
 *.tmp.debug.*

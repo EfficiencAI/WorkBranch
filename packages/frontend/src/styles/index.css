@@ -164,8 +164,8 @@ button {
 
 .diagram-shell__nav {
   position: fixed;
-  top: 1%;
-  left: 1%;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  left: 12px;
   z-index: 40;
   display: flex;
   flex-direction: column;
@@ -1158,15 +1158,21 @@ button {
 
 /* ====== Diagram Shell & Settings 样式 ====== */
 
+/* Settings Page - Optimized for mobile */
 .diagram-shell__settings {
   width: 100%;
   height: 100%;
+  display: flex;
+  flex-direction: column;
   overflow: auto;
   padding-right: 4px;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .settings-page--embedded {
   padding-top: 4px;
+  flex: 1;
+  min-height: 0;
 }
 
 .settings-page--embedded .ant-typography {
@@ -1257,7 +1263,7 @@ button {
 }
 
 .settings-tree-leaf {
-  padding: 12px 0;
+  padding: 8px 0;  /* 减少垂直间距：12px → 8px */
   border-top: 1px solid var(--app-border);
 }
 
@@ -1268,20 +1274,20 @@ button {
 
 .settings-tree-leaf__meta {
   flex: 1;
-  min-width: 220px;
+  min-width: 180px;  /* 减少最小宽度：220px → 180px */
 }
 
 .settings-tree-leaf__path.ant-typography {
-  margin: 4px 0 0;
+  margin: 2px 0 0;  /* 减少路径间距：4px → 2px */
   word-break: break-all;
 }
 
 .settings-tree-leaf__value {
-  margin-top: 12px;
+  margin-top: 8px;  /* 减少值区域间距：12px → 8px */
 }
 
 .settings-tree-leaf__hint.ant-typography {
-  margin: 8px 0 0;
+  margin: 6px 0 0;  /* 减少提示间距：8px → 6px */
 }
 
 .settings-leaf-inline-editor {
@@ -1299,8 +1305,20 @@ button {
   flex: 1;
 }
 
+/* 修复：统一编辑/只读状态按钮布局 */
+.settings-leaf-editor-wrapper {
+  width: 100%;
+}
+
 .settings-leaf-footer-actions {
-  margin-top: 12px;
+  margin-top: 8px;  /* 减少间距：12px → 8px */
+  display: flex;
+  justify-content: flex-end;  /* 按钮右对齐 */
+  gap: 8px;  /* 按钮之间间距 */
+}
+
+.settings-leaf-footer-actions .ant-btn {
+  min-width: 64px;  /* 固定最小宽度，避免跳动 */
 }
 
 .settings-array-readonly {
@@ -2144,6 +2162,70 @@ button {
 
   .focus-view__branch-card {
     max-width: none;
+  }
+
+  /* 缺陷2：空状态卡片移动端响应式 */
+  .conversation-canvas__focused-empty-state,
+  .ant-empty {
+    max-width: none !important;
+    width: calc(100% - 32px) !important;
+    padding: 20px 16px !important;
+  }
+
+  /* 缺陷3：底部手势导航 safe-area-inset-bottom */
+  .app-content {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 24px);
+  }
+
+  .app-content--diagram {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 16px);
+  }
+
+  .message-composer {
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  }
+
+  /* 缺陷4：CTA按钮触摸目标≥48dp */
+  .ant-btn-primary,
+  .message-composer__send-btn,
+  .conversation-canvas__exit-focus-button {
+    min-height: 48px !important;
+    min-width: 48px !important;
+    padding-inline: 16px !important;
+  }
+
+  .diagram-shell__nav-trigger,
+  .diagram-shell__exit-focus-trigger {
+    min-width: 48px !important;
+    min-height: 48px !important;
+  }
+
+  /* 设置页面移动端优化 */
+  .settings-tree-leaf {
+    padding: 6px 0;  /* 进一步减少间距 */
+  }
+
+  .settings-tree-leaf__meta {
+    min-width: 0;  /* 允许压缩 */
+  }
+
+  .settings-leaf-footer-actions {
+    margin-top: 6px;
+    gap: 12px;  /* 增加按钮间距便于点击 */
+  }
+
+  .settings-leaf-footer-actions .ant-btn {
+    min-height: 40px;  /* 触摸友好 */
+    min-width: 72px;
+  }
+
+  .settings-leaf-inline-editor .ant-btn {
+    min-height: 36px;
+    min-width: 56px;
+  }
+
+  .settings-card {
+    border-radius: 12px;
   }
 }
 

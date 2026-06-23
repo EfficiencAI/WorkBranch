@@ -61,7 +61,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const lockedSendConversationId = useTreeStore(selectLockedSendConversationId)
   const selectedConversationId = useTreeStore(selectSelectedConversationId)
   const selectSession = useSessionStore((state) => state.selectSession)
-  const loadSessionDetail = useSessionStore((state) => state.loadSessionDetail)
   const createSession = useSessionStore((state) => state.createSession)
   const deleteSession = useSessionStore((state) => state.deleteSession)
   const ensureConversationForCurrentSession = useSessionStore((state) => state.ensureConversationForCurrentSession)
@@ -123,16 +122,18 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const handleCreateConversation = useCallback(
     async (parentConversationId: string | null) => {
       try {
-        const createdConversationId = await ensureConversationForCurrentSession({ parentConversationId })
+        const result = await ensureConversationForCurrentSession({ parentConversationId })
 
-        if (!createdConversationId) {
+        if (!result) {
           return
         }
 
-        if (selectedSessionId) {
-          const detail = await loadSessionDetail(selectedSessionId)
-          await enterSessionContext(detail)
-        }
+        const { conversationId: createdConversationId, detail } = result
+
+        // 与 handleSelectSession 路径一致：先重置 tree UI 再进入上下文。
+        // 直接使用 ensureConversationForCurrentSession 返回的已加载 detail，
+        // 不再从 store 间接读取，避免并发更新导致读到过期值。
+        await runSessionContext(detail)
 
         frontendLogger.info('create_conversation', {
           extra: {
@@ -144,11 +145,10 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         useTreeStore.getState().setFocusedConversationId(null)
         useTreeStore.getState().setLockedSendConversationId(createdConversationId)
       } catch (caughtError) {
-        console.error('[handleCreateConversation] error:', caughtError)
         onRequestError(caughtError)
       }
     },
-    [ensureConversationForCurrentSession, enterSessionContext, loadSessionDetail, onRequestError, selectedSessionId],
+    [ensureConversationForCurrentSession, runSessionContext, onRequestError],
   )
 
   const handleSelectSession = useCallback(
@@ -162,7 +162,12 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const handleCreateSession = useCallback(async () => {
     try {
       const detail = await createSession()
-      await runSessionContext(detail)
+      // 新创建的 session 还没有对话，conversations=[]。
+      // 此时调用 enterSessionContext 会因 !summaries.length 立即 resetConversationState，
+      // 属于无效操作。延迟到创建对话后再统一进入上下文。
+      if (detail && detail.conversations && detail.conversations.length > 0) {
+        await runSessionContext(detail)
+      }
     } catch (caughtError) {
       onRequestError(caughtError)
     }
@@ -259,34 +264,29 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
             return
           }
 
-          targetConversationId = await ensureConversationForCurrentSession()
-          if (!targetConversationId) {
+          const result = await ensureConversationForCurrentSession()
+          if (!result) {
             return
           }
 
+          targetConversationId = result.conversationId
           useTreeStore.getState().setLockedSendConversationId(targetConversationId)
-          if (selectedSessionId) {
-            const detail = await loadSessionDetail(selectedSessionId)
-            await enterSessionContext(detail)
-          }
+          await enterSessionContext(result.detail)
         }
 
         const targetConversation = conversationNodes.find((node) => node.conversationId === targetConversationId)
         const targetMessageCount = targetConversation?.messageCount ?? 0
 
         if (singleMessagePerNode && targetMessageCount >= 1) {
-          const childConversationId = await ensureConversationForCurrentSession({ parentConversationId: targetConversationId })
-          if (!childConversationId) {
+          const childResult = await ensureConversationForCurrentSession({ parentConversationId: targetConversationId })
+          if (!childResult) {
             return
           }
 
-          if (selectedSessionId) {
-            const detail = await loadSessionDetail(selectedSessionId)
-            await enterSessionContext(detail)
-          }
+          await enterSessionContext(childResult.detail)
 
-          useTreeStore.getState().setLockedSendConversationId(childConversationId)
-          targetConversationId = childConversationId
+          useTreeStore.getState().setLockedSendConversationId(childResult.conversationId)
+          targetConversationId = childResult.conversationId
         }
 
         await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
@@ -303,10 +303,8 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     [
       ensureConversationForCurrentSession,
       enterSessionContext,
-      loadSessionDetail,
       onRequestError,
       onSendError,
-      selectedSessionId,
       sendTargetConversationId,
       sessionDetail,
       conversationNodes,
