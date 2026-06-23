@@ -22,7 +22,7 @@ const OnboardingContext = createContext<OnboardingContextValue | null>(null)
 function isLlmConfigured(settings: ReturnType<typeof useSettings>['settings']): boolean {
   if (!settings || typeof settings !== 'object') return false
   const llm = settings.llm
-  if (!llm || typeof llm !== 'object') return false
+  if (!llm || typeof llm !== 'object' || Array.isArray(llm)) return false
   const apiKey = (llm as Record<string, unknown>).api_key
   const baseUrl = (llm as Record<string, unknown>).base_url
   const model = (llm as Record<string, unknown>).model

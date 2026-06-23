@@ -38,22 +38,21 @@ dist/
 (android|platforms/android)/.idea/
 
 # Android native libs (large binaries, extracted from npm at build time)
-(android|platforms/android)/**/libs/cdvnodejsmobile/libnode/
+android/**/libs/cdvnodejsmobile/libnode/
+platforms/android/**/libs/cdvnodejsmobile/libnode/
 
 # Android generated assets
-(android|platforms/android)/**/app/src/main/assets/public
-(android|platforms/android)/**/app/src/main/assets/capacitor.config.json
-(android|platforms/android)/**/app/src/main/assets/capacitor.plugins.json
-(android|platforms/android)/**/app/src/main/res/xml/config.xml
-
-# Android web assets (built by esbuild / cap sync)
-(android|platforms/android)/**/app/src/main/assets/www/
-
-# Android all assets (完整忽略，由cap sync生成)
-(android|platforms/android)/**/app/src/main/assets/
+android/**/app/src/main/assets/
+platforms/android/**/app/src/main/assets/
 
 # Capacitor plugins (auto-generated, managed by cap sync)
-(android|platforms/android)/capacitor-cordova-android-plugins/
+android/capacitor-cordova-android-plugins/
+platforms/android/capacitor-cordova-android-plugins/
+
+# libnode download artifacts (large binary zip + extracted temp)
+android/libnode-*.zip
+android/libnode-temp/
+
 packages/backend/workspaces
 
 dev-tools/

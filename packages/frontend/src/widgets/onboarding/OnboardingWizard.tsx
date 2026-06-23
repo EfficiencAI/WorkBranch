@@ -39,11 +39,12 @@ export function OnboardingWizard() {
   const stepIndex = STEP_LIST.findIndex((s) => s.key === currentStep)
 
   useEffect(() => {
-    if (visible && settings?.llm) {
+    if (visible && settings?.llm && typeof settings.llm === 'object' && !Array.isArray(settings.llm)) {
+      const llm = settings.llm as Record<string, unknown>
       form.setFieldsValue({
-        api_key: settings.llm.api_key ?? '',
-        base_url: settings.llm.base_url ?? '',
-        model: settings.llm.model ?? '',
+        api_key: (llm.api_key as string) ?? '',
+        base_url: (llm.base_url as string) ?? '',
+        model: (llm.model as string) ?? '',
       })
     }
   }, [visible, settings, form])
@@ -55,7 +56,6 @@ export function OnboardingWizard() {
       await form.validateFields([current.key])
       if (stepIndex < STEP_LIST.length - 1) {
         const next = STEP_LIST[stepIndex + 1]
-        setStepIndex(stepIndex + 1)
         goToStep(next.key)
       }
     } catch {
@@ -96,11 +96,7 @@ export function OnboardingWizard() {
         <Text type="secondary">请先完成基础配置以开始使用</Text>
       </div>
 
-      <Steps current={stepIndex} size="small" style={{ marginBottom: 24 }}>
-        {STEP_LIST.map((s) => (
-          <Steps.Step key={s.key} title={s.title} icon={s.icon} />
-        ))}
-      </Steps>
+      <Steps items={STEP_LIST.map((s) => ({ title: s.title, icon: s.icon }))} current={stepIndex} size="small" style={{ marginBottom: 24 }} />
 
       <Form form={form} layout="vertical" requiredMark="optional">
         <Form.Item
@@ -128,7 +124,6 @@ export function OnboardingWizard() {
           {stepIndex > 0 && (
             <Button style={{ marginRight: 8 }} onClick={() => {
               const prev = STEP_LIST[stepIndex - 1]
-              setStepIndex(stepIndex - 1)
               goToStep(prev.key)
             }}>
               上一步

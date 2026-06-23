@@ -260,7 +260,12 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     async (message: string, enableContext: boolean) => {
       try {
         const llm = settings?.llm
-        if (!llm || typeof llm !== 'object' || !llm.api_key || !llm.base_url || !llm.model) {
+        if (!llm || typeof llm !== 'object' || Array.isArray(llm)) {
+          showOnboarding()
+          return
+        }
+        const llmConfig = llm as Record<string, unknown>
+        if (!llmConfig.api_key || !llmConfig.base_url || !llmConfig.model) {
           showOnboarding()
           return
         }
