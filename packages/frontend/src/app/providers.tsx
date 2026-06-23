@@ -2,7 +2,9 @@ import { App as AntdApp, ConfigProvider, theme as antdTheme } from 'antd'
 import type { PropsWithChildren } from 'react'
 import type { ThemeConfig } from 'antd'
 import { SettingsProvider } from './settings'
+import { OnboardingProvider } from './onboarding'
 import { ThemeProvider, useTheme } from './theme'
+import { OnboardingWidget } from '../widgets/onboarding'
 
 const sharedTokens: ThemeConfig['token'] = {
   colorPrimary: '#4f46e5',
@@ -45,9 +47,14 @@ function ThemeConfigProvider({ children }: PropsWithChildren) {
 export function AppProviders({ children }: PropsWithChildren) {
   return (
     <SettingsProvider>
-      <ThemeProvider>
-        <ThemeConfigProvider>{children}</ThemeConfigProvider>
-      </ThemeProvider>
+      <OnboardingProvider>
+        <ThemeProvider>
+          <ThemeConfigProvider>
+            {children}
+            <OnboardingWidget />
+          </ThemeConfigProvider>
+        </ThemeProvider>
+      </OnboardingProvider>
     </SettingsProvider>
   )
 }

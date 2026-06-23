@@ -2,6 +2,7 @@ import { Button, Checkbox, Drawer, Modal, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
+import { useOnboarding } from '../../app/onboarding'
 import type { SessionId } from '../../entities'
 import {
   selectChatWorkbenchConversationDetail,
@@ -44,6 +45,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
+  const { showOnboarding } = useOnboarding()
   const responsive = useResponsive()
   const sessions = useSessionStore(selectSessionList)
   const selectedSessionId = useSessionStore(selectCurrentSessionId)
@@ -257,6 +259,12 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const handleSendMessage = useCallback(
     async (message: string, enableContext: boolean) => {
       try {
+        const llm = settings?.llm
+        if (!llm || typeof llm !== 'object' || !llm.api_key || !llm.base_url || !llm.model) {
+          showOnboarding()
+          return
+        }
+
         let targetConversationId = sendTargetConversationId
 
         if (!targetConversationId) {
