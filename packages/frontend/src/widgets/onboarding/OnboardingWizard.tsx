@@ -66,13 +66,18 @@ export function OnboardingWizard() {
   const handleFinish = useCallback(async () => {
     try {
       await form.validateFields()
+    } catch {
+      message.error('请检查输入内容')
+      return
+    }
+    try {
       setSubmitting(true)
       const values = form.getFieldsValue()
       await patchSettings({ llm: values })
       message.success('配置已保存')
       completeOnboarding()
-    } catch {
-      message.error('保存失败，请检查输入')
+    } catch (err) {
+      message.error(`保存失败: ${err instanceof Error ? err.message : '未知错误'}`)
     } finally {
       setSubmitting(false)
     }

@@ -3,22 +3,35 @@ interface CapacitorGlobal {
   platform?: string
 }
 
+let _cachedBaseUrl: string | null = null
+
 function getApiBaseUrl(): string {
+  if (_cachedBaseUrl !== null) {
+    return _cachedBaseUrl
+  }
+
   if (typeof window !== 'undefined') {
     const capacitor = (window as unknown as { Capacitor?: CapacitorGlobal }).Capacitor
-    const isNative = capacitor?.isNative || capacitor?.platform === 'android'
-    const isCapacitorHost = window.location.origin === 'https://localhost'
+    const isNative = capacitor?.isNative === true || capacitor?.platform === 'android'
+    const isCapacitorHost = window.location.origin === 'http://localhost' || window.location.origin === 'https://localhost'
     if (isNative || isCapacitorHost) {
-      return 'http://127.0.0.1:3000'
+      _cachedBaseUrl = 'http://127.0.0.1:3000'
+      return _cachedBaseUrl
     }
   }
-  return ''
+  _cachedBaseUrl = ''
+  return _cachedBaseUrl
 }
 
-export const apiBaseUrl = getApiBaseUrl()
+export function getApiBaseUrlRuntime(): string {
+  return getApiBaseUrl()
+}
+
+// 保持向后兼容，导出getApiBaseUrl
+export { getApiBaseUrl }
 
 export function getApiUrl(path: string): string {
-  const base = apiBaseUrl
+  const base = getApiBaseUrl()
   if (base) {
     return `${base}${path}`
   }
@@ -26,11 +39,12 @@ export function getApiUrl(path: string): string {
 }
 
 export async function waitForBackendReady(maxRetries = 60, intervalMs = 500): Promise<boolean> {
-  if (!apiBaseUrl) {
+  const currentBaseUrl = getApiBaseUrl()
+  if (!currentBaseUrl) {
     return true
   }
   
-  const healthUrl = `${apiBaseUrl}/health`
+  const healthUrl = `${currentBaseUrl}/health`
   
   // Dynamically import CapacitorHttp if available
   let CapacitorHttp: { get: (options: { url: string; headers?: Record<string, string> }) => Promise<{ status: number }> } | null = null
@@ -62,7 +76,7 @@ export async function waitForBackendReady(maxRetries = 60, intervalMs = 500): Pr
           return true
         }
       }
-    } catch {
+    } catch (healthErr) {
       // Service not ready yet, wait and retry
     }
     await new Promise(resolve => setTimeout(resolve, intervalMs))

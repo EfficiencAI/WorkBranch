@@ -1,6 +1,6 @@
 import { getClientId } from '../logging/clientId'
 import { ApiError } from './error'
-import { getApiUrl } from './config'
+import { getApiUrl, getApiBaseUrl } from './config'
 import type { ApiEnvelope, HttpRequestOptions } from './types'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -31,7 +31,7 @@ async function parseResponseBody(response: Response, parseAs: HttpRequestOptions
 
   try {
     return JSON.parse(text) as unknown
-  } catch {
+  } catch (parseErr) {
     throw new ApiError('响应解析失败', { status: response.status, details: text })
   }
 }
@@ -58,15 +58,38 @@ export async function request<TData = unknown, TBody = unknown>(
   }
 
   let response: Response
+  const fullUrl = getApiUrl(url)
   try {
-    response = await fetch(getApiUrl(url), {
+    // 始终优先尝试 CapacitorHttp (Android原生环境)
+    const { CapacitorHttp } = await import('@capacitor/core')
+    if (CapacitorHttp) {
+      try {
+        const nativeResponse = await CapacitorHttp.request({
+          url: fullUrl,
+          method: method as any,
+          headers: Object.fromEntries(requestHeaders.entries()),
+          data: requestBody,
+        })
+        // nativeResponse.data 可能已经是对象，不需要二次 stringify
+        const bodyData = typeof nativeResponse.data === 'string' ? nativeResponse.data : JSON.stringify(nativeResponse.data)
+        response = new Response(bodyData, {
+          status: nativeResponse.status,
+          headers: new Headers(nativeResponse.headers as Record<string, string>),
+        })
+      } catch (httpError) {
+        throw httpError
+      }
+    } else {
+      throw new Error('CapacitorHttp not available')
+    }
+  } catch (capError) {
+    // CapacitorHttp 不可用时回退到 fetch
+    response = await fetch(fullUrl, {
       method,
       headers: requestHeaders,
       body: requestBody,
       signal,
     })
-  } catch (error) {
-    throw new ApiError('网络请求失败', { details: error })
   }
 
   const parsed = await parseResponseBody(response, parseAs)

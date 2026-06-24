@@ -95,3 +95,13 @@ test-results/
 
 # 临时调试输出
 *.tmp.debug.*
+
+# 调试目录
+.dbg/
+
+# 调试文档（根目录）
+/debug-*.md
+
+# 临时截图（根目录）
+/screen*.png
+/final*.png
