@@ -56,43 +56,17 @@ class ConversationBuffer {
   }
 
   async completeMessage(messageId: string): Promise<void> {
-    const fs = require('fs');
     const draft = this.drafts.get(messageId);
-    fs.appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\mq-trace.log',
-      `[${new Date().toISOString()}] [buffer] completeMessage mid=${messageId} hasDraft=${!!draft} contentLen=${draft?.assistant_content?.length || 0}\n`);
-    // FORCE output to verify code path - use same method as MQ trace
-    require('fs').appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\step-trace.log',
-      `[${new Date().toISOString()}] [STEP-TRACE] completeMessage ENTER mid=${messageId} draft=${!!draft}\n`);
+    if (!draft) return;
 
-    const _stepLog = (msg: string) => require('fs').appendFileSync('e:\\\\PythonProject\\\\WorkBranch\\.tmp-debug\\step-trace.log',
-      `[${new Date().toISOString()}] [STEP-TRACE] ${msg}\n`);
-
-    if (!draft) {
-      console.warn('[buffer] completeMessage: no draft for', messageId,
-        'available drafts:', Array.from(this.drafts.keys()));
-      return;
-    }
-
-    _stepLog(`STEP1: calling updateMessageAssistant for ${messageId}`);
-    try {
-      await conversationDAO.updateMessageAssistant(
-        messageId,
-        draft.assistant_content || '',
-        'completed',
-        draft.thinking_content ?? null
-      );
-      _stepLog('STEP2: updateMessageAssistant DONE');
-    } catch(daoErr: unknown) {
-      _stepLog(`STEP2-ERR: ${daoErr instanceof Error ? daoErr.message : String(daoErr)}`);
-      throw daoErr;
-    }
-
-    // 写透代理已自动处理持久化（每次写操作后 50ms 内自动 save + fsync）
-    // 无需手动调用 db.save()
-    _stepLog('STEP3: auto-save handled by write-through proxy');
+    await conversationDAO.updateMessageAssistant(
+      messageId,
+      draft.assistant_content || '',
+      'completed',
+      draft.thinking_content ?? null
+    );
 
     this.drafts.delete(messageId);
-    _stepLog(`SUCCESS for mid=${messageId}`);
   }
 
   async failMessage(messageId: string): Promise<void> {
