@@ -74,21 +74,17 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const cancelStreamingConversation = useChatWorkbenchStore((state) => state.cancelStreamingConversation)
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
-  const [peekNav, setPeekNav] = useState(false)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
-  const navExpanded = !responsive.isMobile && (peekNav || activeSidebar !== null)
   const isFocused = focusedConversationId !== null
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const navClassName = [
     'diagram-shell__nav',
     responsive.isMobile ? 'diagram-shell__nav--mobile' : null,
     isFocused ? 'diagram-shell__nav--focused' : null,
-    !isFocused && activeSidebar ? 'diagram-shell__nav--open' : null,
-    !isFocused && !activeSidebar && navExpanded ? 'diagram-shell__nav--peek' : null,
   ].filter(Boolean).join(' ')
 
   const selectedConversation = useMemo(
@@ -363,7 +359,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   }, [conversationNodes, onRequestError, persistConversationPositions, selectedSessionId, updateConversationNodePositions])
 
   function collapseNav() {
-    setPeekNav(false)
     setActiveSidebar(null)
 
     if (isSettingsRoute) {
@@ -372,7 +367,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   }
 
   function openSidebar(mode: SidebarMode) {
-    setPeekNav(true)
     setActiveSidebar(mode)
 
     if (mode === 'settings' && !isSettingsRoute) {

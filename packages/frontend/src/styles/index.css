@@ -232,21 +232,6 @@ button {
   opacity: 0.3;
 }
 
-.diagram-shell__nav--peek {
-  width: 332px;
-  border-radius: calc(18px * var(--app-ui-scale));
-  padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
-}
-
-.diagram-shell__nav--open {
-  width: 372px;
-  min-height: min(78vh, 760px);
-  border-radius: var(--app-radius-lg);
-  padding: var(--app-space-2) var(--app-space-3) var(--app-space-3);
-  background: var(--app-panel-bg-strong);
-  box-shadow: var(--app-shadow-lg);
-}
-
 .diagram-shell__nav--focused {
     left: auto !important;
     right: 1% !important;
@@ -1418,11 +1403,6 @@ button {
     padding: 0;
   }
 
-  .diagram-shell__nav--peek,
-  .diagram-shell__nav--open {
-    width: min(420px, calc(100vw - 32px));
-  }
-
   .diagram-shell__hud {
     top: 96px;
     left: 16px;
@@ -1473,11 +1453,6 @@ button {
     right: 1% !important;
     width: 58px;
     min-height: 58px;
-  }
-
-  .diagram-shell__nav--peek,
-  .diagram-shell__nav--open {
-    width: calc(100vw - 28px);
   }
 
   .diagram-shell__nav-head {
