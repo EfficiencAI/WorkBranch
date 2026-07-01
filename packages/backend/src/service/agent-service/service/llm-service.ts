@@ -38,9 +38,9 @@ class LLMServiceImpl {
     }
 
     return new ChatOpenAI({
-      apiKey: apiKey,
+      openAIApiKey: apiKey,
       configuration: {
-        baseURL: baseUrl,
+        basePath: baseUrl,
       },
       modelName: model,
       temperature,
