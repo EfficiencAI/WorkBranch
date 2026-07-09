@@ -104,23 +104,27 @@ export function OnboardingWizard() {
       <Steps items={STEP_LIST.map((s) => ({ title: s.title, icon: s.icon }))} current={stepIndex} size="small" style={{ marginBottom: 24 }} />
 
       <Form form={form} layout="vertical" requiredMark="optional">
-        <Form.Item
-          name={current.key}
-          rules={[
-            { required: true, message: `请输入${current.title}` },
-            ...(current.key === 'base_url'
-              ? [{ type: 'url', message: '请输入有效的 URL' } as const]
-              : []),
-          ]}
-          help={current.help}
-        >
-          <Input
-            size="large"
-            placeholder={current.placeholder}
-            type={current.key === 'api_key' ? 'password' : 'text'}
-            onPressEnter={isLastStep ? handleFinish : handleNext}
-          />
-        </Form.Item>
+        {STEP_LIST.map((step) => (
+          <Form.Item
+            key={step.key}
+            name={step.key}
+            hidden={step.key !== current.key}
+            rules={[
+              { required: true, message: `请输入${step.title}` },
+              ...(step.key === 'base_url'
+                ? [{ type: 'url', message: '请输入有效的 URL' } as const]
+                : []),
+            ]}
+            help={step.help}
+          >
+            <Input
+              size="large"
+              placeholder={step.placeholder}
+              type={step.key === 'api_key' ? 'password' : 'text'}
+              onPressEnter={isLastStep ? handleFinish : handleNext}
+            />
+          </Form.Item>
+        ))}
       </Form>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
