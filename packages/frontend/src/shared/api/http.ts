@@ -45,45 +45,53 @@ export async function request<TData = unknown, TBody = unknown>(
   const requestHeaders = new Headers(headers)
   requestHeaders.set('X-Client-Id', getClientId())
   let requestBody: BodyInit | undefined
+  let capacitorData: unknown
 
   if (body !== undefined) {
     if (body instanceof FormData || body instanceof URLSearchParams || typeof body === 'string' || body instanceof Blob) {
       requestBody = body
+      capacitorData = body
     } else {
       if (!requestHeaders.has('Content-Type')) {
         requestHeaders.set('Content-Type', 'application/json')
       }
       requestBody = JSON.stringify(body)
+      // CapacitorHttp 文档要求 data 为可序列化对象，原生层负责序列化；
+      // 传 stringify 后的 string 会导致请求异常，因此用原始对象
+      capacitorData = body
     }
   }
 
   let response: Response
   const fullUrl = getApiUrl(url)
+
+  // 仅当 @capacitor/core 可加载且导出 CapacitorHttp 时使用原生请求；
+  // 加载失败（纯 web/dev 环境）才回退 fetch
+  let capacitorHttp: typeof import('@capacitor/core').CapacitorHttp | null = null
   try {
-    // 始终优先尝试 CapacitorHttp (Android原生环境)
     const { CapacitorHttp } = await import('@capacitor/core')
-    if (CapacitorHttp) {
-      try {
-        const nativeResponse = await CapacitorHttp.request({
-          url: fullUrl,
-          method: method as any,
-          headers: Object.fromEntries(requestHeaders.entries()),
-          data: requestBody,
-        })
-        // nativeResponse.data 可能已经是对象，不需要二次 stringify
-        const bodyData = typeof nativeResponse.data === 'string' ? nativeResponse.data : JSON.stringify(nativeResponse.data)
-        response = new Response(bodyData, {
-          status: nativeResponse.status,
-          headers: new Headers(nativeResponse.headers as Record<string, string>),
-        })
-      } catch (httpError) {
-        throw httpError
-      }
-    } else {
-      throw new Error('CapacitorHttp not available')
-    }
-  } catch (capError) {
-    // CapacitorHttp 不可用时回退到 fetch
+    capacitorHttp = CapacitorHttp ?? null
+  } catch {
+    // @capacitor/core 不可用，使用 fetch
+  }
+
+  if (capacitorHttp) {
+    // 原生请求失败直接抛出真实错误，不再回退 fetch：
+    // Android WebView origin 为 https://localhost，回退 fetch 访问 http://127.0.0.1:3000
+    // 会被混合内容策略阻断，抛出误导性的 "Failed to fetch" 掩盖真实根因
+    const nativeResponse = await capacitorHttp.request({
+      url: fullUrl,
+      method: method as any,
+      headers: Object.fromEntries(requestHeaders.entries()),
+      data: capacitorData,
+    })
+    // nativeResponse.data 可能已经是对象，不需要二次 stringify
+    const bodyData = typeof nativeResponse.data === 'string' ? nativeResponse.data : JSON.stringify(nativeResponse.data)
+    response = new Response(bodyData, {
+      status: nativeResponse.status,
+      headers: new Headers(nativeResponse.headers as Record<string, string>),
+    })
+  } else {
     response = await fetch(fullUrl, {
       method,
       headers: requestHeaders,
