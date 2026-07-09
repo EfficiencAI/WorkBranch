@@ -12,12 +12,34 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
-             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#61
+             // Default: https://android.googlesource.com/platform/frameworks/base/+/282e181b58cf72b6ca770dc7ca5f91f135444502/tools/aapt/AaptAssets.cpp#L61
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
+        }
+        externalNativeBuild {
+            cmake {
+                cppFlags ""
+                arguments "-DANDROID_STL=c++_shared"
+            }
         }
         ndk {
             abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
         }
+    }
+    externalNativeBuild {
+        cmake {
+            path "libs/cdvnodejsmobile/CMakeLists.txt"
+        }
+    }
+    sourceSets {
+        main {
+            jniLibs.srcDirs += 'libs/cdvnodejsmobile/libnode/bin/'
+        }
+    }
+    packagingOptions {
+        pickFirst 'lib/x86/libnode.so'
+        pickFirst 'lib/armeabi-v7a/libnode.so'
+        pickFirst 'lib/arm64-v8a/libnode.so'
+        pickFirst 'lib/x86_64/libnode.so'
     }
     buildTypes {
         release {
