@@ -12,6 +12,7 @@ import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
 import { MessageRenderer } from '../../components/messages'
 import { useLongPress } from './useLongPress'
+import type { AgentId } from '../../shared/api'
 
 type ConversationCanvasProps = {
   currentSessionId: SessionId | null
@@ -25,9 +26,11 @@ type ConversationCanvasProps = {
   messagesLoading: boolean
   messagesError: string | null
   sending: boolean
+  selectedAgentId: AgentId
   canCreateConversationOnSend: boolean
   initialLoading?: boolean
   onSendMessage: (message: string, enableContext: boolean) => Promise<void>
+  onAgentChange: (agentId: AgentId) => void
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
   onDeleteConversation: (conversationId: string) => Promise<void>
@@ -360,7 +363,9 @@ function FocusOverlay({
   sending,
   selectedConversationId,
   selectedConversationLabel,
+  selectedAgentId,
   onSend,
+  onAgentChange,
   onStop,
   onNavigateToNode,
   onNavPathTailChange,
@@ -376,7 +381,9 @@ function FocusOverlay({
   sending: boolean
   selectedConversationId: string | null
   selectedConversationLabel: string | null
+  selectedAgentId: AgentId
   onSend: (message: string, enableContext: boolean) => Promise<void>
+  onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void
   onNavPathTailChange?: (tailConversationId: string | null) => void
@@ -454,7 +461,9 @@ function FocusOverlay({
           sending={sending}
           selectedConversationId={selectedConversationId}
           selectedConversationLabel={selectedConversationLabel}
+          selectedAgentId={selectedAgentId}
           onSend={onSend}
+          onAgentChange={onAgentChange}
           onStop={onStop}
           onNavigateToNode={onNavigateToNode}
           onNavPathTailChange={onNavPathTailChange}
@@ -541,7 +550,9 @@ interface FocusViewProps {
   sending: boolean
   selectedConversationId: string | null
   selectedConversationLabel: string | null
+  selectedAgentId: AgentId
   onSend: (message: string, enableContext: boolean) => Promise<void>
+  onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void
   onNavPathTailChange?: (tailConversationId: string | null) => void
@@ -553,7 +564,9 @@ function FocusView({
   sending,
   selectedConversationId,
   selectedConversationLabel,
+  selectedAgentId,
   onSend,
+  onAgentChange,
   onStop,
   onNavigateToNode,
   onNavPathTailChange,
@@ -904,7 +917,9 @@ function FocusView({
             selectedConversationId={selectedConversationId}
             selectedConversationLabel={selectedConversationLabel}
             sending={sending}
+            selectedAgentId={selectedAgentId}
             onSend={onSend}
+            onAgentChange={onAgentChange}
             onStop={onStop}
           />
         </div>
@@ -1364,8 +1379,10 @@ function FlowViewport({
   messagesLoading,
   messagesError,
   sending,
+  selectedAgentId,
   initialLoading,
   onSendMessage,
+  onAgentChange,
   onStopMessage,
   onCreateConversation,
   onCreateSession,
@@ -1689,9 +1706,11 @@ function FlowViewport({
         messagesError={messagesError}
         conversationError={conversationDetail?.error ?? null}
         sending={sending}
+        selectedAgentId={selectedAgentId}
         selectedConversationId={selectedConversation?.conversationId ?? null}
         selectedConversationLabel={selectedConversation ? summarizeConversation(selectedConversation) : null}
         onSend={onSendMessage}
+        onAgentChange={onAgentChange}
         onStop={onStopMessage}
         onNavigateToNode={handleFocusNavigateToNode}
         onNavPathTailChange={onNavPathTailChange}

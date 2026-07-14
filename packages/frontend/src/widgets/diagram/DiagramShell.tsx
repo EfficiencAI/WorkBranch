@@ -8,6 +8,7 @@ import {
   selectChatWorkbenchConversationDetail,
   selectChatWorkbenchConversationMessages,
   selectChatWorkbenchConversationNodes,
+  selectChatWorkbenchWorkspaceDetail,
   selectChatWorkbenchMessagesError,
   selectChatWorkbenchMessagesLoading,
   selectChatWorkbenchStreamingConversationIds,
@@ -25,6 +26,7 @@ import {
   useTreeStore,
   useUserStore,
 } from '../../features'
+import type { AgentId } from '../../shared/api'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
@@ -54,6 +56,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const deletingSessionId = useSessionStore(selectDeletingSessionId)
   const user = useUserStore(selectUserProfile)
   const conversationDetail = useChatWorkbenchStore(selectChatWorkbenchConversationDetail)
+  const workspaceDetail = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)
   const conversationMessages = useChatWorkbenchStore(selectChatWorkbenchConversationMessages)
   const messagesLoading = useChatWorkbenchStore(selectChatWorkbenchMessagesLoading)
   const messagesError = useChatWorkbenchStore(selectChatWorkbenchMessagesError)
@@ -76,6 +79,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('builtin')
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
@@ -104,6 +108,35 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const hasConversationNodes = conversationNodes.length > 0
   const canCreateConversationOnSend = !hasConversationNodes
   const isStreamingViewedConversation = viewedConversationId !== null && streamingConversationIds.has(viewedConversationId)
+
+  useEffect(() => {
+    const agentSettings = settings?.agent
+    if (!agentSettings || typeof agentSettings !== 'object' || Array.isArray(agentSettings)) {
+      return
+    }
+    const defaultAgent = (agentSettings as Record<string, unknown>).default_agent
+    setSelectedAgentId(defaultAgent === 'trae' ? 'trae' : 'builtin')
+  }, [settings])
+
+  function confirmTraeRun(): Promise<boolean> {
+    return new Promise((resolve) => {
+      Modal.confirm({
+        title: '确认运行 Trae CLI？',
+        content: (
+          <Space direction="vertical" size={8}>
+            <Typography.Text>Trae CLI 可能修改工作区文件。</Typography.Text>
+            <Typography.Text type="secondary">
+              working dir: {workspaceDetail?.dir ?? conversationDetail?.workspaceId ?? '当前会话工作区'}
+            </Typography.Text>
+          </Space>
+        ),
+        okText: '确认运行',
+        cancelText: '取消',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  }
 
   useEffect(() => {
     void syncConversationContext(viewedConversationId)
@@ -255,15 +288,17 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const handleSendMessage = useCallback(
     async (message: string, enableContext: boolean) => {
       try {
-        const llm = settings?.llm
-        if (!llm || typeof llm !== 'object' || Array.isArray(llm)) {
-          showOnboarding()
-          return
-        }
-        const llmConfig = llm as Record<string, unknown>
-        if (!llmConfig.api_key || !llmConfig.base_url || !llmConfig.model) {
-          showOnboarding()
-          return
+        if (selectedAgentId === 'builtin') {
+          const llm = settings?.llm
+          if (!llm || typeof llm !== 'object' || Array.isArray(llm)) {
+            showOnboarding()
+            return
+          }
+          const llmConfig = llm as Record<string, unknown>
+          if (!llmConfig.api_key || !llmConfig.base_url || !llmConfig.model) {
+            showOnboarding()
+            return
+          }
         }
 
         let targetConversationId = sendTargetConversationId
@@ -298,7 +333,18 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           targetConversationId = childResult.conversationId
         }
 
+        let writeConfirmed = false
+        if (selectedAgentId === 'trae') {
+          writeConfirmed = await confirmTraeRun()
+          if (!writeConfirmed) {
+            return
+          }
+        }
+
         await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
+          agentId: selectedAgentId,
+          writeConfirmed,
+        }, {
           onStreamError(event) {
             if (event.content) {
               onSendError(String(event.content))
@@ -315,7 +361,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       onRequestError,
       onSendError,
       sendTargetConversationId,
+      selectedAgentId,
       sessionDetail,
+      settings,
+      workspaceDetail,
+      conversationDetail,
       conversationNodes,
       singleMessagePerNode,
     ],
@@ -394,9 +444,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           messagesLoading={messagesLoading}
           messagesError={messagesError}
           sending={isStreamingViewedConversation}
+          selectedAgentId={selectedAgentId}
           canCreateConversationOnSend={canCreateConversationOnSend}
           initialLoading={initialLoading}
           onSendMessage={handleSendMessage}
+          onAgentChange={setSelectedAgentId}
           onStopMessage={handleStopMessage}
           onCreateConversation={handleCreateConversation}
           onDeleteConversation={handleDeleteConversation}

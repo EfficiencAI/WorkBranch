@@ -178,6 +178,15 @@ export type SimpleEvent = {
 }
 
 export type ChatStreamEvent = CanonicalMessage | SimpleEvent
+export type AgentId = 'builtin' | 'trae'
+
+export type StreamConversationMessageBody = {
+  message: string
+  enable_context?: boolean
+  agent_id?: AgentId
+  write_confirmed?: boolean
+  last_seq?: number
+}
 
 export async function cancelConversation(conversationId: string) {
   await post(`/api/session/conversations/${conversationId}/cancel`)
@@ -185,7 +194,7 @@ export async function cancelConversation(conversationId: string) {
 
 export async function streamConversationMessage(
   conversationId: string,
-  body: { message: string; enable_context?: boolean; last_seq?: number },
+  body: StreamConversationMessageBody,
   handlers: {
     onEvent?: (event: ChatStreamEvent) => void
     signal?: AbortSignal

@@ -19,5 +19,5 @@ export {
   updateConversationPositions,
 } from './workspace'
 export { fetchUserProfile, updateUserName } from './user'
-export type { ChatStreamEvent } from './workspace'
+export type { AgentId, ChatStreamEvent, StreamConversationMessageBody } from './workspace'
 export type { ApiEnvelope, HttpRequestOptions, RequestMethod, ResponseParseMode, SseEventMessage, SseEventName } from './types'

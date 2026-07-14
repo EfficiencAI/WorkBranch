@@ -1,5 +1,5 @@
 import type { ConversationDetail, ConversationNode, ConversationPosition, MessageNode, SessionDetail, SessionId, WorkspaceDetail } from '../../../entities'
-import type { ChatStreamEvent } from '../../../shared/api'
+import type { AgentId, ChatStreamEvent } from '../../../shared/api'
 
 export type SessionContextResult = 'empty-session' | 'ready'
 
@@ -24,6 +24,11 @@ export type SendMessageHandlers = {
   signal?: AbortSignal
 }
 
+export type SendMessageOptions = {
+  agentId?: AgentId
+  writeConfirmed?: boolean
+}
+
 export type ChatWorkbenchActions = {
   loadChatWorkbench: (preferredSessionId?: SessionId | null) => Promise<void>
   loadConversationBundle: (conversationId: string) => Promise<void>
@@ -32,7 +37,7 @@ export type ChatWorkbenchActions = {
   enterSessionContext: (sessionDetail: SessionDetail | null) => Promise<SessionContextResult>
   deleteConversationFromSession: (conversationId: string) => Promise<void>
   cascadeDeleteConversationFromSession: (conversationId: string) => Promise<void>
-  sendMessageToConversation: (conversationId: string, messageText: string, enableContext: boolean, handlers?: SendMessageHandlers) => Promise<void>
+  sendMessageToConversation: (conversationId: string, messageText: string, enableContext: boolean, options?: SendMessageOptions, handlers?: SendMessageHandlers) => Promise<void>
   cancelStreamingConversation: () => Promise<void>
   updateConversationNodePosition: (conversationId: string, position: ConversationPosition) => void
   updateConversationNodePositions: (positions: Array<{ conversationId: string; position: ConversationPosition }>) => void

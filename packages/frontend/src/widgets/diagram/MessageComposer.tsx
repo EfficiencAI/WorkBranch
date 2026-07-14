@@ -1,16 +1,19 @@
-import { Button, Checkbox, Input, Space, Typography } from 'antd'
+import { Button, Checkbox, Input, Select, Space, Typography } from 'antd'
 import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
 import { useResponsive } from '../../shared/lib'
+import type { AgentId } from '../../shared/api'
 
 type MessageComposerProps = {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   sending: boolean
+  selectedAgentId: AgentId
   allowCreateOnSend?: boolean
   onSend: (message: string, enableContext: boolean) => Promise<void>
+  onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
 }
 
@@ -18,8 +21,10 @@ export function MessageComposer({
   selectedConversationId,
   selectedConversationLabel,
   sending,
+  selectedAgentId,
   allowCreateOnSend = false,
   onSend,
+  onAgentChange,
   onStop,
 }: MessageComposerProps) {
   const { settings } = useSettings()
@@ -41,8 +46,8 @@ export function MessageComposer({
     const el = toolbarRef.current
     if (!el || !hasSendTarget) return
     const containerWidth = el.clientWidth
-    const btnCount = 6
-    const gapCount = 5
+    const btnCount = 7
+    const gapCount = 6
     const baseGap = Math.max(4, containerWidth * 0.008)
     const totalGaps = baseGap * gapCount
     const availableWidth = containerWidth - totalGaps
@@ -99,6 +104,19 @@ export function MessageComposer({
     void handleSend()
   }
 
+  const agentSelect = (
+    <Select<AgentId>
+      size="small"
+      value={selectedAgentId}
+      onChange={onAgentChange}
+      style={{ minWidth: 112 }}
+      options={[
+        { value: 'builtin', label: 'Default' },
+        { value: 'trae', label: 'Trae CLI' },
+      ]}
+    />
+  )
+
   if (collapsed) {
     return (
       <div className="message-composer message-composer--collapsed">
@@ -146,6 +164,8 @@ export function MessageComposer({
                   </Button>
                 </>
               )}
+
+              {agentSelect}
 
               <Button
                 type="text"
@@ -228,6 +248,7 @@ export function MessageComposer({
                 >
                   上下文组织
                 </Checkbox>
+                {agentSelect}
                 <Button size={responsive.composerConfig.buttonSize} onClick={() => setCollapsed(true)}>
                   折叠
                 </Button>
@@ -267,6 +288,7 @@ export function MessageComposer({
                 >
                   上下文组织
                 </Checkbox>
+                {agentSelect}
                 <Button size="small" onClick={() => setCollapsed(true)}>
                   折叠
                 </Button>

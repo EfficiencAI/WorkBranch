@@ -20,7 +20,7 @@ import type { ChatStreamEvent } from '../../../shared/api'
 import type { ContentBlock } from '@workbranch/shared'
 import { isApiError } from '../../../shared/api'
 import { useSessionStore } from '../../session'
-import type { ChatWorkbenchStore, SendMessageHandlers, SessionContextResult } from './types'
+import type { ChatWorkbenchStore, SendMessageHandlers, SendMessageOptions, SessionContextResult } from './types'
 import type { MessageNode } from '../../../entities'
 
 function isEqual(a: unknown, b: unknown): boolean {
@@ -384,7 +384,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     }
   },
 
-  async sendMessageToConversation(conversationId: string, messageText: string, enableContext: boolean, handlers: SendMessageHandlers = {}) {
+  async sendMessageToConversation(conversationId: string, messageText: string, enableContext: boolean, options: SendMessageOptions = {}, handlers: SendMessageHandlers = {}) {
     const { currentSessionId } = useSessionStore.getState()
 
     if (!currentSessionId) {
@@ -405,6 +405,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           conversation_id: conversationId,
           message_length: messageText.length,
           enable_context: enableContext,
+          agent_id: options.agentId ?? 'builtin',
           last_seq: lastSeq,
         },
       })
@@ -414,6 +415,8 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           message: messageText,
           enable_context: enableContext,
+          agent_id: options.agentId ?? 'builtin',
+          write_confirmed: options.writeConfirmed === true,
           last_seq: lastSeq,
         },
         {
