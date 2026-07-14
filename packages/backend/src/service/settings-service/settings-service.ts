@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     max_size: 1000,
   },
   agent: {
+    default_agent: 'builtin',
     memory_mode: 'accumulate',
     memory_window_size: 3,
   },

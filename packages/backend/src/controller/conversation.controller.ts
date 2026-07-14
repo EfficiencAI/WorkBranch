@@ -49,12 +49,12 @@ export class ConversationController {
   async sendMessage(
     request: FastifyRequest<{
       Params: { conversationId: string };
-      Body: { message: string; enable_context?: boolean; last_seq?: number };
+      Body: { message: string; enable_context?: boolean; agent_id?: 'builtin' | 'trae'; write_confirmed?: boolean; last_seq?: number };
     }>,
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const { message, enable_context, last_seq } = request.body;
+    const { message, enable_context, agent_id, write_confirmed, last_seq } = request.body;
 
     const conversation = await sessionService.getConversationDetail(conversationId);
     if (!conversation) {
@@ -104,7 +104,7 @@ export class ConversationController {
 
     let result;
     try {
-      result = await sessionService.sendMessage(conversationId, message, enable_context);
+      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id || 'builtin', write_confirmed === true);
     } catch (err) {
       const errorMessage = String(err);
       unsubscribe();

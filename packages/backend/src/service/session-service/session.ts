@@ -1,6 +1,7 @@
 import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
 import { agentService } from '../agent-service/agent';
+import type { AgentId } from '../agent-service/adapters';
 import { workspaceService } from '../agent-service/service/workspace-service';
 import { logger } from '../../core/logging';
 
@@ -127,7 +128,9 @@ export class SessionService {
   async sendMessage(
     conversationId: string,
     message: string,
-    _enableContext: boolean = false
+    enableContext: boolean = false,
+    agentId: AgentId = 'builtin',
+    writeConfirmed: boolean = false,
   ): Promise<{ message_id: string; conversation_id: string; session_id: number }> {
     let convInfo = this.conversations.get(conversationId);
     if (!convInfo) {
@@ -154,6 +157,8 @@ export class SessionService {
     }
 
     const messageId = this.generateMessageId(conversationId);
+    const parentChainMessages = enableContext ? await this.getParentChainMessages(conversationId) : [];
+    const currentConversationMessages = enableContext ? await this.getConversationMessages(conversationId) : [];
 
     await conversationBuffer.createMessage(messageId, conversationId, convInfo.session_id, message);
 
@@ -171,7 +176,11 @@ export class SessionService {
         conversationId,
         String(convInfo!.session_id),
         messageId,
-        message
+        message,
+        parentChainMessages,
+        currentConversationMessages,
+        agentId,
+        writeConfirmed,
       ).catch(async (err) => {
         const errorMsg = String(err);
         logger.error({ err: errorMsg, conversationId }, 'Agent run failed');
@@ -230,6 +239,12 @@ export class SessionService {
         ended_at: new Date().toISOString(),
       });
       logger.info({ conversationId, state: ConversationState.CANCELLED }, 'Conversation state updated');
+    }
+
+    try {
+      await agentService.cancelConversation(conversationId);
+    } catch (cancelErr) {
+      logger.error({ err: cancelErr, conversationId }, 'Failed to cancel active agent process');
     }
 
     conversationBuffer.clear(conversationId);

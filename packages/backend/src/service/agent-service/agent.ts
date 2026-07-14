@@ -1,11 +1,11 @@
 import { messageQueue } from '../session-service/mq';
 import { createMessage, createContentBlock, SegmentType, type ContentBlock } from '../session-service/canonical';
 import { logger } from '../../core/logging';
-import { runAgentGraph, type AgentOutcome } from './graph/agent-graphs';
-import type { MessageContext } from './graph/director-agent/director-agent';
+import type { AgentOutcome } from './graph/agent-graphs';
 import { initializeTools } from './tools';
 import { sessionService } from '../session-service';
 import { workspaceService } from './service/workspace-service';
+import { resolveAgentAdapter, type AgentId } from './adapters';
 
 enum ConversationStatus {
   PENDING = 'pending',
@@ -28,6 +28,7 @@ interface Conversation {
 export class AgentService {
   private initialized = false;
   private conversations: Map<string, Conversation> = new Map();
+  private abortControllers: Map<string, AbortController> = new Map();
 
   private initialize(): void {
     if (!this.initialized) {
@@ -104,6 +105,7 @@ export class AgentService {
     if (!conv) return false;
 
     conv.status = ConversationStatus.CANCELLED;
+    this.abortControllers.get(conversationId)?.abort();
     logger.info({
       event: 'conversation.cancelled',
       conversation_id: conversationId,
@@ -125,6 +127,8 @@ export class AgentService {
     parentChainMessages?: Array<Record<string, unknown>>,
     currentConversationMessages?: Array<Record<string, unknown>>,
     handoffMetadata?: Record<string, unknown>,
+    agentId: AgentId = 'builtin',
+    writeConfirmed: boolean = false,
   ): Promise<void> {
     this.initialize();
 
@@ -137,12 +141,14 @@ export class AgentService {
     conv.status = ConversationStatus.RUNNING;
 
     const mid = messageId || this.generateId();
+    const adapter = resolveAgentAdapter(agentId);
 
     logger.info({
       event: 'agent.run.started',
       conversation_id: conversationId,
       workspace_id: conv.workspace_id,
       message_id: mid,
+      agent_id: adapter.id,
       parent_chain_count: parentChainMessages?.length || 0,
       current_conv_count: currentConversationMessages?.length || 0,
     });
@@ -177,24 +183,35 @@ export class AgentService {
       console.log('[agent] published msg, mid=', mid, 'type=', blockType);
     };
 
-    const context: MessageContext = {
-      send_message: sendMessage,
-      session_id: conv.session_id,
-      conversation_id: conversationId,
-      workspace_id: conv.workspace_id,
-      message_id: mid,
-      cancel_check: () => this.cancelCheck(conversationId),
-    };
+    const abortController = new AbortController();
+    this.abortControllers.set(conversationId, abortController);
 
     try {
-      const outcome: AgentOutcome = await runAgentGraph(
-        'director_agent',
+      const workspaceDir = workspaceService.getWorkspaceDir(conv.workspace_id);
+
+      if (!workspaceDir) {
+        throw new Error(`工作区 ${conv.workspace_id} 不存在`);
+      }
+
+      if (adapter.id === 'trae' && writeConfirmed !== true) {
+        throw new Error('Trae CLI 允许修改工作区文件，执行前必须确认');
+      }
+
+      messageQueue.registerStream(conversationId, conv.session_id, conv.workspace_id);
+
+      const outcome: AgentOutcome = await adapter.run({
         userMessage,
-        conv.workspace_id,
-        context,
-        parentChainMessages,
-        currentConversationMessages,
-      );
+        workspaceId: conv.workspace_id,
+        workspaceDir,
+        conversationId,
+        sessionId: conv.session_id,
+        messageId: mid,
+        parentChainMessages: parentChainMessages || [],
+        currentConversationMessages: currentConversationMessages || [],
+        signal: abortController.signal,
+        cancelCheck: () => this.cancelCheck(conversationId),
+        publish: sendMessage,
+      });
 
       if (textStarted) {
         await sendMessage('', SegmentType.TEXT_END);
@@ -217,6 +234,7 @@ export class AgentService {
         event: 'agent.run.completed',
         conversation_id: conversationId,
         message_id: mid,
+        agent_id: adapter.id,
         outcome_status: outcome.status,
         produced_user_reply: outcome.produced_user_reply,
       });
@@ -236,6 +254,8 @@ export class AgentService {
       conv.error = errorMessage;
 
       await sessionService.failConversation(conversationId, errorMessage);
+    } finally {
+      this.abortControllers.delete(conversationId);
     }
   }
 
@@ -244,13 +264,26 @@ export class AgentService {
     conversationId: string,
     sessionId: string,
     messageId: string,
-    userMessage: string
+    userMessage: string,
+    parentChainMessages?: Array<Record<string, unknown>>,
+    currentConversationMessages?: Array<Record<string, unknown>>,
+    agentId: AgentId = 'builtin',
+    writeConfirmed: boolean = false,
   ): Promise<void> {
     if (!this.conversations.has(conversationId)) {
       await this.registerConversation(conversationId, workspaceId, sessionId);
     }
 
-    await this.sendMessage(conversationId, userMessage, messageId);
+    await this.sendMessage(
+      conversationId,
+      userMessage,
+      messageId,
+      parentChainMessages,
+      currentConversationMessages,
+      undefined,
+      agentId,
+      writeConfirmed,
+    );
   }
 
   getConversation(conversationId: string): Conversation | undefined {
