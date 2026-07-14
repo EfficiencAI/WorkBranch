@@ -39,7 +39,7 @@ export class ReviewAgent extends BaseSubAgent {
 
     try {
       const messageContext = {
-        send_message: async (content: string, type: SegmentType, metadata?: Record<string, unknown>) => {
+        send_message: async (content: string, type: SegmentType, _metadata?: Record<string, unknown>) => {
           this.tokenCallback(content, type);
         },
         conversation_id: context?.conversation_id,

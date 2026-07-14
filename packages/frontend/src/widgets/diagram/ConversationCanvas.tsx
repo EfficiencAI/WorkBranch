@@ -3,7 +3,6 @@ import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button, Card, Spin, Space, Typography } from 'antd'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
-import { useSettings } from '../../app/settings'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
 import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
 import { useResponsive } from '../../shared/lib/useResponsive'
@@ -186,7 +185,7 @@ function OverviewNodePage({ conversation, focused, selected }: { conversation: C
   )
 }
 
-function FocusNodePage({
+export function FocusNodePage({
   conversation,
   conversationMessages,
   messagesLoading,
@@ -230,14 +229,13 @@ function FocusNodePage({
   )
 }
 
-function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
+function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
     focused,
     selected,
   } = data
 
-  const { setContextMenu } = useContextMenu()
   const draggingNodeId = useTreeStore((state) => state.draggingNodeId)
   const setDraggingNodeId = useTreeStore((state) => state.setDraggingNodeId)
   const clearDraggingNodeId = useTreeStore((state) => state.clearDraggingNodeId)
@@ -321,7 +319,7 @@ function FlowConversationNode({ data, id }: NodeProps<Node<FlowNodeData>>) {
       className={nodeClassName}
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
-      onClick={(e) => {
+      onClick={() => {
         // 显式触发聚焦态
         if (focusedConversationId !== conversation.conversationId) {
           setFocusedConversationId(conversation.conversationId)
@@ -552,10 +550,6 @@ interface FocusViewProps {
 function FocusView({
   conversation,
   conversationNodes,
-  conversationMessages,
-  messagesLoading,
-  messagesError,
-  conversationError,
   sending,
   selectedConversationId,
   selectedConversationLabel,
@@ -659,18 +653,6 @@ function FocusView({
   const viewedNode = useMemo(
     () => conversationNodes.find((n) => n.conversationId === viewedNodeId) ?? conversation ?? null,
     [conversationNodes, viewedNodeId, conversation],
-  )
-
-  const siblingCount = useMemo(() => {
-    if (!viewedNode) return 0
-    return conversationNodes.filter(
-      (n) => n.parentConversationId === viewedNode.parentConversationId && n.conversationId !== viewedNodeId,
-    ).length
-  }, [conversationNodes, viewedNode])
-
-  const childNodes = useMemo(
-    () => conversationNodes.filter((n) => n.parentConversationId === viewedNodeId),
-    [conversationNodes, viewedNodeId],
   )
 
   // ─── 统一的路径感知导航函数（滚动+高亮模式） ───
@@ -805,7 +787,7 @@ function FocusView({
   // 构建祖先链（用于面包屑）
   const ancestorChain = useMemo(() => {
     const chain: ConversationNode[] = []
-    let current: ConversationNode | undefined = viewedNode
+    let current: ConversationNode | null | undefined = viewedNode
     while (current) {
       chain.unshift(current)
       current = conversationNodes.find((n) => n.conversationId === current!.parentConversationId)
@@ -823,8 +805,7 @@ function FocusView({
       {/* 左侧：树导航 */}
       <div className="focus-view__tree" style={isMobile ? undefined : { width: treeWidth }}>
         <FocusTreeNav
-          anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? focusedConversationId ?? ''}
-          allNodes={conversationNodes}
+          anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? conversation?.conversationId ?? ''}
           activeId={viewedNodeId}
           pathIds={new Set(navState.path.map((item) => item.conversationId))}
           onSelect={handleNavigate}
@@ -839,7 +820,7 @@ function FocusView({
       {/* 右侧：主内容区（无缝内容流） */}
       <div className="focus-view__main">
         {/* 面包屑 */}
-        <FocusBreadcrumb chain={ancestorChain} activeId={viewedNodeId} onSelect={handleNavigate} />
+        <FocusBreadcrumb chain={ancestorChain} onSelect={handleNavigate} />
 
         {/* 内容流容器 */}
         <div className="focus-view__content-flow" ref={contentFlowRef}>
@@ -936,11 +917,10 @@ function FocusView({
 
 interface BreadcrumbProps {
   chain: ConversationNode[]
-  activeId: string
   onSelect: (id: string) => void
 }
 
-function FocusBreadcrumb({ chain, activeId, onSelect }: BreadcrumbProps) {
+function FocusBreadcrumb({ chain, onSelect }: BreadcrumbProps) {
   if (chain.length <= 1) return null
 
   return (
@@ -1124,13 +1104,12 @@ function calcSvgSize(layoutNodes: LayoutNode[]): { width: number; height: number
 
 interface TreeNavProps {
   anchorId: string
-  allNodes: ConversationNode[]
   activeId: string
   pathIds: Set<string>   // 导航路径上的节点 ID 集合
   onSelect: (id: string) => void
 }
 
-function FocusTreeNav({ anchorId, allNodes, activeId, pathIds, onSelect }: TreeNavProps) {
+function FocusTreeNav({ anchorId, activeId, pathIds, onSelect }: TreeNavProps) {
   // useSyncExternalStore 直接订阅 zustand store，保证数据新鲜（解决 props stale 问题）
   const storeNodes = useSyncExternalStore(
     useChatWorkbenchStore.subscribe,
@@ -1376,7 +1355,6 @@ export function buildTreeLayout(conversationNodes: ConversationNode[]) {
 }
 
 function FlowViewport({
-  currentSessionId,
   focusedConversationId,
   lockedSendConversationId,
   sessionDetail,
@@ -1386,24 +1364,21 @@ function FlowViewport({
   messagesLoading,
   messagesError,
   sending,
-  canCreateConversationOnSend,
   initialLoading,
   onSendMessage,
   onStopMessage,
   onCreateConversation,
-  onDeleteConversation,
   onCreateSession,
   onNavPathTailChange,
 }: ConversationCanvasProps) {
-  const { settings } = useSettings()
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
-  const responsive = useResponsive()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
+  const conversationMessagesCache = useChatWorkbenchStore((state) => state.conversationMessagesCache)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
-  const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth)
+  const [, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
   const lastZoomRef = useRef<number>(1)
   const isRefreshingRef = useRef(false)
@@ -1413,7 +1388,7 @@ function FlowViewport({
   const [focusOriginRect, setFocusOriginRect] = useState<FocusOverlayRect | null>(null)
   const previousFocusedIdRef = useRef<string | null>(null)
   // 聚焦态内浏览的节点ID（可独立于聚焦锚点变化）
-  const [focusViewedId, setFocusViewedId] = useState<string | null>(null)
+  const [, setFocusViewedId] = useState<string | null>(null)
 
   const selectedConversation = useMemo(
     () => conversationNodes.find((conversation) => conversation.conversationId === lockedSendConversationId) ?? null,
@@ -1527,10 +1502,6 @@ function FlowViewport({
     previousFocusedIdRef.current = isNowFocused
   }, [focusedConversationId, enterFocusMode, exitFocusMode])
 
-  const focusMetrics = useMemo(() => {
-    return { cardWidth: 320, bodyHeight: 220, centerYOffset: 0, visualWidth: 320, visualHeight: 220 }
-  }, [])
-
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
     return conversationNodes.map((conversation) => {
       const focused = storeFocusedConversationId === conversation.conversationId
@@ -1546,6 +1517,10 @@ function FlowViewport({
           conversation,
           focused,
           selected: lockedSendConversationId === conversation.conversationId,
+          conversationMessages: conversationMessagesCache[conversation.conversationId] ?? [],
+          messagesLoading: false,
+          messagesError: null,
+          conversationError: null,
         },
         className: [
           'conversation-flow-node',
@@ -1558,6 +1533,7 @@ function FlowViewport({
     conversationNodes,
     lockedSendConversationId,
     overviewLayoutMap,
+    conversationMessagesCache,
     storeFocusedConversationId,
   ])
 

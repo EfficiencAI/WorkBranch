@@ -68,9 +68,10 @@ export class ConversationController {
     });
 
     const streamState = messageQueue.getStreamState(conversationId);
+    const lastSeq = last_seq ?? 0;
 
-    if (streamState.is_completed && last_seq > 0) {
-      const missedMessages = messageQueue.getMessagesAfter(conversationId, last_seq);
+    if (streamState.is_completed && lastSeq > 0) {
+      const missedMessages = messageQueue.getMessagesAfter(conversationId, lastSeq);
       if (missedMessages.length > 0) {
         for (const { message: msg, seq } of missedMessages) {
           const eventData = messageToDict(msg);
@@ -99,7 +100,7 @@ export class ConversationController {
       if (hasDoneSegment) {
         doneReceived = true;
       }
-    }, { lastSeq: last_seq });
+    }, { lastSeq });
 
     let result;
     try {

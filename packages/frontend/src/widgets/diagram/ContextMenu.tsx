@@ -128,7 +128,7 @@ export function ContextMenu({
   if (!contextMenu) return null
 
   const menuItems: MenuProps['items'] = (() => {
-    const baseItems = getMenuItems(contextMenu.type)
+    const baseItems = getMenuItems(contextMenu.type) ?? []
     if (contextMenu.type !== 'node' || !contextMenu.conversationId) return baseItems
 
     return baseItems.map((item) => {

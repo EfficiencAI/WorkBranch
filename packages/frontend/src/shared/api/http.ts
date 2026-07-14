@@ -1,6 +1,6 @@
 import { getClientId } from '../logging/clientId'
 import { ApiError } from './error'
-import { getApiUrl, getApiBaseUrl } from './config'
+import { getApiUrl } from './config'
 import type { ApiEnvelope, HttpRequestOptions } from './types'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

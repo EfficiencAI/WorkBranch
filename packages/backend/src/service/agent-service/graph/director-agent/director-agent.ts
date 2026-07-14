@@ -4,13 +4,11 @@ import { ExecutionMode } from '../decision/complexity-analyzer';
 import { runToolExecution } from '../subgraphs/tool-execution-graph';
 import { llmService } from '../../service/llm-service';
 import { planFileService } from '../../service/plan-file-service';
-import { runAgentGraph } from '../agent-graphs';
 import { SegmentType } from '../../../session-service/canonical';
 import { logger } from '../../../../core/logging';
 import { toolRegistry } from '../../tools/registry';
 import { isToolAllowed, getAllowedTools } from '../subgraphs/tool-registry';
-import { buildContextPrompt, formatTodoPromptBlock, DIRECT_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT, CHAT_SYSTEM_PROMPT, THINK_SYSTEM_PROMPT, buildDirectorPlanMessages, buildChatSystemPrompt } from '../../prompts/graph-prompts';
-import { workspaceService } from '../../service/workspace-service';
+import { buildContextPrompt, formatTodoPromptBlock, DIRECT_SYSTEM_PROMPT, PLAN_MODE_SYSTEM_PROMPT, THINK_SYSTEM_PROMPT, buildDirectorPlanMessages, buildChatSystemPrompt } from '../../prompts/graph-prompts';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -24,7 +22,6 @@ export interface MessageContext {
   settings_service?: Record<string, unknown>;
 }
 
-const MAX_DIRECT_ITERATIONS = 32;
 const CHECK_INTERVAL = 8;
 
 function modeName(value: unknown): string | null {
@@ -255,7 +252,7 @@ function _loadPlanContentForState(state: AgentState): { planContent: string | un
     return { planContent: undefined, planFile: existingPlanFile };
   }
 
-  return { planContent: planReadResult.content, planFile: planReadResult.planFile };
+  return { planContent: planReadResult.content, planFile: planReadResult.plan_file };
 }
 
 function hasImageParts(parts: unknown[]): boolean {
@@ -301,7 +298,7 @@ async function _executeChatToolDirect(
   messageContext: MessageContext | undefined,
   parentChainMessages: Array<Record<string, unknown>>,
   currentConversationMessages: Array<Record<string, unknown>>,
-  toolArgs?: Record<string, unknown>,
+  _toolArgs?: Record<string, unknown>,
   multimodalParts?: unknown,
 ): Promise<string> {
   const chatSystemPrompt = buildChatSystemPrompt(!!multimodalParts);
@@ -579,6 +576,13 @@ function _executeCreateDir(toolArgs: Record<string, unknown>): { result: string 
   }
 }
 
+void _executeThinkingToolDirect;
+void _executeReadFile;
+void _executeWriteFile;
+void _executeDeleteFile;
+void _executeListDir;
+void _executeCreateDir;
+
 export function checkState(state: AgentState): 'analyze' | 'decide' | 'execute' | 'done' {
   if (state.pending_tools && state.pending_tools.length > 0) {
     logger.info({ event: 'route.checkState', target: 'execute', reason: 'has_pending_tools' });
@@ -593,7 +597,6 @@ export function checkState(state: AgentState): 'analyze' | 'decide' | 'execute' 
     return 'done';
   }
   if (state.todo_status === 'blocked') {
-    const reply = '当前任务被阻塞，无法继续执行。';
     logger.info({ event: 'route.checkState', target: 'done', reason: 'todo_blocked' });
     return 'done';
   }
@@ -985,7 +988,7 @@ export function createPlanNode(messageContext?: MessageContext) {
 
     try {
       const { systemPrompt, messages } = buildDirectorPlanMessages(userMessage);
-      const response = await llmService.chat(messages as Array<Record<string, unknown>>, systemPrompt);
+      const response = await llmService.chat(messages as any, systemPrompt);
 
       let responseText = stripCodeBlock(response);
       const data = JSON.parse(responseText);
@@ -1015,9 +1018,9 @@ export function createPlanNode(messageContext?: MessageContext) {
       ];
     }
 
-    const planContent = planFileService.formatPlanAsMarkdown(userMessage, plan);
-    const createResult = planFileService.createPlan(workspaceId, planContent, plan);
-    const planFilePath = createResult.planFile;
+    const planContent = planFileService.formatPlanAsMarkdown(userMessage, plan as any);
+    const createResult = planFileService.createPlan(workspaceId, planContent, plan as any);
+    const planFilePath = createResult.plan_file;
 
     logger.info({ event: 'director.plan.created', plan_file: planFilePath, steps: plan.length });
 

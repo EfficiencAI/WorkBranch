@@ -315,23 +315,23 @@ export function getPlanSystemPrompt(_agentType: string = 'director_agent'): stri
   return PLAN_SYSTEM_PROMPT_BASE;
 }
 
-export function buildIntentAnalysisMessages(
+export async function buildIntentAnalysisMessages(
   userMessage: string,
   parentChainMessages: Array<Record<string, unknown>>,
   currentConversationMessages: Array<Record<string, unknown>>,
-): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
+): Promise<{ systemPrompt: string; messages: Array<Record<string, unknown>> }> {
   const systemPrompt = INTENT_ANALYSIS_PROMPT.replace('{tool_prompt}', '');
-  let prompt = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
+  let prompt = await buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
   prompt += '\n请分析以上用户当前问题的意图。';
   return { systemPrompt, messages: [{ role: 'user', content: prompt }] };
 }
 
-export function buildPlanGenerationMessages(
+export async function buildPlanGenerationMessages(
   userMessage: string,
   parentChainMessages: Array<Record<string, unknown>>,
   currentConversationMessages: Array<Record<string, unknown>>,
   intentAnalysis?: Record<string, unknown>,
-): { systemPrompt: string; messages: Array<Record<string, unknown>> } {
+): Promise<{ systemPrompt: string; messages: Array<Record<string, unknown>> }> {
   const systemPrompt = getPlanSystemPrompt();
 
   let intentContext = '';
@@ -346,7 +346,7 @@ export function buildPlanGenerationMessages(
 `;
   }
 
-  const taskContent = buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
+  const taskContent = await buildContextPrompt(parentChainMessages, currentConversationMessages, userMessage);
   const fullPrompt = `${taskContent}${intentContext}请根据以上用户当前问题生成执行计划，包含 2-5 个任务，严格按照 JSON 格式输出。`;
   return { systemPrompt, messages: [{ role: 'user', content: fullPrompt }] };
 }

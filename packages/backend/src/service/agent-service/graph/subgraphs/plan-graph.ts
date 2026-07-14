@@ -163,7 +163,7 @@ function phase4Finalize(state: AgentState): Partial<AgentState> {
   };
 }
 
-function phase5Exit(state: AgentState): Partial<AgentState> {
+function phase5Exit(_state: AgentState): Partial<AgentState> {
   logger.info({ event: 'plan.phase5', phase: 'exit' });
   return {};
 }
@@ -239,11 +239,11 @@ export function createPlanSubgraph() {
 
   (graph as any).setEntryPoint('phase1');
 
-  graph.addEdge('phase1', 'phase2');
-  graph.addEdge('phase2', 'phase3');
-  graph.addEdge('phase3', 'phase4');
-  graph.addEdge('phase4', 'phase5');
-  graph.addEdge('phase5', END);
+  (graph as any).addEdge('phase1', 'phase2');
+  (graph as any).addEdge('phase2', 'phase3');
+  (graph as any).addEdge('phase3', 'phase4');
+  (graph as any).addEdge('phase4', 'phase5');
+  (graph as any).addEdge('phase5', END);
 
   return graph.compile();
 }

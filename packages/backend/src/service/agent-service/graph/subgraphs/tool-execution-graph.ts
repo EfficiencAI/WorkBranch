@@ -2,7 +2,7 @@ import { StateGraph, END } from '@langchain/langgraph';
 import { toolExecutor, checkPermission, type ToolExecutionContext } from '../../tools/executors';
 import type { ToolCall } from '../../state/agent-state';
 import type { ToolExecutionState } from '../../state/subgraph-states';
-import { isSpecialTool, writeToolEvent, FILE_TOOLS as REGISTRY_FILE_TOOLS, EXPLORE_TOOLS, WORKSPACE_TOOLS } from './tool-registry';
+import { isSpecialTool, writeToolEvent, EXPLORE_TOOLS } from './tool-registry';
 import { SegmentType } from '../../../session-service/canonical';
 import { logger } from '../../../../core/logging';
 import { workspaceService } from '../../service/workspace-service';
@@ -103,7 +103,7 @@ function denyExecutionNode(state: ToolExecutionState): Partial<ToolExecutionStat
   logger.error({ event: 'tool_execution.denied', tool_name: state.tool_name });
   return {
     error: state.error || 'Permission denied',
-    result: null,
+    result: '',
   } as Partial<ToolExecutionState>;
 }
 
@@ -159,7 +159,7 @@ function createExecuteNode(messageContext?: Record<string, unknown>) {
         if (!resolved.valid) {
           logger.error({ event: 'tool_execution.path_validate_failed', tool_name: toolName, error: resolved.error });
           return {
-            result: null,
+            result: '',
             error: resolved.error || '路径验证失败',
           } as Partial<ToolExecutionState>;
         }
@@ -215,7 +215,7 @@ function createToolExecutionGraph(messageContext?: Record<string, unknown>) {
   graph.addNode('execute', createExecuteNode(messageContext));
   graph.addNode('doom_loop_check', checkDoomLoop);
 
-  graph.setEntryPoint('check_permission');
+  (graph as any).setEntryPoint('check_permission');
 
   (graph as any).addConditionalEdges('check_permission', routeByPermission, {
     execute: 'execute',
@@ -223,10 +223,10 @@ function createToolExecutionGraph(messageContext?: Record<string, unknown>) {
     deny: 'deny',
   });
 
-  graph.addEdge('ask_user', 'execute');
-  graph.addEdge('execute', 'doom_loop_check');
-  graph.addEdge('doom_loop_check', END);
-  graph.addEdge('deny', END);
+  (graph as any).addEdge('ask_user', 'execute');
+  (graph as any).addEdge('execute', 'doom_loop_check');
+  (graph as any).addEdge('doom_loop_check', END);
+  (graph as any).addEdge('deny', END);
 
   return graph.compile();
 }
@@ -237,7 +237,7 @@ export async function runToolExecution(params: RunToolExecutionParams): Promise<
     toolArgs,
     workspaceId,
     conversationId,
-    messageId,
+    messageId: _messageId,
     agentType = 'build_agent',
     previousCalls = [],
     taskDescription = '',
@@ -262,7 +262,7 @@ export async function runToolExecution(params: RunToolExecutionParams): Promise<
     result: '',
     error: '',
     doom_loop_detected: false,
-    previous_calls: previousCalls,
+    previous_calls: previousCalls as unknown as Record<string, unknown>[],
     task_description: taskDescription,
     previous_results: previousResults,
     agent_type: agentType,

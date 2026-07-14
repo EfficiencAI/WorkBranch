@@ -193,7 +193,7 @@ const OrchestratorStateChannels = {
   current_conversation_messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
 };
 
-function createPlanNode(context: MessageContext, config: OrchestratorConfig) {
+function createPlanNode(context: MessageContext, _config: OrchestratorConfig) {
   return async (state: OrchestratorState): Promise<Partial<OrchestratorState>> => {
     const isReplan = state.plan_failed;
     const replanCount = state.replan_count;
@@ -233,7 +233,7 @@ function createPlanNode(context: MessageContext, config: OrchestratorConfig) {
   };
 }
 
-function createBuildNode(context: MessageContext, config: OrchestratorConfig) {
+function createBuildNode(context: MessageContext, _config: OrchestratorConfig) {
   return async (state: OrchestratorState): Promise<Partial<OrchestratorState>> => {
     context.cancel_check?.();
 
@@ -268,8 +268,8 @@ function createBuildNode(context: MessageContext, config: OrchestratorConfig) {
 }
 
 function createCompactionNode(config: OrchestratorConfig) {
-  return (state: OrchestratorState): Partial<OrchestratorState> => {
-    const compactionResult = runCompaction(state.messages, config.max_messages);
+  return async (state: OrchestratorState): Promise<Partial<OrchestratorState>> => {
+    const compactionResult = await runCompaction(state.messages, config.max_messages);
 
     persistence.save(state.workspace_id, { ...state, messages: compactionResult.messages });
 
@@ -313,7 +313,7 @@ function createOrchestratorGraph(context: MessageContext, config: OrchestratorCo
     done: END,
   });
 
-  graph.addEdge('compaction', 'build_flow');
+  (graph as any).addEdge('compaction', 'build_flow');
 
   return graph.compile();
 }

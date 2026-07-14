@@ -3,7 +3,6 @@ import type { AgentState, ToolCall } from '../state/agent-state';
 import type { MessageContext } from './director-agent/director-agent';
 import { createOrchestratorGraphV3, getLastUserMessageText } from './director-agent/director-agent';
 import { runToolExecution } from './subgraphs/tool-execution-graph';
-import { SegmentType } from '../../session-service/canonical';
 import { persistence } from './orchestrator-v2';
 import { logger } from '../../../core/logging';
 
@@ -333,7 +332,7 @@ export async function runAgentGraph(
     }
 
     const graph = createAgentGraph(agentType, messageContext);
-    const finalState = await graph.invoke(initialState as Record<string, unknown>) as AgentState;
+    const finalState = await graph.invoke(initialState as unknown as Record<string, unknown>) as AgentState;
 
     if (persistState) {
       persistence.save(workspaceId, finalState as unknown as Record<string, unknown>);

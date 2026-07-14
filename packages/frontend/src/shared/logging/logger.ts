@@ -9,6 +9,7 @@ type FrontendLogEvent =
   | 'send_message'
   | 'stream_completed'
   | 'stream_failed'
+  | 'unlock_send_target'
   | 'client.restored'
   | 'workspace.loaded'
   | 'auto_arrange_conversations'
@@ -28,6 +29,7 @@ const ALLOWED_EVENTS = new Set<FrontendLogEvent>([
   'send_message',
   'stream_completed',
   'stream_failed',
+  'unlock_send_target',
   'client.restored',
   'workspace.loaded',
   'auto_arrange_conversations',

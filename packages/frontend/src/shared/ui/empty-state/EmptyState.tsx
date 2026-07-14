@@ -1,4 +1,4 @@
-import { Button, Empty, Space, Typography } from 'antd'
+import { Empty, Space, Typography } from 'antd'
 import type { ReactNode } from 'react'
 
 type EmptyStateProps = {

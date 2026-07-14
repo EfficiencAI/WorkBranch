@@ -129,16 +129,16 @@ export function createCompactionSubgraph() {
     skip: 'skip',
   });
 
-  graph.addEdge('compress', END);
-  graph.addEdge('skip', END);
+  (graph as any).addEdge('compress', END);
+  (graph as any).addEdge('skip', END);
 
   return graph.compile();
 }
 
-export function runCompaction(
+export async function runCompaction(
   messages: unknown[],
   maxMessages: number = 10,
-): { messages: unknown[]; compressed: boolean; summary: string } {
+): Promise<{ messages: unknown[]; compressed: boolean; summary: string }> {
   logger.info({ event: 'compaction.run', message_count: messages.length, max_messages: maxMessages });
 
   const initialState: CompactionState = {
@@ -149,7 +149,7 @@ export function runCompaction(
   };
 
   const graph = createCompactionSubgraph();
-  const result = graph.invoke(initialState as Record<string, unknown>) as CompactionState;
+  const result = await graph.invoke(initialState as unknown as Record<string, unknown>) as CompactionState;
 
   return {
     messages: result.messages,
