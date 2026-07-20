@@ -103,6 +103,26 @@ const DEFAULT_SETTINGS_METADATA: Record<string, unknown> = {
   },
 };
 
+function isSettingsObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function mergeSettingsUpdates(
+  current: Record<string, unknown>,
+  updates: Record<string, unknown>
+): Record<string, unknown> {
+  const merged = { ...current };
+
+  for (const [key, updateValue] of Object.entries(updates)) {
+    const currentValue = current[key];
+    merged[key] = isSettingsObject(currentValue) && isSettingsObject(updateValue)
+      ? mergeSettingsUpdates(currentValue, updateValue)
+      : updateValue;
+  }
+
+  return merged;
+}
+
 function mergeMissingDefaults(defaults: Record<string, unknown>, current: Record<string, unknown>): [Record<string, unknown>, boolean] {
   if (typeof defaults !== 'object' || defaults === null) {
     return [current, false];
@@ -186,7 +206,7 @@ export class SettingsService {
   }
 
   updateSettings(updates: Record<string, unknown>): boolean {
-    Object.assign(this.data, updates);
+    this.data = mergeSettingsUpdates(this.data, updates);
     this.persist();
     return true;
   }

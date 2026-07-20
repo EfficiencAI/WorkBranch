@@ -24,6 +24,8 @@ packages/backend/data/*
 logs/
 .test/
 tests/
+!packages/backend/tests/
+!packages/backend/tests/**/*.test.ts
 dist/
 *.tsbuildinfo
 
