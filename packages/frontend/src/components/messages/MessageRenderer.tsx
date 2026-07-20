@@ -1,9 +1,8 @@
 import React from 'react';
-import type { ContentBlock } from '@workbranch/shared';
+import { SegmentType, type ContentBlock } from '@workbranch/shared';
 import type { MergedSegment } from './types';
 import { MergedSegmentType } from './types';
 import { mergeSegments } from './SegmentMerger';
-import { toXml, validateXmlStructure } from './XmlConverter';
 
 interface MessageRendererProps {
   content: string;
@@ -11,74 +10,100 @@ interface MessageRendererProps {
 }
 
 function parseContentBlocks(rawContent: string): ContentBlock[] {
-  if (!rawContent || !rawContent.trim()) {
-    return [];
-  }
-  
+  if (!rawContent || !rawContent.trim()) return [];
+
   try {
     const blocks = JSON.parse(rawContent) as ContentBlock[];
-    if (Array.isArray(blocks) && blocks.length > 0) {
-      return blocks;
-    }
-
-    // JSON 解析成功但格式不符合预期（空数组或非数组）
-    console.warn(
-      `[MessageRenderer] assistantContent 解析为非标准格式，预期 ContentBlock[] 数组。` +
-      `实际类型: ${typeof blocks}, 长度: ${Array.isArray(blocks) ? blocks.length : 'N/A'}。` +
-      `内容预览: ${rawContent.substring(0, 100)}...`
-    );
-  } catch (e) {
-    // JSON 解析失败：说明是纯文本格式而非 JSON 数组
-    // 使用 text_delta 类型包装以确保能被 mergeSegments 正确处理
-    console.warn(
-      `[MessageRenderer] assistantContent 为纯文本格式（非 JSON ContentBlock[]），` +
-      `已自动降级为 text_delta 包装。` +
-      `如需消除此警告，请确保后端存储的 assistant_content 为 JSON 格式。` +
-      `\n内容预览: ${rawContent.substring(0, 80)}`
-    );
-    
-    return [{ type: 'text_delta' as any, content: rawContent }];
+    if (Array.isArray(blocks)) return blocks;
+  } catch {
+    return [{ type: SegmentType.TEXT_DELTA, content: rawContent }];
   }
-  
-  return [];
+
+  return [{ type: SegmentType.TEXT_DELTA, content: rawContent }];
 }
 
-function extractTextContent(segments: MergedSegment[]): string {
-  return segments
-    .filter(seg => seg.type === MergedSegmentType.TEXT || seg.type === MergedSegmentType.PLAN)
-    .map(seg => seg.content)
-    .join('');
+function getWorkflowLabel(type: MergedSegmentType): string {
+  if (type === MergedSegmentType.STATE_CHANGE) return '步骤状态';
+  if (type === MergedSegmentType.THINKING) return '工作判断';
+  if (type === MergedSegmentType.TOOL_CALL) return '工具调用';
+  if (type === MergedSegmentType.TOOL_RES) return '工具结果';
+  if (type === MergedSegmentType.ERROR) return '执行错误';
+  return '执行过程';
 }
 
-/**
- * Phase 1: 将 assistantContent 包装为 XML 并在界面上直接展示，
- * 用于验证 XML 结构是否正确。
- * Phase 2 将在此基础上替换 pre 块为各策略组件的可视化渲染。
- */
+function getWorkflowTone(type: MergedSegmentType): string {
+  if (type === MergedSegmentType.TOOL_CALL) return 'tool-call';
+  if (type === MergedSegmentType.TOOL_RES) return 'tool-result';
+  if (type === MergedSegmentType.ERROR) return 'error';
+  if (type === MergedSegmentType.THINKING) return 'thinking';
+  return 'state';
+}
+
+function WorkflowItem({ segment }: { segment: MergedSegment }) {
+  const stepNumber = segment.meta.step_number;
+  const toolName = segment.meta.tool_name;
+  const metaLabel = [
+    typeof stepNumber === 'number' ? `Step ${stepNumber}` : null,
+    typeof toolName === 'string' ? toolName : null,
+  ].filter(Boolean).join(' · ');
+
+  const preserveFormatting =
+    segment.type === MergedSegmentType.TOOL_CALL || segment.type === MergedSegmentType.TOOL_RES;
+
+  return (
+    <div className={`agent-workflow__item agent-workflow__item--${getWorkflowTone(segment.type)}`}>
+      <div className="agent-workflow__item-header">
+        <span className="agent-workflow__item-label">{getWorkflowLabel(segment.type)}</span>
+        {metaLabel ? <span className="agent-workflow__item-meta">{metaLabel}</span> : null}
+      </div>
+      {segment.content ? (
+        preserveFormatting
+          ? <pre className="agent-workflow__item-content agent-workflow__item-content--code">{segment.content}</pre>
+          : <div className="agent-workflow__item-content">{segment.content}</div>
+      ) : null}
+    </div>
+  );
+}
+
 export const MessageRenderer: React.FC<MessageRendererProps> = ({ content, messageId }) => {
   const blocks = parseContentBlocks(content);
   const segments = mergeSegments(blocks, messageId);
-  const textContent = extractTextContent(segments);
+  const workflowSegments = segments.filter((segment) =>
+    segment.type !== MergedSegmentType.TEXT &&
+    segment.type !== MergedSegmentType.PLAN &&
+    segment.type !== MergedSegmentType.DONE
+  );
+  const responseSegments = segments.filter((segment) =>
+    segment.type === MergedSegmentType.TEXT || segment.type === MergedSegmentType.PLAN
+  );
 
-  if (!textContent) {
-    // 静默兜底点：所有 segment 都被过滤或合并后无文本内容
-    if (content && content.trim()) {
-      console.warn(
-        `[MessageRenderer] 消息 ${messageId} 有原始内容但渲染结果为空。` +
-        `\n原始内容长度: ${content.length}, 解析块数: ${blocks.length}, 合并段数: ${segments.length}` +
-        `\n原始内容预览: ${content.substring(0, 100)}`
-      );
-    }
-    return null;
-  }
-
-  const xml = toXml(segments);
-  const { valid, errors } = validateXmlStructure(xml);
+  if (segments.length === 0) return null;
 
   return (
-    <>
-      {valid ? xml : '[XML 结构错误] ' + errors.join(', ') + '\n\n' + xml}
-    </>
+    <div className="agent-message">
+      {workflowSegments.length > 0 ? (
+        <details className="agent-workflow" open>
+          <summary className="agent-workflow__summary">
+            Agent 执行过程 <span>{workflowSegments.length} 项</span>
+          </summary>
+          <div className="agent-workflow__items">
+            {workflowSegments.map((segment, index) => (
+              <WorkflowItem key={`${segment.type}-${index}`} segment={segment} />
+            ))}
+          </div>
+        </details>
+      ) : null}
+
+      {responseSegments.length > 0 ? (
+        <div className="agent-response">
+          {responseSegments.map((segment, index) => (
+            <div className="agent-response__text" key={`${segment.type}-${index}`}>
+              {segment.content}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
   );
 };
 

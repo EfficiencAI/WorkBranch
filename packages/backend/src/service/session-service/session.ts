@@ -377,6 +377,7 @@ export class SessionService {
       user_content: msg.user_content,
       assistant_content: msg.assistant_content,
       thinking_content: msg.thinking_content,
+      content_blocks: msg.content_blocks,
       status: msg.status,
       created_at: msg.created_at,
       updated_at: msg.updated_at,

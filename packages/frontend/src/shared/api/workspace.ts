@@ -69,7 +69,9 @@ function toMessageNode(payload: Record<string, unknown>): MessageNode {
     id: String(payload.id ?? ''),
     conversationId: String(payload.conversation_id ?? ''),
     userContent: String(payload.user_content ?? ''),
-    assistantContent: String(payload.assistant_content ?? ''),
+    assistantContent: payload.content_blocks
+      ? String(payload.content_blocks)
+      : String(payload.assistant_content ?? ''),
     status: (payload.status as MessageNode['status']) ?? 'completed',
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,

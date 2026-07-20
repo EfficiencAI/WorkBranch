@@ -1,5 +1,5 @@
 import { conversationDAO } from '../../data';
-import { SegmentType } from './canonical';
+import { SegmentType, type ContentBlock } from './canonical';
 
 interface DraftMessage {
   id: string;
@@ -8,6 +8,7 @@ interface DraftMessage {
   user_content: string;
   assistant_content: string | null;
   thinking_content: string | null;
+  content_blocks: ContentBlock[];
   status: string;
   created_at: string;
 }
@@ -28,6 +29,7 @@ class ConversationBuffer {
       user_content: userContent,
       assistant_content: null,
       thinking_content: null,
+      content_blocks: [],
       status: 'streaming',
       created_at: new Date().toISOString(),
     };
@@ -63,7 +65,8 @@ class ConversationBuffer {
       messageId,
       draft.assistant_content || '',
       'completed',
-      draft.thinking_content ?? null
+      draft.thinking_content ?? null,
+      JSON.stringify(draft.content_blocks)
     );
 
     this.drafts.delete(messageId);
@@ -73,7 +76,13 @@ class ConversationBuffer {
     const draft = this.drafts.get(messageId);
     if (!draft) return;
 
-    conversationDAO.updateMessageStatus(messageId, 'failed');
+    conversationDAO.updateMessageAssistant(
+      messageId,
+      draft.assistant_content || '',
+      'failed',
+      draft.thinking_content ?? null,
+      JSON.stringify(draft.content_blocks)
+    );
     this.drafts.delete(messageId);
   }
 
@@ -87,6 +96,11 @@ class ConversationBuffer {
 
     for (const block of message.content_blocks) {
       const t = block.type as SegmentType;
+      draft.content_blocks.push({
+        type: block.type,
+        content: block.content,
+        metadata: { ...block.metadata },
+      });
       // Agent uses CHAT_DELTA for streaming text; also handle TEXT_DELTA/THINKING_DELTA
       if (t === SegmentType.TEXT_DELTA || t === SegmentType.CHAT_DELTA) {
         draft.assistant_content = (draft.assistant_content || '') + block.content;

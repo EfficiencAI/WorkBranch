@@ -32,6 +32,7 @@ export interface Message {
   user_content: string;
   assistant_content: string | null;
   thinking_content: string | null;
+  content_blocks: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -257,14 +258,15 @@ export class ConversationDAO {
     messageId: string,
     assistantContent: string,
     status: string = 'completed',
-    thinkingContent: string | null = null
+    thinkingContent: string | null = null,
+    contentBlocks: string | null = null
   ): void {
     const stmt = db.prepare(`
       UPDATE messages
-      SET assistant_content = ?, thinking_content = ?, status = ?, updated_at = CURRENT_TIMESTAMP
+      SET assistant_content = ?, thinking_content = ?, content_blocks = ?, status = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `);
-    stmt.run(assistantContent, thinkingContent, status, messageId);
+    stmt.run(assistantContent, thinkingContent, contentBlocks, status, messageId);
 
     const row = db.prepare('SELECT session_id, conversation_id FROM messages WHERE id = ?').get(messageId) as { session_id: number; conversation_id: string } | undefined;
     if (row) {
@@ -286,7 +288,7 @@ export class ConversationDAO {
 
   getMessageById(messageId: string): Message | null {
     const stmt = db.prepare(`
-      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
+      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, content_blocks, status, created_at, updated_at
       FROM messages
       WHERE id = ?
     `);
@@ -296,7 +298,7 @@ export class ConversationDAO {
 
   getMessagesByConversation(conversationId: string): Message[] {
     const stmt = db.prepare(`
-      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
+      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, content_blocks, status, created_at, updated_at
       FROM messages
       WHERE conversation_id = ?
       ORDER BY created_at ASC, id ASC
@@ -307,7 +309,7 @@ export class ConversationDAO {
 
   getMessagesBySession(sessionId: number): Message[] {
     const stmt = db.prepare(`
-      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, status, created_at, updated_at
+      SELECT id, conversation_id, session_id, user_content, assistant_content, thinking_content, content_blocks, status, created_at, updated_at
       FROM messages
       WHERE session_id = ?
       ORDER BY created_at ASC
@@ -455,6 +457,7 @@ export class ConversationDAO {
       user_content: row.user_content,
       assistant_content: row.assistant_content,
       thinking_content: row.thinking_content,
+      content_blocks: row.content_blocks,
       status: row.status,
       created_at: row.created_at,
       updated_at: row.updated_at,

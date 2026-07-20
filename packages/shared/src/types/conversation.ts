@@ -45,6 +45,7 @@ export interface ConversationMessage {
   user_content: string;
   assistant_content: string | null;
   thinking_content: string | null;
+  content_blocks: string | null;
   status: string;
   created_at: string;
   updated_at: string;

@@ -281,9 +281,11 @@ class HybridMessageQueue {
 
     if (this.isErrorMessage(message)) {
       this.logEvent('INFO', 'mq.buffer.route_error', `Routing ERROR for mid=${mid}`, message.conversation_id);
-      conversationBuffer.failMessage(mid).catch(err =>
-        this.logEvent('ERROR', 'mq.buffer.fail_failed', `failMessage error: ${err}`, message.conversation_id)
-      );
+      conversationBuffer.consumeMessage(message)
+        .then(() => conversationBuffer.failMessage(mid))
+        .catch(err =>
+          this.logEvent('ERROR', 'mq.buffer.fail_failed', `failMessage error: ${err}`, message.conversation_id)
+        );
       return;
     }
 

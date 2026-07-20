@@ -147,11 +147,11 @@ function renderMessageList(
                         <Typography.Text strong>助手</Typography.Text>
                         <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text>
                       </Space>
-                      <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
+                      <div className="conversation-node__message-text">
                         <MessageRenderer content={message.assistantContent} messageId={message.id} />
                         {message.status === 'streaming' && <span className="streaming-indicator">▊</span>}
                         {message.status === 'error' && <Typography.Text type="danger"> [发送失败: {message.assistantContent || '未知错误'}]</Typography.Text>}
-                      </Typography.Paragraph>
+                      </div>
                     </Space>
                   </Card>
                 ) : null}

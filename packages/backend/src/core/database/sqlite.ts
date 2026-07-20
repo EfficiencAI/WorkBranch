@@ -36,6 +36,7 @@ export interface MessageRow {
   user_content: string;
   assistant_content: string | null;
   thinking_content: string | null;
+  content_blocks: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -359,6 +360,7 @@ export class SQLiteDatabase {
         user_content TEXT NOT NULL,
         assistant_content TEXT,
         thinking_content TEXT,
+        content_blocks TEXT,
         status TEXT DEFAULT 'streaming',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -382,6 +384,7 @@ export class SQLiteDatabase {
     logger.info('Database tables created');
 
     this.migrateAddWorkspaceId();
+    this.migrateAddMessageContentBlocks();
 
     this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)').run(1, 'Default User');
   }
@@ -391,7 +394,7 @@ export class SQLiteDatabase {
 
     try {
       const columns = this.db.pragma('table_info(sessions)');
-      const hasWorkspaceId = columns.some((col: any) => col.name === 'workspace_id');
+      const hasWorkspaceId = this.hasTableColumn(columns, 'workspace_id');
 
       if (!hasWorkspaceId) {
         this.db.exec('ALTER TABLE sessions ADD COLUMN workspace_id TEXT');
@@ -404,6 +407,29 @@ export class SQLiteDatabase {
       // 列已存在时 sql.js 会抛错，忽略即可（幂等迁移）
       logger.warn(`migrateAddWorkspaceId skipped: ${e instanceof Error ? e.message : e}`);
     }
+  }
+
+  private migrateAddMessageContentBlocks(): void {
+    if (!this.db) return;
+
+    try {
+      const columns = this.db.pragma('table_info(messages)');
+      if (!this.hasTableColumn(columns, 'content_blocks')) {
+        this.db.exec('ALTER TABLE messages ADD COLUMN content_blocks TEXT');
+        logger.info('Migrated messages table: added content_blocks column');
+      }
+    } catch (e) {
+      logger.warn(`migrateAddMessageContentBlocks failed: ${e instanceof Error ? e.message : e}`);
+      throw e;
+    }
+  }
+
+  private hasTableColumn(columns: unknown[], columnName: string): boolean {
+    return columns.some((column) => {
+      if (Array.isArray(column)) return column[1] === columnName;
+      return typeof column === 'object' && column !== null &&
+        (column as Record<string, unknown>).name === columnName;
+    });
   }
 
   prepare(sql: string): PreparedStatement {
