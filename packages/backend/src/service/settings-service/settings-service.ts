@@ -26,9 +26,22 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     max_size: 1000,
   },
   agent: {
-    default_agent: 'builtin',
+    default_agent: 'trae',
     memory_mode: 'accumulate',
     memory_window_size: 3,
+  },
+  trae_cli: {
+    executable: 'trae-cli',
+    provider: 'openai',
+    max_steps: 200,
+    tools: [
+      'bash',
+      'str_replace_based_edit_tool',
+      'sequentialthinking',
+      'task_done',
+    ],
+    show_workflow: true,
+    trajectory_retention: 'all',
   },
   conversation: {
     single_message_per_node: true,

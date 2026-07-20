@@ -127,7 +127,7 @@ export class AgentService {
     parentChainMessages?: Array<Record<string, unknown>>,
     currentConversationMessages?: Array<Record<string, unknown>>,
     handoffMetadata?: Record<string, unknown>,
-    agentId: AgentId = 'builtin',
+    agentId?: AgentId,
     writeConfirmed: boolean = false,
   ): Promise<void> {
     this.initialize();
@@ -267,7 +267,7 @@ export class AgentService {
     userMessage: string,
     parentChainMessages?: Array<Record<string, unknown>>,
     currentConversationMessages?: Array<Record<string, unknown>>,
-    agentId: AgentId = 'builtin',
+    agentId?: AgentId,
     writeConfirmed: boolean = false,
   ): Promise<void> {
     if (!this.conversations.has(conversationId)) {

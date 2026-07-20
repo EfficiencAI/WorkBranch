@@ -79,7 +79,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
-  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('builtin')
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('trae')
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true

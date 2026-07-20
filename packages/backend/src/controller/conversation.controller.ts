@@ -104,7 +104,7 @@ export class ConversationController {
 
     let result;
     try {
-      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id || 'builtin', write_confirmed === true);
+      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id, write_confirmed === true);
     } catch (err) {
       const errorMessage = String(err);
       unsubscribe();

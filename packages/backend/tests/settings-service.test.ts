@@ -39,6 +39,8 @@ describe('SettingsService partial updates', () => {
     expect(service.get('llm:temperature')).toBe(0.7);
     expect(service.get('llm:max_tokens')).toBe(4096);
     expect(service.get('ui:theme_mode')).toBe('system');
+    expect(service.get('agent:default_agent')).toBe('trae');
+    expect(service.get('trae_cli:max_steps')).toBe(200);
     expect(storage.data).toEqual(service.getAll());
   });
 

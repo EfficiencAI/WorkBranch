@@ -129,7 +129,7 @@ export class SessionService {
     conversationId: string,
     message: string,
     enableContext: boolean = false,
-    agentId: AgentId = 'builtin',
+    agentId?: AgentId,
     writeConfirmed: boolean = false,
   ): Promise<{ message_id: string; conversation_id: string; session_id: number }> {
     let convInfo = this.conversations.get(conversationId);

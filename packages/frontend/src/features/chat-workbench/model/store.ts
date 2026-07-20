@@ -405,7 +405,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           conversation_id: conversationId,
           message_length: messageText.length,
           enable_context: enableContext,
-          agent_id: options.agentId ?? 'builtin',
+          agent_id: options.agentId ?? 'trae',
           last_seq: lastSeq,
         },
       })
@@ -415,7 +415,7 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         {
           message: messageText,
           enable_context: enableContext,
-          agent_id: options.agentId ?? 'builtin',
+          agent_id: options.agentId ?? 'trae',
           write_confirmed: options.writeConfirmed === true,
           last_seq: lastSeq,
         },
