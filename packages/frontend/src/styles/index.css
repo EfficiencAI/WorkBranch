@@ -789,6 +789,10 @@ button {
   background: rgba(15, 23, 42, 0.48);
 }
 
+:root[data-theme='light'] .conversation-node__message-card {
+  background: var(--app-card-bg);
+}
+
 .conversation-node__message-text {
   font-size: var(--app-font-size-xs);
   line-height: 1.4;
@@ -1005,6 +1009,31 @@ button {
   background: var(--app-bg-soft);
   border-color: var(--app-primary);
   color: var(--app-primary);
+}
+
+.message-composer__agent-select.ant-select {
+  justify-content: center;
+  padding-inline: 10px;
+  border-radius: 32px;
+  background: transparent;
+  border-color: var(--app-border);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+
+.message-composer--focused .message-composer__agent-select .ant-select-content {
+  font-size: inherit;
+  line-height: 1;
+}
+
+.message-composer--focused .message-composer__agent-select .ant-select-suffix {
+  font-size: 0.9em;
+}
+
+.message-composer__agent-select.ant-select:hover,
+.message-composer__agent-select.ant-select-focused,
+.message-composer__agent-select.ant-select-open {
+  background: var(--app-hover-bg);
+  border-color: var(--app-border-strong);
 }
 
 .message-composer__tool-btn--active {
@@ -1833,6 +1862,10 @@ button {
   }
 
   .ant-btn {
+    min-height: 44px;
+  }
+
+  .message-composer__agent-select.ant-select {
     min-height: 44px;
   }
 

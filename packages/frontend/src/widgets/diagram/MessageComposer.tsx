@@ -1,5 +1,5 @@
 import { Button, Checkbox, Input, Select, Space, Typography } from 'antd'
-import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined } from '@ant-design/icons'
+import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
@@ -106,10 +106,13 @@ export function MessageComposer({
 
   const agentSelect = (
     <Select<AgentId>
+      className="message-composer__agent-select"
       size="small"
       value={selectedAgentId}
       onChange={onAgentChange}
-      style={{ minWidth: 112 }}
+      style={hasSendTarget ? btnStyle : { minWidth: 112 }}
+      suffixIcon={<SwapOutlined />}
+      labelRender={() => (selectedAgentId === 'builtin' ? '默认' : 'Trae')}
       options={[
         { value: 'builtin', label: 'Default' },
         { value: 'trae', label: 'Trae CLI' },
