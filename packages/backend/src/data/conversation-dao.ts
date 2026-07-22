@@ -378,8 +378,9 @@ export class ConversationDAO {
 
   getParentChainConversationIds(conversationId: string): string[] {
     const chain: string[] = [];
-    let currentId: string | null = conversationId;
-    const visited = new Set<string>();
+    const conversation = this.getConversationById(conversationId);
+    let currentId = conversation?.parent_conversation_id ?? null;
+    const visited = new Set<string>([conversationId]);
 
     while (currentId && !visited.has(currentId)) {
       visited.add(currentId);
@@ -389,7 +390,7 @@ export class ConversationDAO {
       currentId = conv.parent_conversation_id;
     }
 
-    return chain;
+    return chain.reverse();
   }
 
   getParentChainMessages(conversationId: string): Message[] {
@@ -402,7 +403,6 @@ export class ConversationDAO {
       allMessages.push(...messages);
     }
 
-    allMessages.sort((a, b) => a.created_at.localeCompare(b.created_at));
     return allMessages;
   }
 

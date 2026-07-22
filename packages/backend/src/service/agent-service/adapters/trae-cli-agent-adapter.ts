@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import assert from 'node:assert/strict';
 import * as path from 'path';
 import { logger } from '../../../core/logging';
 import { SegmentType } from '../../session-service/canonical';
@@ -22,19 +23,19 @@ function formatMessages(title: string, messages: Array<Record<string, unknown>>)
   }
 
   const lines = messages.map((message, index) => {
-    const user = String(message.user_content ?? message.userContent ?? '');
-    const assistant = String(message.assistant_content ?? message.assistantContent ?? '');
-    return [
-      `#${index + 1}`,
-      user ? `User: ${user}` : null,
-      assistant ? `Assistant: ${assistant}` : null,
-    ].filter(Boolean).join('\n');
+    assert(
+      message.role === 'user' || message.role === 'assistant',
+      'Agent context message role is invalid',
+    );
+    assert(typeof message.content === 'string', 'Agent context message content must be a string');
+    const role = message.role === 'user' ? 'User' : 'Assistant';
+    return `#${index + 1}\n${role}: ${message.content}`;
   });
 
   return `${title}\n${lines.join('\n\n')}`;
 }
 
-function buildPrompt(context: AgentAdapterContext): string {
+export function buildTraePrompt(context: AgentAdapterContext): string {
   return [
     '你正在 WorkBranch 树形对话软件中执行任务。',
     '请根据上下文完成当前用户任务；如需修改文件，只能在指定 working directory 内操作。',
@@ -111,7 +112,7 @@ export class TraeCliAgentAdapter implements AgentAdapter {
 
   async run(context: AgentAdapterContext): Promise<AgentOutcome> {
     const runtime = getRuntimeSettings();
-    const prompt = buildPrompt(context);
+    const prompt = buildTraePrompt(context);
     const { configFile, trajectoryDir } = writeTraeConfig(context.workspaceDir, runtime);
     const trajectoryFile = path.join(trajectoryDir, `${context.messageId}.json`);
 

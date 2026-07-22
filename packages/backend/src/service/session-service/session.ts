@@ -4,6 +4,7 @@ import { agentService } from '../agent-service/agent';
 import type { AgentId } from '../agent-service/adapters';
 import { workspaceService } from '../agent-service/service/workspace-service';
 import { logger } from '../../core/logging';
+import { assertContextMessagesDisjoint, toAgentContextMessages } from './agent-context';
 
 export enum ConversationState {
   PENDING = 'pending',
@@ -157,8 +158,15 @@ export class SessionService {
     }
 
     const messageId = this.generateMessageId(conversationId);
-    const parentChainMessages = enableContext ? await this.getParentChainMessages(conversationId) : [];
-    const currentConversationMessages = enableContext ? await this.getConversationMessages(conversationId) : [];
+    const storedParentChainMessages = enableContext
+      ? conversationDAO.getParentChainMessages(conversationId)
+      : [];
+    const storedCurrentConversationMessages = enableContext
+      ? conversationDAO.getMessagesByConversation(conversationId)
+      : [];
+    assertContextMessagesDisjoint(storedParentChainMessages, storedCurrentConversationMessages);
+    const parentChainMessages = toAgentContextMessages(storedParentChainMessages);
+    const currentConversationMessages = toAgentContextMessages(storedCurrentConversationMessages);
 
     await conversationBuffer.createMessage(messageId, conversationId, convInfo.session_id, message);
 
