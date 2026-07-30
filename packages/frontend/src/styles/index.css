@@ -2231,6 +2231,7 @@ button {
 .flow-section__messages-list-inner .conversation-node__message-card--user {
   margin-left: auto;
   max-width: 80%;
+  text-align: right;
 }
 
 /* 非活跃节点的消息加载中 */
