@@ -1,7 +1,8 @@
 import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Spin, Space, Typography } from 'antd'
+import { Button, Card, Spin, Space, Typography, Tooltip } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
 import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
@@ -114,6 +115,7 @@ function renderMessageList(
   messagesError: string | null,
   conversationError: string | null,
   messagesClassName = 'conversation-node__messages',
+  showTime = true,
 ) {
   return (
     <>
@@ -132,7 +134,7 @@ function renderMessageList(
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                         <Typography.Text strong>用户</Typography.Text>
-                        <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text>
+                        {showTime ? <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text> : null}
                       </Space>
                       <Typography.Paragraph className="conversation-node__message-text" style={{ marginBottom: 0 }}>
                         {message.userContent}
@@ -145,7 +147,7 @@ function renderMessageList(
                     <Space direction="vertical" size={4} style={{ width: '100%' }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                         <Typography.Text strong>助手</Typography.Text>
-                        <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text>
+                        {showTime ? <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text> : null}
                       </Space>
                       <div className="conversation-node__message-text">
                         <MessageRenderer content={message.assistantContent} messageId={message.id} />
@@ -856,23 +858,8 @@ function FocusView({
                   data-node-id={pathItem.conversationId}
                   id={`flow-section-${pathItem.conversationId}`}
                 >
-                  {/* 节点标题头 */}
-                  <div className="flow-section__header">
-                    {index > 0 && <div className="flow-separator">↓</div>}
-                    <Space direction="vertical" size={2}>
-                      <Space align="center" size={9} wrap>
-                        <Typography.Text strong style={{ fontSize: 14 }}>
-                          {summarizeConversation(node)}
-                        </Typography.Text>
-                        {isActive && <span className="active-indicator-dot" />}
-                      </Space>
-                      <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-                        {node.conversationId}
-                        {index + 1 < navState.path.length && ` → 第 ${index + 1}/${navState.path.length} 层`}
-                        {nodeMessages.length > 0 && ` · ${nodeMessages.length} 条消息`}
-                      </Typography.Text>
-                    </Space>
-                  </div>
+                  {/* 分隔线（非首节点） */}
+                  {index > 0 && <div className="flow-separator">↓</div>}
 
                   {/* 所有节点都显示完整消息列表 */}
                   {isNodeLoading ? (
@@ -883,8 +870,30 @@ function FocusView({
                       </Typography.Text>
                     </div>
                   ) : nodeMessages.length > 0 ? (
-                    <div className="flow-section__messages">
-                      {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list')}
+                    <div className={`flow-section__messages ${isActive ? 'flow-section__messages--active' : ''}`}>
+                      <div className="flow-section__messages-list">
+                        <Tooltip
+                          title={
+                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>标题</span><span style={{ textAlign: 'right' }}>{summarizeConversation(node)}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>对话 ID</span><span style={{ fontFamily: 'monospace', textAlign: 'right' }}>{node.conversationId}</span></div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>消息数</span><span style={{ textAlign: 'right' }}>{nodeMessages.length} 条</span></div>
+                              {index + 1 < navState.path.length && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>层级</span><span style={{ textAlign: 'right' }}>第 {index + 1} / {navState.path.length} 层</span></div>}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>状态</span><span style={{ textAlign: 'right' }}>{node.state}</span></div>
+                              {node.createdAt && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>创建时间</span><span style={{ textAlign: 'right' }}>{node.createdAt}</span></div>}
+                              {node.updatedAt && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>更新时间</span><span style={{ textAlign: 'right' }}>{node.updatedAt}</span></div>}
+                            </Space>
+                          }
+                          placement="topRight"
+                          overlayStyle={{ maxWidth: 320 }}
+                          color="rgba(17, 24, 39, 0.95)"
+                        >
+                          <span className="flow-section__info-icon">
+                            <InfoCircleOutlined />
+                          </span>
+                        </Tooltip>
+                        {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list-inner', false)}
+                      </div>
                     </div>
                   ) : (
                     <div className="flow-section__empty-messages">
