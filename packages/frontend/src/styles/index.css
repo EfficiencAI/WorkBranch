@@ -2227,13 +2227,6 @@ button {
   border-bottom: none;
 }
 
-/* 用户消息右对齐，模拟聊天界面 */
-.flow-section__messages-list-inner .conversation-node__message-card--user {
-  margin-left: auto;
-  max-width: 80%;
-  text-align: right;
-}
-
 /* 非活跃节点的消息加载中 */
 .flow-section__loading {
   display: flex;
