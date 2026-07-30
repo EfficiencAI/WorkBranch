@@ -2182,27 +2182,15 @@ button {
   margin: 0 auto;
 }
 
-/* 活跃节点：内容框为白色面板 + 淡绿色呼吸光晕 */
+/* 活跃节点：内容框为白色面板 + 淡绿色静态光晕 */
 .flow-section__messages--active {
   position: relative;
   padding: 8px;
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid rgba(34, 197, 94, 0.35);
-  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2),
-              0 0 20px rgba(34, 197, 94, 0.15);
-  animation: flow-content-glow 3s ease-in-out infinite;
-}
-
-@keyframes flow-content-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.2),
-                0 0 20px rgba(34, 197, 94, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.35),
-                0 0 28px rgba(34, 197, 94, 0.22);
-  }
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.25),
+              0 0 20px rgba(34, 197, 94, 0.18);
 }
 
 /* 元数据信息图标：内容框内部右上角 */
