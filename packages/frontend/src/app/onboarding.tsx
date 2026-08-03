@@ -44,12 +44,11 @@ export function OnboardingProvider({ children }: PropsWithChildren) {
   const { settings, loading } = useSettings()
   const [forcedVisible, setForcedVisible] = useState(false)
   const [step, setStep] = useState<OnboardingStep>('api_key')
-
-  const completed = getStorageBool(ONBOARDING_COMPLETED_KEY, false)
-  const skipped = getStorageBool(ONBOARDING_SKIPPED_KEY, false)
+  const [completed, setCompleted] = useState(() => getStorageBool(ONBOARDING_COMPLETED_KEY, false))
+  const [skipped, setSkipped] = useState(() => getStorageBool(ONBOARDING_SKIPPED_KEY, false))
   const configured = isLlmConfigured(settings)
 
-  const shouldShow = !loading && !completed && (!configured || skipped)
+  const shouldShow = !loading && !completed && !skipped && !configured
   const visible = forcedVisible || shouldShow
 
   const showOnboarding = useCallback(() => setForcedVisible(true), [])
@@ -58,11 +57,14 @@ export function OnboardingProvider({ children }: PropsWithChildren) {
   const completeOnboarding = useCallback(() => {
     localStorage.setItem(ONBOARDING_COMPLETED_KEY, 'true')
     localStorage.removeItem(ONBOARDING_SKIPPED_KEY)
+    setCompleted(true)
+    setSkipped(false)
     hideForced()
   }, [hideForced])
 
   const skipOnboarding = useCallback(() => {
     localStorage.setItem(ONBOARDING_SKIPPED_KEY, 'true')
+    setSkipped(true)
     hideForced()
   }, [hideForced])
 
