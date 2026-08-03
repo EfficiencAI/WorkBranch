@@ -11,6 +11,7 @@
     "clean": "Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue"
   },
   "dependencies": {
+    "@ant-design/icons": "^6.3.2",
     "@workbranch/shared": "workspace:*",
     "@xyflow/react": "^12.10.1",
     "antd": "^6.3.4",

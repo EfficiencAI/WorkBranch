@@ -149,8 +149,8 @@ Director Agent（导演）
 
 ### 环境要求
 
-- Node.js >= 18.0.0
-- pnpm >= 8.0.0
+- Node.js >= 22.12.0
+- pnpm 11.18.0
 - Python >= 3.10（旧版 Python 后端需要）
 
 ### 安装依赖

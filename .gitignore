@@ -6,22 +6,37 @@ CLAUDE.md
 setting.json
 .playwright/
 .playwright-cli/
-*.yaml
 
-!pnpm-workspace.yaml
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# OS metadata
+.DS_Store
+Thumbs.db
 
 __pycache__/
 .agent_states/
 *.py[cod]
 *$py.class
 node_modules/
+.pnpm-store/
 .tools/
+
+# Package-manager artifacts (the project uses pnpm)
+package-lock.json
+*.log
 
 .temp/
 .tmp-debug/
 
 packages/backend/data/*
 logs/
+*.db
+*.db-shm
+*.db-wal
 .test/
 tests/
 !packages/backend/tests/
@@ -29,16 +44,25 @@ tests/
 dist/
 *.tsbuildinfo
 
-# Android build artifacts (covers both android/ and platforms/android/)
-(android|platforms/android)/app/build/
-(android|platforms/android)/.gradle/
-(android|platforms/android)/local.properties
-(android|platforms/android)/build/
-(android|platforms/android)/.cxx/
-(android|platforms/android)/captures/
-(android|platforms/android)/*.iml
-(android|platforms/android)/app/*.iml
-(android|platforms/android)/.idea/
+# Android build artifacts
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/build/
+/android/.cxx/
+/android/captures/
+/android/*.iml
+/android/app/*.iml
+/android/.idea/
+/platforms/android/app/build/
+/platforms/android/.gradle/
+/platforms/android/local.properties
+/platforms/android/build/
+/platforms/android/.cxx/
+/platforms/android/captures/
+/platforms/android/*.iml
+/platforms/android/app/*.iml
+/platforms/android/.idea/
 
 # Android native libs (large binaries, extracted from npm at build time)
 android/**/libs/cdvnodejsmobile/libnode/
@@ -66,9 +90,6 @@ packages/backend/build-vscode-*/
 packages/backend/_build_temp/
 packages/backend/native/
 *.node
-
-# npm lock files (project uses pnpm)
-packages/backend/package-lock.json
 
 # ============================================
 # 🚫 防止调试文件污染（临时测试文件）
