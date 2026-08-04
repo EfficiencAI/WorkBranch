@@ -6,16 +6,126 @@ CLAUDE.md
 setting.json
 .playwright/
 .playwright-cli/
-*.yaml
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# OS metadata
+.DS_Store
+Thumbs.db
 
 __pycache__/
 .agent_states/
 *.py[cod]
 *$py.class
 node_modules/
+.pnpm-store/
+.tools/
+
+# Package-manager artifacts (the project uses pnpm)
+package-lock.json
+*.log
 
 .temp/
+.tmp-debug/
 
-*.db
+packages/backend/data/*
 logs/
+*.db
+*.db-shm
+*.db-wal
 .test/
+tests/
+!packages/backend/tests/
+!packages/backend/tests/**/*.test.ts
+dist/
+*.tsbuildinfo
+
+# Android build artifacts
+/android/app/build/
+/android/.gradle/
+/android/local.properties
+/android/build/
+/android/.cxx/
+/android/captures/
+/android/*.iml
+/android/app/*.iml
+/android/.idea/
+/platforms/android/app/build/
+/platforms/android/.gradle/
+/platforms/android/local.properties
+/platforms/android/build/
+/platforms/android/.cxx/
+/platforms/android/captures/
+/platforms/android/*.iml
+/platforms/android/app/*.iml
+/platforms/android/.idea/
+
+# Android native libs (large binaries, extracted from npm at build time)
+android/**/libs/cdvnodejsmobile/libnode/
+platforms/android/**/libs/cdvnodejsmobile/libnode/
+
+# Android generated assets
+android/**/app/src/main/assets/
+platforms/android/**/app/src/main/assets/
+
+# Capacitor plugins (auto-generated, managed by cap sync)
+android/capacitor-cordova-android-plugins/
+platforms/android/capacitor-cordova-android-plugins/
+
+# libnode download artifacts (large binary zip + extracted temp)
+android/libnode-*.zip
+android/libnode-temp/
+
+packages/backend/workspaces
+
+dev-tools/
+
+# CMake/Native build artifacts
+packages/backend/build-android-*/
+packages/backend/build-vscode-*/
+packages/backend/_build_temp/
+packages/backend/native/
+*.node
+
+# ============================================
+# 🚫 防止调试文件污染（临时测试文件）
+# ============================================
+
+# 手动测试脚本
+test-*.js
+debug-session.spec.ts
+
+# 测试截图和结果截图
+test-*.png
+debug-*.png
+final-*.png
+e2e-result*.png
+screenshot_*.png
+
+# 调试数据文件（DOM诊断、验证报告等）
+debug-*.json
+verification-*.json
+full-diagnosis.json
+debug-*.txt
+pw-output.txt
+ui_dump.xml
+
+# Playwright 测试结果
+test-results/
+
+# 临时调试输出
+*.tmp.debug.*
+
+# 调试目录
+.dbg/
+
+# 调试文档（根目录）
+/debug-*.md
+
+# 临时截图（根目录）
+/screen*.png
+/final*.png

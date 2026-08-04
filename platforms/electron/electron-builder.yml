@@ -1,0 +1,50 @@
+appId: com.workbranch.app
+productName: WorkBranch
+directories:
+  output: release
+  buildResources: resources
+
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icon.ico
+
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: WorkBranch
+
+files:
+  - "**/*"
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}"
+  - "!**/node_modules/.bin"
+  - "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}"
+  - "!.editorconfig"
+  - "!**/._*"
+  - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
+  - "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}"
+  - "!**/{appveyor.yml,.travis.yml,circle.yml}"
+  - "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+  - "!**/tsconfig.tsbuildinfo"
+  - "!**/*.ts"
+  - "!**/*.map"
+
+extraResources:
+  - from: "../../packages/backend/dist"
+    to: "backend"
+    filter:
+      - "**/*.js"
+      - "**/*.json"
+  - from: "../../packages/backend/node_modules"
+    to: "backend/node_modules"
+    filter:
+      - "**/*"
+  - from: "../../packages/backend/data"
+    to: "backend/data"
+    filter:
+      - "**/*"

@@ -1,1 +1,47 @@
-{}
+{
+  "name": "workbranch",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "description": "WorkBranch - AI-powered workspace application",
+  "scripts": {
+    "dev": "pnpm --filter @workbranch/backend --filter @workbranch/frontend run dev",
+    "build": "pnpm --filter @workbranch/backend --filter @workbranch/frontend run build",
+    "test": "pnpm --filter @workbranch/tests run test:all",
+    "test:backend": "pnpm --filter @workbranch/tests run test:backend",
+    "test:frontend": "pnpm --filter @workbranch/tests run test:frontend",
+    "test:e2e": "pnpm --filter @workbranch/tests run test:e2e",
+    "test:coverage": "pnpm --filter @workbranch/tests run test:backend:coverage && pnpm --filter @workbranch/tests run test:frontend:coverage",
+    "lint": "eslint packages/**/src/**/*.{ts,tsx}",
+    "format": "prettier --write \"packages/**/src/**/*.{ts,tsx}\"",
+    "clean": "pnpm -r --if-present run clean",
+    "dev:frontend": "pnpm --filter @workbranch/frontend run dev",
+    "dev:backend": "pnpm --filter @workbranch/backend run dev",
+    "build:frontend": "pnpm --filter @workbranch/frontend run build",
+    "build:backend": "pnpm --filter @workbranch/backend run build",
+    "start:backend": "pnpm --filter @workbranch/backend run start",
+    "build:electron": "pnpm --filter @workbranch/electron run build",
+    "build:android": "pnpm --filter @workbranch/android run build",
+    "dev:electron": "pnpm --filter @workbranch/electron run dev"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.0",
+    "@typescript-eslint/parser": "^6.13.0",
+    "esbuild": "^0.28.0",
+    "eslint": "^8.55.0",
+    "playwright": "^1.60.0",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.0"
+  },
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=11.18.0"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@red-mobile/nodejs-mobile-cordova": "^3.4.2"
+  }
+}
