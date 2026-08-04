@@ -38,6 +38,8 @@ export function getApiUrl(path: string): string {
   return path
 }
 
+export const AUTH_TOKEN_KEY = 'workassistant_token'
+
 export async function waitForBackendReady(maxRetries = 60, intervalMs = 500): Promise<boolean> {
   const currentBaseUrl = getApiBaseUrl()
   if (!currentBaseUrl) {

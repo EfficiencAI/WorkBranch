@@ -1,11 +1,21 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { DiagramPage } from '../pages'
+import { ProductShell } from './layouts/ProductShell'
+import { WorkAssistantLayout } from './layouts/WorkAssistantLayout'
+import {
+  AssistantDetailPage,
+  AssistantWizardPage,
+  AuthPage,
+  DiagramPage,
+  SettingsPage,
+  VisitorChatPage,
+  WorkAssistantHomePage,
+} from '../pages'
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <AppLayout />,
+    element: <ProductShell />,
     children: [
       {
         index: true,
@@ -13,16 +23,35 @@ export const router = createBrowserRouter([
       },
       {
         path: 'chat',
-        element: <DiagramPage />,
+        element: <AppLayout />,
+        children: [{ index: true, element: <DiagramPage /> }],
       },
       {
         path: 'settings',
-        element: <DiagramPage />,
+        element: <AppLayout />,
+        children: [{ index: true, element: <SettingsPage /> }],
+      },
+      {
+        path: 'assistant',
+        element: <WorkAssistantLayout />,
+        children: [
+          { index: true, element: <WorkAssistantHomePage /> },
+          { path: 'new', element: <AssistantWizardPage /> },
+          { path: ':assistantId', element: <AssistantDetailPage /> },
+        ],
       },
       {
         path: '*',
         element: <Navigate replace to="/chat" />,
       },
     ],
+  },
+  {
+    path: '/auth',
+    element: <AuthPage />,
+  },
+  {
+    path: '/s/:shareToken',
+    element: <VisitorChatPage />,
   },
 ])

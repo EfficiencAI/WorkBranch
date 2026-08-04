@@ -1,6 +1,6 @@
 import { getClientId } from '../logging/clientId'
 import { ApiError } from './error'
-import { getApiUrl } from './config'
+import { AUTH_TOKEN_KEY, getApiUrl } from './config'
 import type { ApiEnvelope, HttpRequestOptions } from './types'
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -44,6 +44,10 @@ export async function request<TData = unknown, TBody = unknown>(
 
   const requestHeaders = new Headers(headers)
   requestHeaders.set('X-Client-Id', getClientId())
+  const authToken = typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
+  if (authToken) {
+    requestHeaders.set('Authorization', `Bearer ${authToken}`)
+  }
   let requestBody: BodyInit | undefined
   let capacitorData: unknown
 

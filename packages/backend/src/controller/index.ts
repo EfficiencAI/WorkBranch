@@ -5,3 +5,6 @@ export { UserController } from './user.controller';
 export { SettingsController } from './settings.controller';
 export { LogController } from './log.controller';
 export { WorkspaceController } from './workspace.controller';
+export { AuthController } from './auth.controller';
+export { AssistantController } from './assistant.controller';
+export { VisitorController } from './visitor.controller';

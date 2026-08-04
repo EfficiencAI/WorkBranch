@@ -6,6 +6,7 @@ import { readClientId } from './shared/logging/clientId'
 import { frontendLogger } from './shared/logging/logger'
 import { waitForBackendReady } from './shared/api/config'
 import './styles/index.css'
+import './styles/workassistant.css'
 
 const { clientId, restored } = readClientId()
 

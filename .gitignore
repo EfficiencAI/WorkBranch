@@ -31,6 +31,7 @@ package-lock.json
 
 .temp/
 .tmp-debug/
+assistant-knowledge/
 
 packages/backend/data/*
 logs/
