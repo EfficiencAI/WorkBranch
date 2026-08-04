@@ -1,18 +1,5 @@
-import {
-  Alert,
-  App as AntdApp,
-  Button,
-  Card,
-  Flex,
-  Input,
-  InputNumber,
-  Slider,
-  Space,
-  Radio,
-  Switch,
-  Typography,
-} from 'antd'
-import { ReloadOutlined } from '@ant-design/icons'
+import { Alert, App as AntdApp, Button, Card, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
+import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -37,6 +24,157 @@ type EditingState = {
 }
 
 const MAX_RENDER_DEPTH = 5
+
+type SettingCategoryKey = 'ui' | 'conversation' | 'llm' | 'agent' | 'advanced'
+
+const SETTING_CATEGORIES: Array<{
+  key: SettingCategoryKey
+  label: string
+  rootKeys: string[]
+  icon: ReactNode
+}> = [
+  { key: 'ui', label: '界面', rootKeys: ['ui'], icon: <DesktopOutlined /> },
+  {
+    key: 'conversation',
+    label: '对话',
+    rootKeys: ['conversation', 'context'],
+    icon: <MessageOutlined />,
+  },
+  { key: 'llm', label: '模型', rootKeys: ['llm'], icon: <ApiOutlined /> },
+  {
+    key: 'agent',
+    label: 'Agent',
+    rootKeys: ['agent', 'trae_cli', 'tool_permissions'],
+    icon: <RobotOutlined />,
+  },
+  {
+    key: 'advanced',
+    label: '高级',
+    rootKeys: ['database', 'workspace', 'mq', 'logging', 'debug'],
+    icon: <ControlOutlined />,
+  },
+]
+
+const ROOT_SETTING_LABELS: Record<string, string> = {
+  ui: '界面与显示',
+  conversation: '会话结构',
+  context: '上下文',
+  llm: '语言模型',
+  agent: 'Agent 默认行为',
+  trae_cli: 'Trae CLI',
+  tool_permissions: '工具权限',
+  database: '数据库',
+  workspace: '工作区',
+  mq: '消息队列',
+  logging: '运行日志',
+  debug: '调试',
+}
+
+const SETTING_PRESENTATIONS: Record<string, { label: string; description?: string }> = {
+  'ui.scale': { label: '界面缩放', description: '调整控件和正文的整体尺寸' },
+  'ui.show_debug_overlay': {
+    label: '显示调试浮层',
+    description: '在工作台显示运行诊断信息',
+  },
+  'ui.show_workspace_hud': {
+    label: '显示工作区信息',
+    description: '在画布顶部显示名称和当前视图',
+  },
+  'ui.diagram_double_click_delay_ms': {
+    label: '双击判定间隔',
+    description: '调整画布节点的双击响应时间',
+  },
+  'ui.message_send_shortcuts_reversed': {
+    label: '反转发送快捷键',
+    description: 'Enter 换行，Ctrl + Enter 发送',
+  },
+  'conversation.single_message_per_node': {
+    label: '每条消息创建节点',
+    description: '发送消息时自动建立新的子节点',
+  },
+  'context.max_tokens': {
+    label: '最大上下文',
+    description: '单次执行允许携带的 Token 数量',
+  },
+  'context.warning_threshold': {
+    label: '上下文预警阈值',
+    description: '占用达到该比例时提示整理上下文',
+  },
+  'context.include_parent_context_by_default': {
+    label: '默认携带父级上下文',
+    description: '新分支自动继承路径中的历史消息',
+  },
+  'llm.api_key': { label: 'API 密钥', description: '仅保存在当前后端配置中' },
+  'llm.base_url': {
+    label: 'API 地址',
+    description: '兼容 OpenAI 协议的服务端点',
+  },
+  'llm.model': { label: '默认模型', description: '用于内置 Agent 的语言模型' },
+  'llm.temperature': {
+    label: '生成温度',
+    description: '较高数值会增加输出多样性',
+  },
+  'llm.max_tokens': {
+    label: '最大输出长度',
+    description: '单次生成允许输出的最大 Token 数量',
+  },
+  'agent.default_agent': {
+    label: '默认 Agent',
+    description: '新对话默认使用的执行方式',
+  },
+  'agent.memory_mode': {
+    label: '记忆模式',
+    description: '决定执行之间如何保留上下文',
+  },
+  'agent.memory_window_size': {
+    label: '记忆窗口',
+    description: '滑动窗口模式保留的历史轮次',
+  },
+  'trae_cli.executable': {
+    label: '可执行程序',
+    description: 'Trae CLI 的命令或绝对路径',
+  },
+  'trae_cli.provider': { label: '模型提供方' },
+  'trae_cli.max_steps': {
+    label: '最大执行步骤',
+    description: '单次任务允许的工具调用上限',
+  },
+  'trae_cli.tools': { label: '可用工具' },
+  'trae_cli.show_workflow': {
+    label: '显示执行工作流',
+    description: '在消息中呈现工具调用与执行步骤',
+  },
+  'trae_cli.trajectory_retention': { label: '轨迹保留策略' },
+  'database.path': {
+    label: '数据库文件',
+    description: 'WorkBranch 本地数据库位置',
+  },
+  'workspace.base_dir': {
+    label: '工作区目录',
+    description: '会话工作目录的基础位置',
+  },
+  'mq.max_size': { label: '消息队列上限' },
+  'logging.enabled': {
+    label: '启用运行日志',
+    description: '记录后端与 Agent 执行信息',
+  },
+  'logging.level': { label: '日志级别', description: '控制写入日志的最小等级' },
+  'logging.base_dir': { label: '日志目录' },
+  'logging.max_file_size_mb': { label: '单文件大小上限' },
+  'logging.api_log_enabled': { label: '记录 API 日志' },
+  'logging.sensitive_fields': { label: '敏感字段' },
+  'logging.retention.enabled': { label: '启用日志清理' },
+  'logging.retention.max_runs': { label: '最多保留运行次数' },
+  'logging.retention.max_days': { label: '最多保留天数' },
+  'debug.consistency_check': {
+    label: '一致性检查',
+    description: '开发诊断使用，可能降低执行速度',
+  },
+}
+
+function getSettingPresentation(fullPath: string, fallbackLabel: string) {
+  return SETTING_PRESENTATIONS[fullPath] ?? { label: fallbackLabel }
+}
 
 function isNumericSettingMetadata(value: unknown): value is NumericSettingMetadata {
   if (!isPlainObject(value)) {
@@ -131,11 +269,7 @@ function createDefaultArrayItem(kind: ArrayEditorKind) {
 }
 
 function getSearchTokens(query: string) {
-  return query
-    .trim()
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
+  return query.trim().toLowerCase().split(/\s+/).filter(Boolean)
 }
 
 function matchesSearchTokens(tokens: string[], label: string, fullPath: string) {
@@ -240,12 +374,7 @@ function buildInitialEditorValue(kind: EditorKind, value: SettingValue): string 
   return value === null ? '' : String(value)
 }
 
-function parseEditorValue(
-  kind: EditorKind,
-  value: string | number | boolean | null | ArrayEditorValue,
-  originalValue: SettingValue,
-  metadata?: NumericSettingMetadata,
-) {
+function parseEditorValue(kind: EditorKind, value: string | number | boolean | null | ArrayEditorValue, originalValue: SettingValue, metadata?: NumericSettingMetadata) {
   if (kind === 'secret') {
     return value === '' ? originalValue : String(value)
   }
@@ -289,6 +418,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [activeCategory, setActiveCategory] = useState<SettingCategoryKey>('ui')
   const [pendingArrayFocusIndex, setPendingArrayFocusIndex] = useState<number | null>(null)
   const [activeArrayItemIndex, setActiveArrayItemIndex] = useState<number | null>(null)
   const arrayItemRefs = useRef<Array<InputRef | null>>([])
@@ -329,7 +459,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   }, [settings])
 
   const searchTokens = useMemo(() => getSearchTokens(searchQuery), [searchQuery])
-
 
   function cancelEditing() {
     setEditing(null)
@@ -403,13 +532,10 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     })
   }
 
-  const isEditingPath = useCallback(
-    (rootKey: string, path: string[]) => editing?.rootKey === rootKey && isPathEqual(editing.path, path),
-    [editing],
-  )
+  const isEditingPath = useCallback((rootKey: string, path: string[]) => editing?.rootKey === rootKey && isPathEqual(editing.path, path), [editing])
 
   const filterSettingValue = useCallback(
-    (rootKey: string, path: string[], value: SettingValue, depth: number): SettingValue | null => {
+    function filterSettingValue(rootKey: string, path: string[], value: SettingValue, depth: number): SettingValue | null {
       if (!isVisibleLeafValue(value, depth) && isPlainObject(value)) {
         const filteredEntries: Array<readonly [string, SettingValue]> = []
 
@@ -433,7 +559,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
       const label = path[path.length - 1] ?? rootKey
       const fullPath = path.length === 0 ? rootKey : `${rootKey}.${path.join('.')}`
-      return matchesSearchTokens(searchTokens, label, fullPath) ? value : null
+      const presentation = getSettingPresentation(fullPath, label)
+      const searchableLabel = `${label} ${presentation.label} ${presentation.description ?? ''}`
+      return matchesSearchTokens(searchTokens, searchableLabel, fullPath) ? value : null
     },
     [isEditingPath, searchTokens],
   )
@@ -459,6 +587,17 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   }, [searchTokens])
 
   const showEmptySearch = searchTokens.length > 0 && filteredEntries.length === 0 && !showThemeCard
+
+  const embeddedEntries = useMemo(() => {
+    if (searchTokens.length > 0) return filteredEntries
+
+    const category = SETTING_CATEGORIES.find((item) => item.key === activeCategory)
+    if (!category) return filteredEntries
+    return filteredEntries.filter(([rootKey]) => category.rootKeys.includes(rootKey))
+  }, [activeCategory, filteredEntries, searchTokens.length])
+
+  const showEmbeddedTheme =
+    (activeCategory === 'ui' && searchTokens.length === 0) || (showThemeCard && searchTokens.length > 0)
 
   function appendArrayItem() {
     if (!editing || !isArrayEditorKind(editing.kind) || !Array.isArray(editing.value)) {
@@ -632,11 +771,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
   }
 
-  function renderNumberEditor(
-    value: string | number | boolean | null | ArrayEditorValue,
-    metadata?: NumericSettingMetadata,
-    onValueChange?: (nextValue: number | null) => void,
-  ) {
+  function renderNumberEditor(value: string | number | boolean | null | ArrayEditorValue, metadata?: NumericSettingMetadata, onValueChange?: (nextValue: number | null) => void) {
     const currentValue = typeof value === 'number' ? value : null
 
     if (hasSliderConfig(metadata ?? null)) {
@@ -655,19 +790,15 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             step={step}
             value={currentValue ?? min}
             onChange={(nextValue) => handleValueChange(clampNumberValue(nextValue, sliderMetadata))}
-            tooltip={{ formatter: (sliderValue) => (typeof sliderValue === 'number' ? formatSliderValue(sliderValue) : '') }}
+            tooltip={{
+              formatter: (sliderValue) => (typeof sliderValue === 'number' ? formatSliderValue(sliderValue) : ''),
+            }}
           />
         </Space>
       )
     }
 
-    return (
-      <InputNumber
-        value={currentValue}
-        onChange={(nextValue) => (onValueChange ?? updateEditingValue)(nextValue)}
-        style={{ width: '100%' }}
-      />
-    )
+    return <InputNumber value={currentValue} onChange={(nextValue) => (onValueChange ?? updateEditingValue)(nextValue)} style={{ width: '100%' }} />
   }
 
   function renderEditor() {
@@ -693,11 +824,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
               const isItemEditing = activeArrayItemIndex === index
 
               return (
-                <div
-                  key={index}
-                  className={isItemEditing ? 'settings-array-item settings-array-item--active' : 'settings-array-item'}
-                  onMouseEnter={() => setActiveArrayItemIndex(index)}
-                >
+                <div key={index} className={isItemEditing ? 'settings-array-item settings-array-item--active' : 'settings-array-item'} onMouseEnter={() => setActiveArrayItemIndex(index)}>
                   <div className="settings-array-item__main">
                     <Typography.Text type="secondary" className="settings-array-item__index">
                       #{index + 1}
@@ -714,11 +841,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                           style={{ width: '100%' }}
                         />
                       ) : editing.kind === 'array-boolean' ? (
-                        <Switch
-                          checked={Boolean(item)}
-                          disabled={!isItemEditing}
-                          onChange={(checked) => updateArrayItem(index, checked)}
-                        />
+                        <Switch checked={Boolean(item)} disabled={!isItemEditing} onChange={(checked) => updateArrayItem(index, checked)} />
                       ) : (
                         <Input
                           ref={(node) => {
@@ -778,23 +901,11 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     }
 
     if (editing.kind === 'secret') {
-      return (
-        <Input.Password
-          value={String(editing.value ?? '')}
-          onChange={(event) => updateEditingValue(event.target.value)}
-          placeholder="留空则保持原值"
-        />
-      )
+      return <Input.Password value={String(editing.value ?? '')} onChange={(event) => updateEditingValue(event.target.value)} placeholder="留空则保持原值" />
     }
 
     if (editing.kind === 'json') {
-      return (
-        <Input.TextArea
-          value={String(editing.value ?? '')}
-          onChange={(event) => updateEditingValue(event.target.value)}
-          autoSize={{ minRows: 4, maxRows: 12 }}
-        />
-      )
+      return <Input.TextArea value={String(editing.value ?? '')} onChange={(event) => updateEditingValue(event.target.value)} autoSize={{ minRows: 4, maxRows: 12 }} />
     }
 
     return <Input value={String(editing.value ?? '')} onChange={(event) => updateEditingValue(event.target.value)} />
@@ -811,20 +922,18 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   function renderNode(rootKey: string, path: string[], value: SettingValue, depth: number): ReactNode {
     const fullPath = [rootKey, ...path]
     const label = path[path.length - 1] ?? rootKey
+    const presentation = getSettingPresentation(fullPath.join('.'), label)
     const metadata = getSettingMetadataAtPath(settingsMetadata, fullPath)
     const isDirectControl = shouldRenderDirectControl(metadata)
     const isTooDeepObject = isPlainObject(value) && depth > MAX_RENDER_DEPTH
     const isLeaf = !isPlainObject(value) || isTooDeepObject
-    const isEditingLeaf =
-      editing?.rootKey === rootKey &&
-      editing.path.length === path.length &&
-      editing.path.every((segment, index) => segment === path[index])
+    const isEditingLeaf = editing?.rootKey === rootKey && editing.path.length === path.length && editing.path.every((segment, index) => segment === path[index])
 
     if (!isLeaf && isPlainObject(value)) {
       return (
         <div key={fullPath.join('.')} className={`settings-tree-node settings-tree-node--group depth-${depth}`}>
           <Typography.Title level={5} className="settings-tree-node__title">
-            {label}
+            {presentation.label}
           </Typography.Title>
           <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             {Object.entries(value).map(([childKey, childValue]) => renderNode(rootKey, [...path, childKey], childValue, depth + 1))}
@@ -837,7 +946,12 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       <div key={fullPath.join('.')} className={`settings-tree-leaf depth-${depth}`}>
         <Flex justify="space-between" align="flex-start" gap={16} wrap="wrap">
           <div className="settings-tree-leaf__meta">
-            <Typography.Text strong>{label}</Typography.Text>
+            <Typography.Text strong>{presentation.label}</Typography.Text>
+            {presentation.description ? (
+              <Typography.Paragraph type="secondary" className="settings-tree-leaf__description">
+                {presentation.description}
+              </Typography.Paragraph>
+            ) : null}
             <Typography.Paragraph type="secondary" className="settings-tree-leaf__path">
               {fullPath.join('.')}
             </Typography.Paragraph>
@@ -846,12 +960,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
         <div className="settings-tree-leaf__value">
           {typeof value === 'boolean' ? (
-            <Switch
-              checked={value}
-              loading={saving}
-              disabled={editing !== null}
-              onChange={(checked) => void toggleBooleanLeaf(rootKey, path, checked)}
-            />
+            <Switch checked={value} loading={saving} disabled={editing !== null} onChange={(checked) => void toggleBooleanLeaf(rootKey, path, checked)} />
           ) : isEditingLeaf ? (
             <div className="settings-leaf-editor-wrapper">
               {isArrayEditorKind(editing.kind) ? (
@@ -953,22 +1062,124 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     )
   }
 
+  function renderThemePreference() {
+    return (
+      <div className="settings-tree-leaf settings-sidebar__theme-row">
+        <div className="settings-tree-leaf__meta">
+          <Typography.Text strong>主题模式</Typography.Text>
+          <Typography.Paragraph type="secondary" className="settings-tree-leaf__description">
+            选择工作台的明暗外观
+          </Typography.Paragraph>
+          <Typography.Paragraph type="secondary" className="settings-tree-leaf__path">
+            ui.theme_mode
+          </Typography.Paragraph>
+        </div>
+        <div className="settings-tree-leaf__value">
+          <Radio.Group
+            value={themeMode}
+            size="small"
+            className="settings-sidebar__theme-control"
+            onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')}
+            optionType="button"
+            buttonStyle="solid"
+          >
+            <Radio.Button value="dark">深色</Radio.Button>
+            <Radio.Button value="light">浅色</Radio.Button>
+            <Radio.Button value="system">跟随</Radio.Button>
+          </Radio.Group>
+        </div>
+      </div>
+    )
+  }
+
+  if (embedded) {
+    const hasEmbeddedUiEntry = embeddedEntries.some(([rootKey]) => rootKey === 'ui')
+
+    return (
+      <div className="settings-page settings-page--embedded">
+        <header className="settings-sidebar__header">
+          <div className="settings-sidebar__heading-copy">
+            <Typography.Title level={4}>工作台设置</Typography.Title>
+            <Typography.Text type="secondary">修改后保存到本地配置</Typography.Text>
+          </div>
+          <div className="settings-sidebar__header-actions">
+            <Button type="text" size="small" icon={<ReloadOutlined />} onClick={() => void reloadSettings()} loading={loading} title="刷新设置" aria-label="刷新设置" />
+            <StatusTag label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'} tone={loading || saving ? 'processing' : error ? 'error' : 'success'} />
+          </div>
+        </header>
+
+        <div className="settings-sidebar__tools">
+          <Input value={searchQuery} allowClear prefix={<SearchOutlined />} placeholder="搜索设置名称或路径" onChange={(event) => setSearchQuery(event.target.value)} />
+          <nav className="settings-sidebar__categories" aria-label="设置分类">
+            {SETTING_CATEGORIES.map((category) => (
+              <Button
+                key={category.key}
+                type="text"
+                size="small"
+                disabled={editing !== null}
+                icon={category.icon}
+                className={`settings-sidebar__category ${searchTokens.length === 0 && activeCategory === category.key ? 'settings-sidebar__category--active' : ''}`}
+                onClick={() => {
+                  setActiveCategory(category.key)
+                  setSearchQuery('')
+                }}
+              >
+                {category.label}
+              </Button>
+            ))}
+          </nav>
+        </div>
+
+        <div className="settings-sidebar__scroll">
+          {loading ? <LoadingState tip="正在读取后端设置..." /> : null}
+          {error ? <Alert type="error" title="设置读取失败" description={error} showIcon /> : null}
+          {saveError ? <Alert type="error" title="设置保存失败" description={saveError} showIcon closable onClose={() => setSaveError(null)} /> : null}
+
+          {!loading && !error && showEmptySearch ? (
+            <div className="settings-sidebar__empty">
+              <EmptyState title="没有匹配的设置" description="可搜索中文名称或完整配置路径" action={<Button onClick={() => setSearchQuery('')}>清空搜索</Button>} />
+            </div>
+          ) : null}
+
+          {!loading && !error && showEmbeddedTheme && !hasEmbeddedUiEntry ? (
+            <section className="settings-sidebar__section">
+              <header className="settings-sidebar__section-heading">
+                <strong>界面与显示</strong>
+                <span>ui</span>
+              </header>
+              <div className="settings-sidebar__section-body">{renderThemePreference()}</div>
+            </section>
+          ) : null}
+
+          {!loading && !error
+            ? embeddedEntries.map(([rootKey, rootValue]) => (
+                <section className="settings-sidebar__section" key={rootKey}>
+                  <header className="settings-sidebar__section-heading">
+                    <strong>{ROOT_SETTING_LABELS[rootKey] ?? rootKey}</strong>
+                    <span>{rootKey}</span>
+                  </header>
+                  <div className="settings-sidebar__section-body">
+                    {rootKey === 'ui' && showEmbeddedTheme ? renderThemePreference() : null}
+                    {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
+                  </div>
+                </section>
+              ))
+            : null}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <Space
-      direction="vertical"
-      size={embedded ? 'middle' : 'large'}
-      style={{ width: '100%' }}
-      className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}
-    >
+    <Space direction="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <Flex align="center" gap={12}>
-          <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>设置</Typography.Title>
+          <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>
+            设置
+          </Typography.Title>
           <Button icon={<ReloadOutlined />} onClick={() => void reloadSettings()} loading={loading} title="刷新设置" />
         </Flex>
-        <StatusTag
-          label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'}
-          tone={loading || saving ? 'processing' : error ? 'error' : 'success'}
-        />
+        <StatusTag label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'} tone={loading || saving ? 'processing' : error ? 'error' : 'success'} />
       </Flex>
 
       {loading ? <LoadingState tip="正在读取后端设置..." /> : null}
@@ -979,21 +1190,12 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       {!loading && !error ? (
         <Space direction="vertical" size={16} style={{ width: '100%' }}>
           <div className="settings-search-bar">
-            <Input.Search
-              value={searchQuery}
-              allowClear
-              placeholder="按字段名或完整路径搜索设置，例如 ui.theme_mode"
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
+            <Input.Search value={searchQuery} allowClear placeholder="按字段名或完整路径搜索设置，例如 ui.theme_mode" onChange={(event) => setSearchQuery(event.target.value)} />
           </div>
 
           {showEmptySearch ? (
             <Card className="settings-card">
-              <EmptyState
-                title="未找到匹配的设置项"
-                description="可尝试搜索字段名或完整路径，例如 ui.theme_mode"
-                action={<Button onClick={() => setSearchQuery('')}>清空搜索</Button>}
-              />
+              <EmptyState title="未找到匹配的设置项" description="可尝试搜索字段名或完整路径，例如 ui.theme_mode" action={<Button onClick={() => setSearchQuery('')}>清空搜索</Button>} />
             </Card>
           ) : null}
 
@@ -1007,12 +1209,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                       ui.theme_mode
                     </Typography.Paragraph>
                   </div>
-                  <Radio.Group
-                    value={themeMode}
-                    onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')}
-                    optionType="button"
-                    buttonStyle="solid"
-                  >
+                  <Radio.Group value={themeMode} onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')} optionType="button" buttonStyle="solid">
                     <Radio.Button value="dark">深色</Radio.Button>
                     <Radio.Button value="light">浅色</Radio.Button>
                     <Radio.Button value="system">跟随系统</Radio.Button>
@@ -1028,9 +1225,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
           {filteredEntries.map(([rootKey, rootValue]) => (
             <Card title={rootKey} className="settings-card" key={rootKey}>
-              {isPlainObject(rootValue)
-                ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1))
-                : renderNode(rootKey, [], rootValue, 1)}
+              {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
             </Card>
           ))}
         </Space>

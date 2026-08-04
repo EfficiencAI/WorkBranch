@@ -522,24 +522,30 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           <Drawer
             open={activeSidebar !== null}
             placement="left"
-            width={responsive.navWidth.open}
+            width={responsive.isMobile ? '100%' : 392}
             rootStyle={{ zIndex: 30 }}
             onClose={collapseNav}
             title={
-              <Space>
+              <div className="diagram-shell__drawer-tabs" role="tablist" aria-label="侧边栏页面">
                 <Button
                   className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                  icon={<HistoryOutlined />}
+                  role="tab"
+                  aria-selected={activeSidebar === 'history'}
                   onClick={() => openSidebar('history')}
                 >
                   会话历史
                 </Button>
                 <Button
                   className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                  icon={<SettingOutlined />}
+                  role="tab"
+                  aria-selected={activeSidebar === 'settings'}
                   onClick={() => openSidebar('settings')}
                 >
                   设置
                 </Button>
-              </Space>
+              </div>
             }
             className="diagram-shell__drawer"
           >
