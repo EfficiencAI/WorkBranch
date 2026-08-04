@@ -32,6 +32,8 @@ export interface ConversationSummary {
   title: string | null;
   state: string;
   message_count: number;
+  user_prompt_preview: string | null;
+  assistant_conclusion_preview: string | null;
   created_at: string;
   updated_at: string;
   position_x: number | null;

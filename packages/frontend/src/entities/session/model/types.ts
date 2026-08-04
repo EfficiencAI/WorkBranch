@@ -21,6 +21,8 @@ export interface SessionConversationSummary {
   title: string | null
   state: string
   messageCount: number
+  userPromptPreview: string | null
+  assistantConclusionPreview: string | null
   position: ConversationPosition | null
   createdAt?: string
   updatedAt?: string

@@ -1,9 +1,10 @@
 import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Spin, Space, Typography, Tooltip } from 'antd'
-import { InfoCircleOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
+import { CloseOutlined, DownOutlined, InfoCircleOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
 import { selectFocusedConversationId, useChatWorkbenchStore, useTreeStore } from '../../features'
 import { useResponsive } from '../../shared/lib/useResponsive'
@@ -59,6 +60,10 @@ type FlowNodeData = {
   conversation: ConversationNode
   focused: boolean
   selected: boolean
+  searchQuery: string
+  searchMatched: boolean
+  searchSelected: boolean
+  onSearchResultSelect: (conversationId: string) => void
   conversationMessages: MessageNode[]
   messagesLoading: boolean
   messagesError: string | null
@@ -88,6 +93,50 @@ function summarizeConversation(conversation: ConversationNode) {
   }
 
   return '空对话'
+}
+
+function getConversationStateLabel(state: string) {
+  const labels: Record<string, string> = {
+    pending: '待处理',
+    idle: '待处理',
+    active: '处理中',
+    running: '处理中',
+    completed: '已完成',
+    failed: '失败',
+    cancelled: '已取消',
+  }
+  return labels[state] ?? state
+}
+
+function getConversationStateTone(state: string): 'default' | 'processing' | 'success' | 'error' {
+  if (state === 'completed') return 'success'
+  if (state === 'running' || state === 'active') return 'processing'
+  if (state === 'failed') return 'error'
+  return 'default'
+}
+
+function highlightText(value: string, query: string): ReactNode {
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  if (!normalizedQuery) return value
+
+  const normalizedValue = value.toLocaleLowerCase()
+  const parts: ReactNode[] = []
+  let cursor = 0
+  let matchIndex = normalizedValue.indexOf(normalizedQuery)
+
+  while (matchIndex >= 0) {
+    if (matchIndex > cursor) parts.push(value.slice(cursor, matchIndex))
+    parts.push(
+      <mark className="conversation-search__highlight" key={`${matchIndex}-${cursor}`}>
+        {value.slice(matchIndex, matchIndex + normalizedQuery.length)}
+      </mark>,
+    )
+    cursor = matchIndex + normalizedQuery.length
+    matchIndex = normalizedValue.indexOf(normalizedQuery, cursor)
+  }
+
+  if (cursor < value.length) parts.push(value.slice(cursor))
+  return parts.length ? parts : value
 }
 
 function stopEvent(event: React.SyntheticEvent) {
@@ -166,27 +215,42 @@ function renderMessageList(
   )
 }
 
-function OverviewNodePage({ conversation, focused, selected }: { conversation: ConversationNode; focused: boolean; selected: boolean }) {
-  return (
-    <Space direction="vertical" size={10} style={{ width: '100%' }}>
-      <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
-        <Space direction="vertical" size={2}>
-          <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
-          <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
-        </Space>
-        <Space wrap onClick={stopEvent} onDoubleClick={stopEvent}>
-          <StatusTag
-            label={focused ? 'focused' : selected ? 'selected' : conversation.state}
-            tone={focused ? 'warning' : selected ? 'processing' : 'default'}
-          />
-        </Space>
-      </Space>
+function OverviewNodePage({ conversation, searchQuery }: { conversation: ConversationNode; searchQuery: string }) {
+  const prompt = conversation.userPromptPreview?.trim() || '当前节点暂无用户问题'
+  const hasPrompt = Boolean(conversation.userPromptPreview?.trim())
 
-      <Space wrap>
-        <StatusTag label={`${conversation.messageCount} 条消息`} tone="default" />
-        {conversation.parentConversationId ? <StatusTag label={`父对话 ${conversation.parentConversationId}`} tone="default" /> : <StatusTag label="根对话" tone="success" />}
-      </Space>
-    </Space>
+  return (
+    <div className="conversation-node__overview">
+      <div className="conversation-node__overview-header">
+        <div className="conversation-node__overview-heading">
+          <Typography.Text strong className="conversation-node__overview-title">
+            {highlightText(summarizeConversation(conversation), searchQuery)}
+          </Typography.Text>
+          <Typography.Text type="secondary" className="conversation-node__overview-id">
+            {conversation.conversationId}
+          </Typography.Text>
+        </div>
+        <div onClick={stopEvent} onDoubleClick={stopEvent}>
+          <StatusTag label={getConversationStateLabel(conversation.state)} tone={getConversationStateTone(conversation.state)} />
+        </div>
+      </div>
+
+      <div className="conversation-node__overview-divider" />
+
+      <div className="conversation-node__prompt">
+        <span className="conversation-node__prompt-label"><MessageOutlined />用户问题</span>
+        <Typography.Paragraph className={hasPrompt ? 'conversation-node__prompt-text' : 'conversation-node__prompt-text conversation-node__prompt-text--empty'}>
+          {highlightText(prompt, searchQuery)}
+        </Typography.Paragraph>
+      </div>
+
+      <div className="conversation-node__overview-footer">
+        <span className="conversation-node__meta"><MessageOutlined />{conversation.messageCount} 条消息</span>
+        <span className={conversation.parentConversationId ? 'conversation-node__meta' : 'conversation-node__meta conversation-node__meta--root'}>
+          {conversation.parentConversationId ? `父节点 ${conversation.parentConversationId}` : '根对话'}
+        </span>
+      </div>
+    </div>
   )
 }
 
@@ -237,8 +301,11 @@ export function FocusNodePage({
 function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const {
     conversation,
-    focused,
     selected,
+    searchQuery,
+    searchMatched,
+    searchSelected,
+    onSearchResultSelect,
   } = data
 
   const draggingNodeId = useTreeStore((state) => state.draggingNodeId)
@@ -316,6 +383,8 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
   const nodeClassName = [
     'conversation-node',
     selected ? 'conversation-node--selected' : null,
+    searchMatched ? 'conversation-node--search-match' : null,
+    searchSelected ? 'conversation-node--search-selected' : null,
     isDragging ? 'conversation-node--dragging' : null,
   ].filter(Boolean).join(' ')
 
@@ -325,6 +394,10 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       data-conversation-id={conversation.conversationId}
       aria-label={`查看对话 ${conversation.conversationId}`}
       onClick={() => {
+        if (searchQuery) {
+          if (searchMatched) onSearchResultSelect(conversation.conversationId)
+          return
+        }
         // 显式触发聚焦态
         if (focusedConversationId !== conversation.conversationId) {
           setFocusedConversationId(conversation.conversationId)
@@ -335,12 +408,12 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
       <Card
         size="small"
-        className="conversation-node__card conversation-node__card--assistant"
+        className="conversation-node__card conversation-node__card--overview conversation-node__card--assistant"
         {...longPressHandlers}
       >
         <div className="conversation-node__body-frame">
           <div className="conversation-node__page-shell">
-            <OverviewNodePage conversation={conversation} focused={focused} selected={selected} />
+            <OverviewNodePage conversation={conversation} searchQuery={searchMatched ? searchQuery : ''} />
           </div>
         </div>
       </Card>
@@ -1409,6 +1482,9 @@ function FlowViewport({
   const lastZoomRef = useRef<number>(1)
   const isRefreshingRef = useRef(false)
   const zoomDebounceTimerRef = useRef<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResultIndex, setSearchResultIndex] = useState(0)
+  const [searchPreviewDismissed, setSearchPreviewDismissed] = useState(false)
 
   const [overlayPhase, setOverlayPhase] = useState<OverlayPhase>('idle')
   const [focusOriginRect, setFocusOriginRect] = useState<FocusOverlayRect | null>(null)
@@ -1425,7 +1501,49 @@ function FlowViewport({
     [conversationNodes, focusedConversationId],
   )
 
+  const normalizedSearchQuery = searchQuery.trim().toLocaleLowerCase()
+  const searchResults = useMemo(() => {
+    if (!normalizedSearchQuery) return []
+
+    return conversationNodes.filter((conversation) => {
+      const searchableText = `${summarizeConversation(conversation)} ${conversation.userPromptPreview ?? ''}`.toLocaleLowerCase()
+      return searchableText.includes(normalizedSearchQuery)
+    })
+  }, [conversationNodes, normalizedSearchQuery])
+  const selectedSearchConversation = searchResults.length
+    ? searchResults[Math.min(searchResultIndex, searchResults.length - 1)]
+    : null
+
+  const handleSearchQueryChange = useCallback((value: string) => {
+    setSearchQuery(value)
+    setSearchResultIndex(0)
+    setSearchPreviewDismissed(false)
+  }, [])
+
+  const handleSearchResultSelect = useCallback((conversationId: string) => {
+    const index = searchResults.findIndex((conversation) => conversation.conversationId === conversationId)
+    if (index < 0) return
+    setSearchResultIndex(index)
+    setSearchPreviewDismissed(false)
+  }, [searchResults])
+
+  const moveSearchResult = useCallback((offset: number) => {
+    if (!searchResults.length) return
+    setSearchResultIndex((current) => (current + offset + searchResults.length) % searchResults.length)
+    setSearchPreviewDismissed(false)
+  }, [searchResults.length])
+
   const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
+
+  useEffect(() => {
+    if (!selectedSearchConversation || focusedConversation) return
+    const position = resolveConversationPosition(selectedSearchConversation, overviewLayoutMap)
+    const currentZoom = reactFlow.getZoom()
+    void reactFlow.setCenter(position.x, position.y, {
+      duration: 320,
+      zoom: Math.max(currentZoom, 0.72),
+    })
+  }, [focusedConversation, overviewLayoutMap, reactFlow, selectedSearchConversation])
 
   useEffect(() => {
     const handleResize = () => {
@@ -1529,9 +1647,11 @@ function FlowViewport({
   }, [focusedConversationId, enterFocusMode, exitFocusMode])
 
   const flowNodes = useMemo<Array<Node<FlowNodeData>>>(() => {
+    const searchResultIds = new Set(searchResults.map((conversation) => conversation.conversationId))
     return conversationNodes.map((conversation) => {
       const focused = storeFocusedConversationId === conversation.conversationId
       const faded = storeFocusedConversationId !== null && storeFocusedConversationId !== conversation.conversationId
+      const searchMatched = searchResultIds.has(conversation.conversationId)
       return {
         id: conversation.conversationId,
         type: 'conversation',
@@ -1543,6 +1663,10 @@ function FlowViewport({
           conversation,
           focused,
           selected: lockedSendConversationId === conversation.conversationId,
+          searchQuery: normalizedSearchQuery,
+          searchMatched,
+          searchSelected: selectedSearchConversation?.conversationId === conversation.conversationId,
+          onSearchResultSelect: handleSearchResultSelect,
           conversationMessages: conversationMessagesCache[conversation.conversationId] ?? [],
           messagesLoading: false,
           messagesError: null,
@@ -1551,6 +1675,7 @@ function FlowViewport({
         className: [
           'conversation-flow-node',
           faded ? 'conversation-flow-node--dimmed' : null,
+          normalizedSearchQuery && !searchMatched ? 'conversation-flow-node--search-muted' : null,
         ].filter(Boolean).join(' '),
         draggable: false,
       }
@@ -1560,6 +1685,10 @@ function FlowViewport({
     lockedSendConversationId,
     overviewLayoutMap,
     conversationMessagesCache,
+    handleSearchResultSelect,
+    normalizedSearchQuery,
+    searchResults,
+    selectedSearchConversation?.conversationId,
     storeFocusedConversationId,
   ])
 
@@ -1725,8 +1854,131 @@ function FlowViewport({
         onNavPathTailChange={onNavPathTailChange}
       />
 
+      {!focusedConversation && conversationNodes.length ? (
+        <div
+          className="conversation-search"
+          role="search"
+          onPointerDown={stopEvent}
+          onClick={stopEvent}
+          onDoubleClick={stopEvent}
+        >
+          <div className="conversation-search__bar">
+            <SearchOutlined className="conversation-search__search-icon" aria-hidden="true" />
+            <Input
+              className="conversation-search__input"
+              value={searchQuery}
+              variant="borderless"
+              placeholder="搜索用户问题"
+              aria-label="搜索用户问题"
+              onChange={(event) => handleSearchQueryChange(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowUp') {
+                  event.preventDefault()
+                  moveSearchResult(-1)
+                } else if (event.key === 'ArrowDown') {
+                  event.preventDefault()
+                  moveSearchResult(1)
+                } else if (event.key === 'Escape') {
+                  handleSearchQueryChange('')
+                }
+              }}
+            />
+            <span className="conversation-search__count" aria-live="polite">
+              {normalizedSearchQuery
+                ? searchResults.length
+                  ? `${Math.min(searchResultIndex + 1, searchResults.length)} / ${searchResults.length}`
+                  : '0 / 0'
+                : ''}
+            </span>
+            <Tooltip title="上一个结果">
+              <Button
+                type="text"
+                className="conversation-search__button"
+                icon={<UpOutlined />}
+                aria-label="上一个结果"
+                disabled={searchResults.length < 2}
+                onClick={() => moveSearchResult(-1)}
+              />
+            </Tooltip>
+            <Tooltip title="下一个结果">
+              <Button
+                type="text"
+                className="conversation-search__button"
+                icon={<DownOutlined />}
+                aria-label="下一个结果"
+                disabled={searchResults.length < 2}
+                onClick={() => moveSearchResult(1)}
+              />
+            </Tooltip>
+            <Tooltip title="清除搜索">
+              <Button
+                type="text"
+                className="conversation-search__button"
+                icon={<CloseOutlined />}
+                aria-label="清除搜索"
+                disabled={!normalizedSearchQuery}
+                onClick={() => handleSearchQueryChange('')}
+              />
+            </Tooltip>
+          </div>
+          {normalizedSearchQuery && !searchResults.length ? (
+            <div className="conversation-search__empty" role="status">没有匹配的用户问题</div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!focusedConversation && normalizedSearchQuery && selectedSearchConversation && !searchPreviewDismissed ? (
+        <aside
+          className="conversation-search-preview"
+          aria-label="搜索结果预览"
+          onPointerDown={stopEvent}
+          onClick={stopEvent}
+          onDoubleClick={stopEvent}
+        >
+          <header className="conversation-search-preview__header">
+            <div className="conversation-search-preview__heading">
+              <Typography.Text strong className="conversation-search-preview__title">
+                {highlightText(summarizeConversation(selectedSearchConversation), searchQuery)}
+              </Typography.Text>
+              <Typography.Text type="secondary" className="conversation-search-preview__meta">
+                {selectedSearchConversation.conversationId} · {selectedSearchConversation.messageCount} 条消息
+              </Typography.Text>
+            </div>
+            <Tooltip title="关闭预览">
+              <Button
+                type="text"
+                className="conversation-search-preview__close"
+                icon={<CloseOutlined />}
+                aria-label="关闭预览"
+                onClick={() => setSearchPreviewDismissed(true)}
+              />
+            </Tooltip>
+          </header>
+          <div className="conversation-search-preview__body">
+            <section className="conversation-search-preview__message conversation-search-preview__message--user">
+              <div className="conversation-search-preview__role">
+                <strong>用户</strong>
+                <span>首条问题</span>
+              </div>
+              <p>{highlightText(selectedSearchConversation.userPromptPreview?.trim() || '当前节点暂无用户问题', searchQuery)}</p>
+            </section>
+            <section className="conversation-search-preview__message conversation-search-preview__message--assistant">
+              <div className="conversation-search-preview__role">
+                <strong>助手结论</strong>
+                <span>最终回复</span>
+              </div>
+              <p>{selectedSearchConversation.assistantConclusionPreview?.trim() || '当前节点暂无助手结论'}</p>
+            </section>
+          </div>
+        </aside>
+      ) : null}
+
       <ReactFlow
-        className={focusedConversation ? 'conversation-canvas__flow conversation-canvas__flow--focused' : 'conversation-canvas__flow'}
+        className={[
+          'conversation-canvas__flow',
+          focusedConversation ? 'conversation-canvas__flow--focused' : null,
+          normalizedSearchQuery ? 'conversation-canvas__flow--searching' : null,
+        ].filter(Boolean).join(' ')}
         nodes={flowNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
@@ -1741,6 +1993,10 @@ function FlowViewport({
         nodeClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         paneClickDistance={DIAGRAM_POINTER_TOLERANCE_PX}
         onNodeClick={(_, node) => {
+          if (normalizedSearchQuery) {
+            handleSearchResultSelect(node.id)
+            return
+          }
           if (focusedConversationId === node.id) {
             return
           }

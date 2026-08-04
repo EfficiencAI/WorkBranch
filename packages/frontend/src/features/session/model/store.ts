@@ -204,6 +204,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         title: null,
         state: 'active',
         messageCount: 0,
+        userPromptPreview: null,
+        assistantConclusionPreview: null,
         position: null,
       }
       const fallbackDetail = {

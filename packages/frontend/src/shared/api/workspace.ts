@@ -38,6 +38,14 @@ function toConversationSummary(payload: Record<string, unknown>): SessionConvers
     title: payload.title === null || payload.title === undefined ? null : String(payload.title),
     state: String(payload.state ?? 'pending'),
     messageCount: Number(payload.message_count ?? 0),
+    userPromptPreview:
+      payload.user_prompt_preview === null || payload.user_prompt_preview === undefined
+        ? null
+        : String(payload.user_prompt_preview),
+    assistantConclusionPreview:
+      payload.assistant_conclusion_preview === null || payload.assistant_conclusion_preview === undefined
+        ? null
+        : String(payload.assistant_conclusion_preview),
     position: toConversationPosition(payload),
     createdAt: payload.created_at ? String(payload.created_at) : undefined,
     updatedAt: payload.updated_at ? String(payload.updated_at) : undefined,

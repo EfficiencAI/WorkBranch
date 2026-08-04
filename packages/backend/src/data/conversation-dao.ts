@@ -25,6 +25,11 @@ export interface Conversation {
   position_y: number | null;
 }
 
+export interface ConversationSummary extends Conversation {
+  user_prompt_preview: string | null;
+  assistant_conclusion_preview: string | null;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -149,6 +154,38 @@ export class ConversationDAO {
     `);
     const rows = stmt.all(sessionId) as ConversationRow[];
     return rows.map((row) => this.rowToConversation(row));
+  }
+
+  listConversationSummariesBySession(sessionId: number): ConversationSummary[] {
+    const stmt = db.prepare(`
+      SELECT c.id, c.session_id, c.workspace_id, c.parent_conversation_id, c.title, c.state,
+             c.created_at, c.updated_at, c.ended_at, c.message_count, c.error, c.position_x, c.position_y,
+             (
+               SELECT m.user_content
+               FROM messages m
+               WHERE m.conversation_id = c.id
+                 AND TRIM(COALESCE(m.user_content, '')) <> ''
+               ORDER BY m.created_at ASC, m.id ASC
+               LIMIT 1
+             ) AS user_prompt_preview,
+             (
+               SELECT m.assistant_content
+               FROM messages m
+               WHERE m.conversation_id = c.id
+                 AND TRIM(COALESCE(m.assistant_content, '')) <> ''
+               ORDER BY m.created_at DESC, m.id DESC
+               LIMIT 1
+             ) AS assistant_conclusion_preview
+      FROM conversations c
+      WHERE c.session_id = ?
+      ORDER BY c.created_at ASC, c.id ASC
+    `);
+    const rows = stmt.all(sessionId) as ConversationSummary[];
+    return rows.map((row) => ({
+      ...this.rowToConversation(row),
+      user_prompt_preview: row.user_prompt_preview,
+      assistant_conclusion_preview: row.assistant_conclusion_preview,
+    }));
   }
 
   findConversationsByState(state: string): Conversation[] {

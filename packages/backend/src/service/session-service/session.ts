@@ -332,13 +332,15 @@ export class SessionService {
   }
 
   async listConversationSummaries(sessionId: number): Promise<Array<Record<string, unknown>>> {
-    const conversations = conversationDAO.listConversationsBySession(sessionId);
+    const conversations = conversationDAO.listConversationSummariesBySession(sessionId);
     return conversations.map((conv) => ({
       conversation_id: conv.id,
       parent_conversation_id: conv.parent_conversation_id,
       title: conv.title,
       state: conv.state,
       message_count: conv.message_count,
+      user_prompt_preview: conv.user_prompt_preview,
+      assistant_conclusion_preview: conv.assistant_conclusion_preview,
       created_at: conv.created_at,
       updated_at: conv.updated_at,
       position_x: conv.position_x,
