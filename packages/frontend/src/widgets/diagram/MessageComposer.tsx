@@ -1,7 +1,7 @@
-import { Button, Checkbox, Input, Select, Space, Typography } from 'antd'
-import { BulbOutlined, GlobalOutlined, PlusOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import type { CSSProperties, KeyboardEvent } from 'react'
+import { Button, Checkbox, Input, Select, Space, Switch, Tooltip, Typography } from 'antd'
+import { BulbOutlined, GlobalOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
+import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
 import { useResponsive } from '../../shared/lib'
 import type { AgentId } from '../../shared/api'
@@ -34,45 +34,11 @@ export function MessageComposer({
   const [enableContext, setEnableContext] = useState(false)
   const [thinkMode, setThinkMode] = useState(false)
   const [netMode, setNetMode] = useState(false)
-  const [btnStyle, setBtnStyle] = useState<CSSProperties>({})
   const hasSendTarget = selectedConversationId !== null
-  const toolbarRef = useRef<HTMLDivElement>(null)
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
       ? settings.ui.message_send_shortcuts_reversed === true
       : false
-
-  const calcBtnSize = useCallback(() => {
-    const el = toolbarRef.current
-    if (!el || !hasSendTarget) return
-    const containerWidth = el.clientWidth
-    const btnCount = 7
-    const gapCount = 6
-    const baseGap = Math.max(4, containerWidth * 0.008)
-    const totalGaps = baseGap * gapCount
-    const availableWidth = containerWidth - totalGaps
-    
-    const height = Math.max(24, Math.min(30, containerWidth * 0.035))
-    const aspectRatio = 2.5
-    const minBtnWidth = height * aspectRatio
-    const maxBtnWidth = 72
-    const btnWidth = Math.min(maxBtnWidth, Math.max(minBtnWidth, availableWidth / btnCount))
-    
-    const fontSize = Math.max(10, Math.min(12, containerWidth * 0.014))
-    setBtnStyle({
-      width: `${btnWidth}px`,
-      height: `${height}px`,
-      fontSize: `${fontSize}px`,
-    })
-  }, [hasSendTarget])
-
-  useEffect(() => {
-    if (!hasSendTarget) return
-    calcBtnSize()
-    const observer = new ResizeObserver(calcBtnSize)
-    if (toolbarRef.current) observer.observe(toolbarRef.current)
-    return () => observer.disconnect()
-  }, [hasSendTarget, calcBtnSize])
 
   useEffect(() => {
     if (selectedConversationId) {
@@ -110,9 +76,9 @@ export function MessageComposer({
       size="small"
       value={selectedAgentId}
       onChange={onAgentChange}
-      style={hasSendTarget ? btnStyle : { minWidth: 112 }}
+      style={{ minWidth: 112 }}
       suffixIcon={<SwapOutlined />}
-      labelRender={() => (selectedAgentId === 'builtin' ? '默认' : 'Trae')}
+      labelRender={() => (selectedAgentId === 'builtin' ? '内置 Agent' : 'Trae CLI')}
       options={[
         { value: 'builtin', label: 'Default' },
         { value: 'trae', label: 'Trae CLI' },
@@ -137,88 +103,83 @@ export function MessageComposer({
     return (
       <div className="message-composer message-composer--focused">
         <Input.TextArea
-          rows={3}
+          rows={2}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
-          autoSize={{ minRows: 3, maxRows: 8 }}
+          placeholder={selectedConversationId || allowCreateOnSend ? '继续询问当前节点...' : ''}
+          autoSize={{ minRows: 2, maxRows: 5 }}
         />
 
-        <div className="message-composer__focused-toolbar" ref={toolbarRef}>
+        <div className="message-composer__focused-toolbar">
           <div className="message-composer__toolbar-left">
-            <Space size={8} align="center" wrap={false}>
-              {!responsive.isMobile && (
-                <>
-                  <Button
-                    type="text"
-                    shape="round"
-                    className="message-composer__tool-btn"
-                    style={btnStyle}
-                    icon={<PlusOutlined />}
-                  />
+            <Space size={6} align="center" wrap={false}>
+              <Tooltip title="添加附件">
+                <Button
+                  type="text"
+                  className="message-composer__tool-btn message-composer__tool-btn--icon"
+                  aria-label="添加附件"
+                  icon={<PaperClipOutlined />}
+                />
+              </Tooltip>
 
-                  <Button
-                    shape="round"
-                    className="message-composer__tool-btn"
-                    style={btnStyle}
-                  >
-                    模式
-                  </Button>
-                </>
-              )}
+              <label className="message-composer__context-toggle">
+                <Switch aria-label="携带路径上下文" size="small" checked={enableContext} onChange={setEnableContext} />
+                <span>携带路径上下文</span>
+              </label>
 
-              {agentSelect}
-
-              <Button
-                type="text"
-                shape="round"
-                className={`message-composer__tool-btn ${thinkMode ? 'message-composer__tool-btn--active' : ''}`}
-                style={btnStyle}
-                icon={<BulbOutlined />}
-                onClick={() => setThinkMode(!thinkMode)}
-              >
-                {!responsive.isMobile && '思考'}
-              </Button>
-
-              <Button
-                type="text"
-                shape="round"
-                className={`message-composer__tool-btn ${netMode ? 'message-composer__tool-btn--active' : ''}`}
-                style={btnStyle}
-                icon={<GlobalOutlined />}
-                onClick={() => setNetMode(!netMode)}
-              >
-                {!responsive.isMobile && '联网'}
-              </Button>
+              <Typography.Text className="message-composer__focused-target">
+                发送到：{selectedConversationLabel ?? selectedConversationId}
+              </Typography.Text>
             </Space>
           </div>
 
           <div className="message-composer__toolbar-right">
+            <Space size={5} align="center" wrap={false}>
+              {agentSelect}
+              <Tooltip title="深度思考">
+                <Button
+                  type="text"
+                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${thinkMode ? 'message-composer__tool-btn--active' : ''}`}
+                  aria-label="深度思考"
+                  aria-pressed={thinkMode}
+                  icon={<BulbOutlined />}
+                  onClick={() => setThinkMode(!thinkMode)}
+                />
+              </Tooltip>
+              <Tooltip title="联网搜索">
+                <Button
+                  type="text"
+                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${netMode ? 'message-composer__tool-btn--active' : ''}`}
+                  aria-label="联网搜索"
+                  aria-pressed={netMode}
+                  icon={<GlobalOutlined />}
+                  onClick={() => setNetMode(!netMode)}
+                />
+              </Tooltip>
             {sending ? (
-              <Button
-                danger
-                shape="round"
-                className="message-composer__send-btn"
-                style={btnStyle}
-                icon={<StopOutlined />}
-                onClick={() => void onStop?.()}
-              >
-                停止
-              </Button>
+              <Tooltip title="停止生成">
+                <Button
+                  danger
+                  className="message-composer__send-btn"
+                  aria-label="停止生成"
+                  icon={<StopOutlined />}
+                  onClick={() => void onStop?.()}
+                />
+              </Tooltip>
             ) : (
-              <Button
-                type="primary"
-                shape="round"
-                className="message-composer__send-btn"
-                style={btnStyle}
-                icon={<SendOutlined />}
-                disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
-                onClick={() => void handleSend()}
-              >
-                发送
-              </Button>
+              <Tooltip title="发送">
+                <Button
+                  type="primary"
+                  className="message-composer__send-btn"
+                  aria-label="发送"
+                  icon={<SendOutlined />}
+                  disabled={!message.trim() || (!selectedConversationId && !allowCreateOnSend)}
+                  onClick={() => void handleSend()}
+                />
+              </Tooltip>
             )}
+            </Space>
           </div>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowPr
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
-import { CloseOutlined, DownOutlined, InfoCircleOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
+import { CloseOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -475,7 +475,7 @@ function FocusOverlay({
   const viewportHeight = window.innerHeight
 
   const initialTransform = `translate(${originRect.x}px, ${originRect.y}px) scale(${originRect.width / viewportWidth}, ${originRect.height / viewportHeight})`
-  const activeTransform = 'translate(0.5%, 0.5%) scale(1, 1)'
+  const activeTransform = 'translate(0, 0) scale(1, 1)'
 
   return (
     <div
@@ -485,19 +485,7 @@ function FocusOverlay({
         inset: 0,
         zIndex: 100,
         pointerEvents: isActive ? 'auto' : 'none',
-        touchAction: isActive ? 'none' : 'auto',
-      }}
-      onTouchMove={(e) => {
-        if (isActive) {
-          e.preventDefault()
-          e.stopPropagation()
-        }
-      }}
-      onWheel={(e) => {
-        if (isActive) {
-          e.preventDefault()
-          e.stopPropagation()
-        }
+        touchAction: 'auto',
       }}
     >
       <div
@@ -505,9 +493,10 @@ function FocusOverlay({
         style={{
           position: 'absolute',
           inset: 0,
-          borderRadius: isActive ? 'var(--app-radius-lg)' : originRect.borderRadius,
-          background: 'var(--app-card-bg)',
-          backdropFilter: 'blur(20px)',
+          borderRadius: isActive ? 0 : originRect.borderRadius,
+          backgroundColor: '#0a0f19',
+          backgroundImage: 'linear-gradient(rgba(148, 163, 184, 0.055) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.055) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
           transform: isEntering ? initialTransform : activeTransform,
           transformOrigin: 'top left',
           transition: isEntering ? 'none' : `transform ${FOCUS_OVERLAY_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1), border-radius ${FOCUS_OVERLAY_DURATION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`,
@@ -648,7 +637,8 @@ function FocusView({
 }: FocusViewProps) {
   const responsive = useResponsive()
   const [viewedNodeId, setViewedNodeId] = useState(() => conversation?.conversationId ?? '')
-  const [treeWidth, setTreeWidth] = useState(200)
+  const [treeWidth, setTreeWidth] = useState(254)
+  const [treeOpen, setTreeOpen] = useState(() => !responsive.isMobile)
   const isResizing = useRef(false)
   // 程序化滚动标记：scrollIntoView 动画期间阻止滚动更新选中项
   const isProgrammaticScroll = useRef(false)
@@ -662,9 +652,13 @@ function FocusView({
   }, [])
 
   useEffect(() => {
+    setTreeOpen(!responsive.isMobile)
+  }, [responsive.isMobile])
+
+  useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
       if (!isResizing.current) return
-      setTreeWidth(Math.max(120, Math.min(e.clientX, 500)))
+      setTreeWidth(Math.max(220, Math.min(e.clientX, 420)))
     }
     const handleMouseUp = () => {
       if (!isResizing.current) return
@@ -793,8 +787,11 @@ function FocusView({
       }
 
       onNavigateToNode(nodeId)
+      if (responsive.isMobile) {
+        setTreeOpen(false)
+      }
     },
-    [viewedNodeId, navState, conversationNodes, onNavigateToNode],
+    [viewedNodeId, navState, conversationNodes, onNavigateToNode, responsive.isMobile],
   )
 
   // ─── 滚动检测：视口中心点归属算法（防抖 + 程序化滚动标记 + scrollend） ───
@@ -887,123 +884,176 @@ function FocusView({
 
   // 构建节点查找映射
   const nodeMap = useMemo(() => new Map(conversationNodes.map((n) => [n.conversationId, n])), [conversationNodes])
+  const rootNode = navState.path.length > 0 ? nodeMap.get(navState.path[0].conversationId) ?? null : null
 
   return (
-    <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''}`}>
-      {/* 左侧：树导航 */}
-      <div className="focus-view__tree" style={isMobile ? undefined : { width: treeWidth }}>
-        <FocusTreeNav
-          anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? conversation?.conversationId ?? ''}
-          activeId={viewedNodeId}
-          pathIds={new Set(navState.path.map((item) => item.conversationId))}
-          onSelect={handleNavigate}
+    <div className={`focus-view ${isMobile ? 'focus-view--mobile' : ''} ${treeOpen ? 'focus-view--tree-open' : 'focus-view--tree-collapsed'}`}>
+      <aside
+        className="focus-view__tree"
+        style={isMobile ? undefined : { width: treeOpen ? treeWidth : 0 }}
+        aria-label="对话路径"
+        aria-hidden={!treeOpen}
+      >
+        <header className="focus-view__tree-header">
+          <div className="focus-view__tree-heading">
+            <Typography.Text strong>对话路径</Typography.Text>
+            <Typography.Text type="secondary">{conversationNodes.length} 个节点 · {navState.path.length} 层</Typography.Text>
+          </div>
+          <Button
+            type="text"
+            className="focus-view__icon-button"
+            aria-label="收起路径"
+            title="收起路径"
+            icon={isMobile ? <CloseOutlined /> : <MenuFoldOutlined />}
+            onClick={() => setTreeOpen(false)}
+          />
+        </header>
+        <div className="focus-view__tree-body">
+          <Typography.Text className="focus-view__tree-label">当前会话</Typography.Text>
+          <FocusTreeNav
+            anchorId={navState.path[0]?.conversationId ?? viewedNodeId ?? conversation?.conversationId ?? ''}
+            activeId={viewedNodeId}
+            pathIds={new Set(navState.path.map((item) => item.conversationId))}
+            onSelect={handleNavigate}
+          />
+        </div>
+        <footer className="focus-view__tree-footer">
+          <Typography.Text type="secondary">会话</Typography.Text>
+          <Typography.Text strong>{rootNode ? summarizeConversation(rootNode) : '当前会话'}</Typography.Text>
+        </footer>
+      </aside>
+
+      {isMobile ? (
+        <button
+          type="button"
+          className="focus-view__tree-scrim"
+          aria-label="关闭路径导航"
+          onClick={() => setTreeOpen(false)}
         />
-      </div>
+      ) : null}
 
-      {/* 拖拽调整手柄 */}
-      {!isMobile && (
+      {!isMobile && treeOpen ? (
         <div className="focus-view__resize-handle" onMouseDown={handleResizeStart} />
-      )}
+      ) : null}
 
-      {/* 右侧：主内容区（无缝内容流） */}
       <div className="focus-view__main">
-        {/* 面包屑 */}
-        <FocusBreadcrumb chain={ancestorChain} onSelect={handleNavigate} />
+        <header className="focus-view__topbar">
+          {!treeOpen ? (
+            <Button
+              type="text"
+              className="focus-view__icon-button focus-view__tree-open-button"
+              aria-label="打开路径"
+              title="打开路径"
+              icon={<MenuUnfoldOutlined />}
+              onClick={() => setTreeOpen(true)}
+            />
+          ) : null}
+          <FocusBreadcrumb chain={ancestorChain} onSelect={handleNavigate} />
+          <div className="focus-view__topbar-meta">
+            {viewedNode ? <span className="focus-view__meta-pill">{viewedNode.messageCount} 条消息</span> : null}
+            <span className="focus-view__view-badge">聚焦态</span>
+          </div>
+        </header>
 
-        {/* 内容流容器 */}
         <div className="focus-view__content-flow" ref={contentFlowRef}>
-          {navState.path.length > 0 ? (
-            navState.path.map((pathItem, index) => {
-              const node = nodeMap.get(pathItem.conversationId)
-              if (!node) return null
+          <div className="focus-view__content-inner">
+            {navState.path.length > 0 ? (
+              navState.path.map((pathItem, index) => {
+                const node = nodeMap.get(pathItem.conversationId)
+                if (!node) return null
 
-              const isActive = pathItem.conversationId === viewedNodeId
-              const children = getChildrenForNode(pathItem.conversationId)
+                const isActive = pathItem.conversationId === viewedNodeId
+                const children = getChildrenForNode(pathItem.conversationId)
+                const nodeMessages = conversationMessagesCache[pathItem.conversationId] ?? []
+                const isNodeLoading = loadingNodeIds.has(pathItem.conversationId)
 
-              // 从缓存中获取该节点的完整消息
-              const nodeMessages = conversationMessagesCache[pathItem.conversationId] ?? []
-              const isNodeLoading = loadingNodeIds.has(pathItem.conversationId)
-
-              return (
-                <section
-                  key={pathItem.conversationId}
-                  className={`flow-section ${isActive ? 'flow-section--active' : ''}`}
-                  data-node-id={pathItem.conversationId}
-                  id={`flow-section-${pathItem.conversationId}`}
-                >
-                  {/* 分隔线（非首节点） */}
-                  {index > 0 && <div className="flow-separator">↓</div>}
-
-                  {/* 所有节点都显示完整消息列表 */}
-                  {isNodeLoading ? (
-                    <div className="flow-section__loading">
-                      <Spin size="small" />
-                      <Typography.Text type="secondary" style={{ fontSize: 12, marginLeft: 8 }}>
-                        加载中...
-                      </Typography.Text>
-                    </div>
-                  ) : nodeMessages.length > 0 ? (
-                    <div className={`flow-section__messages ${isActive ? 'flow-section__messages--active' : ''}`}>
-                      <div className="flow-section__messages-list">
+                return (
+                  <section
+                    key={pathItem.conversationId}
+                    className={`flow-section ${isActive ? 'flow-section--active' : ''}`}
+                    data-node-id={pathItem.conversationId}
+                    id={`flow-section-${pathItem.conversationId}`}
+                  >
+                    <header className="flow-section__header">
+                      <div className="flow-section__heading">
+                        <Typography.Text className="flow-section__kicker">
+                          {isActive ? <span className="active-indicator-dot" /> : null}
+                          {isActive ? '当前节点' : `路径 ${index + 1} / ${navState.path.length}`}
+                        </Typography.Text>
+                        <Typography.Title level={isActive ? 1 : 2}>{summarizeConversation(node)}</Typography.Title>
+                        <Typography.Text className="flow-section__id">{node.conversationId}</Typography.Text>
+                      </div>
+                      <div className="flow-section__actions">
+                        <StatusTag label={getConversationStateLabel(node.state)} tone={getConversationStateTone(node.state)} />
                         <Tooltip
                           title={
                             <Space direction="vertical" size={4} style={{ width: '100%' }}>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>标题</span><span style={{ textAlign: 'right' }}>{summarizeConversation(node)}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>对话 ID</span><span style={{ fontFamily: 'monospace', textAlign: 'right' }}>{node.conversationId}</span></div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>消息数</span><span style={{ textAlign: 'right' }}>{nodeMessages.length} 条</span></div>
-                              {index + 1 < navState.path.length && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>层级</span><span style={{ textAlign: 'right' }}>第 {index + 1} / {navState.path.length} 层</span></div>}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>状态</span><span style={{ textAlign: 'right' }}>{node.state}</span></div>
-                              {node.createdAt && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>创建时间</span><span style={{ textAlign: 'right' }}>{node.createdAt}</span></div>}
-                              {node.updatedAt && <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}><span style={{ color: '#9ca3af', whiteSpace: 'nowrap' }}>更新时间</span><span style={{ textAlign: 'right' }}>{node.updatedAt}</span></div>}
+                              <div className="flow-section__tooltip-row"><span>标题</span><strong>{summarizeConversation(node)}</strong></div>
+                              <div className="flow-section__tooltip-row"><span>对话 ID</span><strong>{node.conversationId}</strong></div>
+                              <div className="flow-section__tooltip-row"><span>消息数</span><strong>{nodeMessages.length} 条</strong></div>
+                              <div className="flow-section__tooltip-row"><span>层级</span><strong>第 {index + 1} / {navState.path.length} 层</strong></div>
+                              <div className="flow-section__tooltip-row"><span>状态</span><strong>{getConversationStateLabel(node.state)}</strong></div>
                             </Space>
                           }
-                          placement="topRight"
+                          placement="bottomRight"
                           overlayStyle={{ maxWidth: 320 }}
-                          color="rgba(17, 24, 39, 0.95)"
+                          color="rgba(17, 24, 39, 0.98)"
                         >
-                          <span className="flow-section__info-icon">
-                            <InfoCircleOutlined />
-                          </span>
+                          <Button
+                            type="text"
+                            className="focus-view__icon-button flow-section__info-button"
+                            aria-label="查看节点信息"
+                            icon={<InfoCircleOutlined />}
+                          />
                         </Tooltip>
-                        {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list-inner', false)}
                       </div>
-                    </div>
-                  ) : (
-                    <div className="flow-section__empty-messages">
-                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        暂无消息
-                      </Typography.Text>
-                    </div>
-                  )}
+                    </header>
 
-                  {/* 分支选择器：仅在路径底部节点有多个子节点时显示 */}
-                  {index === navState.path.length - 1 && children.length >= 2 && (
-                    <div className="flow-section__branches">
-                      <BranchSelector nodes={children} onSelect={handleNavigate} />
-                    </div>
-                  )}
-                </section>
-              )
-            })
-          ) : (
-            /* 空状态 */
-            <div className="focus-view__empty">
-              <EmptyState title="暂无导航" description="暂无导航路径" />
-            </div>
-          )}
+                    {isNodeLoading ? (
+                      <div className="flow-section__loading">
+                        <Spin size="small" />
+                        <Typography.Text type="secondary">加载中...</Typography.Text>
+                      </div>
+                    ) : nodeMessages.length > 0 ? (
+                      <div className={`flow-section__messages ${isActive ? 'flow-section__messages--active' : ''}`}>
+                        <div className="flow-section__messages-list">
+                          {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list-inner', false)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flow-section__empty-messages">
+                        <Typography.Text type="secondary">暂无消息</Typography.Text>
+                      </div>
+                    )}
+
+                    {index === navState.path.length - 1 && children.length >= 2 ? (
+                      <div className="flow-section__branches">
+                        <BranchSelector nodes={children} onSelect={handleNavigate} />
+                      </div>
+                    ) : null}
+                  </section>
+                )
+              })
+            ) : (
+              <div className="focus-view__empty">
+                <EmptyState title="暂无导航" description="暂无导航路径" />
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* 输入框固定在底部 */}
         <div className="focus-view__composer">
-          <MessageComposer
-            selectedConversationId={selectedConversationId}
-            selectedConversationLabel={selectedConversationLabel}
-            sending={sending}
-            selectedAgentId={selectedAgentId}
-            onSend={onSend}
-            onAgentChange={onAgentChange}
-            onStop={onStop}
-          />
+          <div className="focus-view__composer-inner">
+            <MessageComposer
+              selectedConversationId={selectedConversationId}
+              selectedConversationLabel={selectedConversationLabel}
+              sending={sending}
+              selectedAgentId={selectedAgentId}
+              onSend={onSend}
+              onAgentChange={onAgentChange}
+              onStop={onStop}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -1018,7 +1068,7 @@ interface BreadcrumbProps {
 }
 
 function FocusBreadcrumb({ chain, onSelect }: BreadcrumbProps) {
-  if (chain.length <= 1) return null
+  if (chain.length === 0) return null
 
   return (
     <div className="focus-view__breadcrumb">
@@ -1026,7 +1076,7 @@ function FocusBreadcrumb({ chain, onSelect }: BreadcrumbProps) {
         const isLast = idx === chain.length - 1
         return (
           <span key={node.conversationId} className="focus-view__breadcrumb-item">
-            {idx > 0 && <span className="focus-view__breadcrumb-sep">→</span>}
+            {idx > 0 && <span className="focus-view__breadcrumb-sep">/</span>}
             {isLast ? (
               <span className="focus-view__breadcrumb-label focus-view__breadcrumb-label--active">
                 {summarizeConversation(node)}
@@ -1056,22 +1106,21 @@ interface BranchSelectorProps {
 function BranchSelector({ nodes, onSelect }: BranchSelectorProps) {
   return (
     <div className="focus-view__branches">
-      <Typography.Text type="secondary" style={{ fontSize: 12, marginBottom: 8, display: 'block' }}>
-        子节点
-      </Typography.Text>
+      <div className="focus-view__branch-heading">
+        <Typography.Text strong>继续到子节点</Typography.Text>
+        <Typography.Text type="secondary">选择一个方向继续</Typography.Text>
+      </div>
       <div className="focus-view__branch-cards">
         {nodes.map((node) => (
-          <Card
+          <button
+            type="button"
             key={node.conversationId}
-            size="small"
             className="focus-view__branch-card"
             onClick={() => onSelect(node.conversationId)}
           >
             <div className="focus-view__branch-title">{summarizeConversation(node)}</div>
-            <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-              {node.messageCount ?? 0} 条消息
-            </Typography.Text>
-          </Card>
+            <span>{node.conversationId} · {node.messageCount ?? 0} 条消息</span>
+          </button>
         ))}
       </div>
     </div>
@@ -1081,13 +1130,13 @@ function BranchSelector({ nodes, onSelect }: BranchSelectorProps) {
 // ─── 树导航（Git Graph 风格，lane 列分配算法） ───
 
 // ─── Git Graph 常量 ───
-const PATH_COLOR = '#faad14'  // 路径高亮色（橙黄）
-const BRANCH_COLOR = '#1677ff' // 分支统一蓝色
-const ROW_HEIGHT = 32
-const LANE_WIDTH = 10
-const DOT_RADIUS = 5
-const PADDING_X = 6
-const PADDING_Y = 4
+const PATH_COLOR = '#34d399'
+const BRANCH_COLOR = '#64748b'
+const ROW_HEIGHT = 46
+const LANE_WIDTH = 12
+const DOT_RADIUS = 4
+const PADDING_X = 8
+const PADDING_Y = 6
 
 /** 布局节点：每个节点分配一个 lane（列）和 row（行） */
 interface LayoutNode {
@@ -1096,6 +1145,7 @@ interface LayoutNode {
   row: number         // 第几行（0 开始）
   color: string       // 分支颜色
   label: string       // 显示文本
+  meta: string        // 节点 ID 与消息数
   isActive: boolean   // 是否当前活跃节点
   isInNavPath: boolean // 是否在导航路径上
 }
@@ -1151,12 +1201,17 @@ function buildLayout(
     const y = PADDING_Y + currentRow * ROW_HEIGHT + ROW_HEIGHT / 2
 
     // 记录当前节点
+    const fullLabel = summarizeConversation(node.node)
+    const shortId = node.node.conversationId.length > 18
+      ? `${node.node.conversationId.slice(0, 16)}…`
+      : node.node.conversationId
     layoutNodes.push({
       id: node.node.conversationId,
       lane,
       row: currentRow,
       color,
-      label: summarizeConversation(node.node),
+      label: fullLabel.length > 15 ? `${fullLabel.slice(0, 14)}…` : fullLabel,
+      meta: `${shortId} · ${node.node.messageCount} 条`,
       isActive,
       isInNavPath,
     })
@@ -1188,13 +1243,13 @@ function buildLayout(
 
 /** 计算 SVG 画布尺寸 */
 function calcSvgSize(layoutNodes: LayoutNode[]): { width: number; height: number } {
-  if (layoutNodes.length === 0) return { width: 200, height: 100 }
+  if (layoutNodes.length === 0) return { width: 228, height: 100 }
   const maxLane = Math.max(...layoutNodes.map((n) => n.lane))
   const maxRow = Math.max(...layoutNodes.map((n) => n.row))
   // 宽度：lane 区域 + 标签区域（按最长标签估算，不再固定 +200）
   // 高度：最后一行底部 + padding
   return {
-    width: PADDING_X + (maxLane + 1) * LANE_WIDTH + LANE_WIDTH + 160,
+    width: Math.max(228, PADDING_X + (maxLane + 1) * LANE_WIDTH + LANE_WIDTH + 176),
     height: PADDING_Y + (maxRow + 1) * ROW_HEIGHT + PADDING_Y,
   }
 }
@@ -1275,25 +1330,46 @@ function FocusTreeNav({ anchorId, activeId, pathIds, onSelect }: TreeNavProps) {
           const cx = PADDING_X + node.lane * LANE_WIDTH + LANE_WIDTH / 2
           const cy = PADDING_Y + node.row * ROW_HEIGHT + ROW_HEIGHT / 2
           return (
-            <g key={node.id} onClick={() => onSelect(node.id)} style={{ cursor: 'pointer' }}>
-              {/* 圆点：active 节点为实心，其他为空心 */}
+            <g
+              key={node.id}
+              className={`focus-tree-node ${node.isActive ? 'focus-tree-node--active' : ''}`}
+              onClick={() => onSelect(node.id)}
+              style={{ cursor: 'pointer' }}
+            >
+              <title>{node.label} · {node.id}</title>
+              <rect
+                x={2}
+                y={cy - 20}
+                width={svgSize.width - 4}
+                height={40}
+                rx={6}
+                className="focus-tree-node__background"
+              />
               <circle
                 cx={cx}
                 cy={cy}
                 r={node.isActive ? DOT_RADIUS + 1 : DOT_RADIUS}
                 fill={node.isActive ? node.color : 'var(--app-panel-bg, #fff)'}
-                stroke={node.isActive ? 'none' : node.color}
-                strokeWidth={node.isActive ? 0 : 1.8}
+                stroke={node.color}
+                strokeWidth={node.isActive ? 2 : 1.8}
               />
-              {/* 标签文字：路径深色，非路径浅色 */}
               <text
                 x={cx + DOT_RADIUS + 8}
-                y={cy + 4}
-                fontSize={13}
-                fill={node.isInNavPath ? 'var(--app-text, #333)' : 'var(--app-text-secondary, #888)'}
+                y={cy - 3}
+                fontSize={11}
+                fill={node.isInNavPath ? 'var(--app-text, #f1f5f9)' : 'var(--app-text-muted, #94a3b8)'}
                 fontWeight={node.isActive ? 600 : (node.isInNavPath ? 500 : 400)}
               >
                 {node.label}
+              </text>
+              <text
+                x={cx + DOT_RADIUS + 8}
+                y={cy + 11}
+                fontSize={9}
+                fill="var(--app-text-muted, #64748b)"
+                opacity={0.78}
+              >
+                {node.meta}
               </text>
             </g>
           )
