@@ -1209,10 +1209,6 @@ button {
   background: rgba(244, 63, 94, 0.12);
 }
 
-.diagram-shell__nav--focused .diagram-shell__brand.ant-btn {
-  margin-bottom: 0;
-}
-
 .diagram-shell__nav--focused .diagram-shell__rail-button--exit.ant-btn {
   height: 36px;
 }

@@ -463,17 +463,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         />
 
         <nav className={navClassName} aria-label="图导航">
-          <Tooltip title={responsive.isMobile ? null : '会话历史'} placement="right">
-            <Button
-              type="text"
-              className="diagram-shell__brand"
-              aria-label="打开会话历史"
-              onClick={() => openSidebar('history')}
-            >
-              WB
-            </Button>
-          </Tooltip>
-
           {isFocused ? (
             <Tooltip title={responsive.isMobile ? null : '退出聚焦'} placement="right">
               <Button
@@ -487,6 +476,16 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
             </Tooltip>
           ) : (
             <>
+              <Tooltip title={responsive.isMobile ? null : '会话历史'} placement="right">
+                <Button
+                  type="text"
+                  className="diagram-shell__brand"
+                  aria-label="打开会话历史"
+                  onClick={() => openSidebar('history')}
+                >
+                  WB
+                </Button>
+              </Tooltip>
               <Tooltip title="对话图" placement="right">
                 <Button
                   type="text"
