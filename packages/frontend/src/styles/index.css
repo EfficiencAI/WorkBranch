@@ -151,10 +151,33 @@ button {
 }
 
 .diagram-shell {
+  --app-text: #f1f5f9;
+  --app-text-muted: #94a3b8;
+  --app-text-soft: #cbd5e1;
+  --app-border: rgba(148, 163, 184, 0.2);
+  --app-border-strong: rgba(148, 163, 184, 0.34);
+  --app-panel-bg: rgba(18, 25, 38, 0.95);
+  --app-panel-bg-strong: rgba(18, 25, 38, 0.97);
+  --app-panel-bg-soft: rgba(28, 38, 53, 0.78);
+  --app-panel-bg-strongest: rgba(18, 25, 38, 0.98);
+  --app-panel-muted: rgba(15, 23, 42, 0.72);
+  --app-card-bg: rgba(18, 25, 38, 0.94);
+  --app-card-bg-strong: #151d2a;
+  --app-item-bg: rgba(28, 38, 53, 0.78);
+  --app-floating-bg: rgba(18, 25, 38, 0.95);
+  --app-input-bg: rgba(7, 11, 19, 0.72);
+  --app-hover-bg: rgba(148, 163, 184, 0.1);
+  --app-grid-color: rgba(148, 163, 184, 0.055);
+  --app-grid-bg: #0a0f19;
+  --app-shadow-sm: 0 8px 28px rgba(0, 0, 0, 0.24);
+  --app-shadow-md: 0 14px 34px rgba(0, 0, 0, 0.3);
+  --app-shadow-lg: 0 24px 60px rgba(0, 0, 0, 0.38);
+  --app-shadow-xl: 0 28px 70px rgba(0, 0, 0, 0.48);
   position: relative;
   min-height: 100vh;
   overflow: hidden;
-  background: var(--diagram-bg);
+  color: var(--app-text);
+  background: #0a0f19;
 }
 
 .diagram-shell__canvas-layer {
@@ -164,32 +187,77 @@ button {
 
 .diagram-shell__nav {
   position: fixed;
-  top: calc(env(safe-area-inset-top, 0px) + 12px);
-  left: 12px;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: 14px;
   z-index: 40;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  width: 58px;
-  min-height: 58px;
-  padding: var(--app-space-1);
+  align-items: center;
+  gap: 4px;
+  width: 54px;
+  min-height: 0;
+  padding: 5px;
   border: 1px solid var(--app-border-strong);
-  border-radius: var(--app-radius-lg);
-  background: var(--app-panel-bg);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--app-shadow-md);
+  border-radius: 8px;
+  background: rgba(18, 25, 38, 0.95);
+  backdrop-filter: blur(16px);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
   overflow: hidden;
-  transition:
-    width 240ms ease,
-    min-height 240ms ease,
-    border-radius 240ms ease,
-    background-color 240ms ease,
-    box-shadow 240ms ease,
-    border-color 240ms ease,
-    padding 240ms ease,
-    top 300ms ease,
-    left 300ms ease,
-    right 300ms ease;
+  transition: top 220ms ease, left 220ms ease, right 220ms ease;
+}
+
+.diagram-shell__brand.ant-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 42px;
+  margin-bottom: 4px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: #07120d;
+  background: #34d399;
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.diagram-shell__brand.ant-btn:hover,
+.diagram-shell__brand.ant-btn:focus-visible {
+  color: #07120d;
+  background: #6ee7b7;
+}
+
+.diagram-shell__rail-button.ant-btn {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  min-width: 42px;
+  height: 40px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: transparent;
+  box-shadow: none;
+}
+
+.diagram-shell__rail-button.ant-btn:hover,
+.diagram-shell__rail-button.ant-btn:focus-visible,
+.diagram-shell__rail-button--active.ant-btn {
+  color: var(--app-text);
+  background: rgba(148, 163, 184, 0.12);
+}
+
+.diagram-shell__rail-button--exit.ant-btn {
+  color: #fda4af;
+}
+
+.diagram-shell__rail-button--exit.ant-btn:hover,
+.diagram-shell__rail-button--exit.ant-btn:focus-visible {
+  color: #fecdd3;
+  background: rgba(244, 63, 94, 0.12);
 }
 
 .diagram-shell__exit-focus-overlay {
@@ -233,11 +301,8 @@ button {
 }
 
 .diagram-shell__nav--focused {
-    left: auto !important;
-    right: 1% !important;
-  width: 58px;
-  min-height: 58px;
-  padding: var(--app-space-1);
+  left: auto;
+  right: 14px;
 }
 
 .diagram-shell__nav--focused .diagram-shell__nav-head {
@@ -378,16 +443,15 @@ button {
 
 .diagram-shell__hud {
   position: fixed;
-  top: 96px;
-  left: 24px;
+  top: 18px;
+  left: 86px;
   z-index: 20;
-  max-width: min(420px, calc(100vw - 48px));
-  padding: var(--app-space-6) calc(22px * var(--app-ui-scale));
-  border: 1px solid var(--app-border);
-  border-radius: var(--app-radius-xl);
-  background: var(--app-floating-bg);
-  backdrop-filter: blur(18px);
-  box-shadow: 0 22px 50px rgba(2, 6, 23, 0.32);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(360px, calc(50vw - 300px));
+  height: 36px;
+  pointer-events: none;
 }
 
 .diagram-shell__eyebrow {
@@ -399,8 +463,30 @@ button {
 }
 
 .diagram-shell__title.ant-typography {
+  display: block;
+  min-width: 0;
   margin: 0;
+  overflow: hidden;
   color: var(--app-text);
+  font-size: 15px;
+  line-height: 22px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.diagram-shell__view-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  flex: 0 0 auto;
+  padding: 2px 9px;
+  border: 1px solid var(--app-border);
+  border-radius: 999px;
+  color: var(--app-text-muted);
+  background: rgba(15, 23, 42, 0.75);
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
 .diagram-shell__scrim {
@@ -419,35 +505,6 @@ button {
 .conversation-canvas {
   position: relative;
   min-height: 100vh;
-}
-
-.conversation-canvas__backdrop {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-}
-
-.conversation-canvas__glow {
-  position: absolute;
-  border-radius: 999px;
-  filter: blur(80px);
-  opacity: 0.4;
-}
-
-.conversation-canvas__glow--primary {
-  top: 15%;
-  left: 18%;
-  width: 280px;
-  height: 280px;
-  background: rgba(34, 197, 94, 0.28);
-}
-
-.conversation-canvas__glow--secondary {
-  right: 12%;
-  bottom: 16%;
-  width: 320px;
-  height: 320px;
-  background: rgba(59, 130, 246, 0.22);
 }
 
 .conversation-canvas__viewport {
@@ -1849,10 +1906,7 @@ button {
   }
 
   .diagram-shell__hud {
-    top: 96px;
-    left: 16px;
-    right: 16px;
-    max-width: none;
+    display: none;
   }
 
   .conversation-canvas__overlay--meta {
@@ -1890,19 +1944,34 @@ button {
 
 @media screen and (max-width: 767px) {
   .diagram-shell__nav {
-    top: 1%;
-    left: 1%;
-    right: 1%;
-    width: 58px;
-    min-height: 58px;
-    padding: 5px;
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
+    left: 10px;
+    right: auto;
+    width: 46px;
+    padding: 4px;
   }
 
   .diagram-shell__nav--focused {
-    left: auto !important;
-    right: 1% !important;
-    width: 58px;
-    min-height: 58px;
+    left: auto;
+    right: 10px;
+  }
+
+  .diagram-shell__brand.ant-btn {
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    margin-bottom: 0;
+  }
+
+  .diagram-shell__rail-button.ant-btn {
+    display: none;
+  }
+
+  .diagram-shell__rail-button--exit.ant-btn {
+    display: grid;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
   }
 
   .diagram-shell__nav-head {
@@ -1932,12 +2001,6 @@ button {
     flex: 0 0 auto;
   }
 
-  .diagram-shell__hud {
-    top: 144px;
-    left: 16px;
-    right: 16px;
-  }
-
   .conversation-canvas__overlay--meta {
     top: 260px;
     left: 16px;
@@ -1959,9 +2022,9 @@ button {
   }
 
   .conversation-search {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
+    top: calc(env(safe-area-inset-top, 0px) + 10px);
     right: 8px;
-    left: 82px;
+    left: 66px;
     width: auto;
     min-width: 0;
     transform: none;
@@ -2058,30 +2121,34 @@ button {
 }
 
 .diagram-shell__nav--mobile {
-  position: fixed;
-  top: 14px;
-  left: 14px;
-  z-index: 40;
-  display: flex;
-  flex-direction: column;
-  width: 58px;
-  min-height: 58px;
-  padding: 5px;
-  border: 1px solid var(--app-border-strong);
-  border-radius: calc(16px * var(--app-ui-scale));
-  background: var(--app-panel-bg);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--app-shadow-md);
+  width: 46px;
 }
 
 .diagram-shell__drawer .ant-drawer-content {
   background: var(--app-panel-bg-strong);
 }
 
+.diagram-shell__drawer {
+  --app-text: #f1f5f9;
+  --app-text-muted: #94a3b8;
+  --app-text-soft: #cbd5e1;
+  --app-border: rgba(148, 163, 184, 0.2);
+  --app-border-strong: rgba(148, 163, 184, 0.34);
+  --app-panel-bg: rgba(18, 25, 38, 0.95);
+  --app-panel-bg-strong: rgba(18, 25, 38, 0.97);
+  --app-panel-bg-soft: rgba(28, 38, 53, 0.78);
+  --app-panel-muted: rgba(15, 23, 42, 0.72);
+  --app-card-bg: rgba(18, 25, 38, 0.94);
+  --app-card-bg-strong: #151d2a;
+  --app-item-bg: rgba(28, 38, 53, 0.78);
+  --app-input-bg: rgba(7, 11, 19, 0.72);
+  --app-hover-bg: rgba(148, 163, 184, 0.1);
+}
+
 .diagram-shell__drawer .ant-drawer-header {
   background: transparent;
   border-bottom: 1px solid var(--app-border);
-  padding: 16px 20px;
+  padding: 16px 20px 16px 82px;
 }
 
 .diagram-shell__drawer .ant-drawer-title {
@@ -2212,7 +2279,11 @@ button {
   }
 
   .diagram-shell__hud {
-    max-width: min(380px, calc(100vw - 48px));
+    display: none;
+  }
+
+  .diagram-shell__drawer .ant-drawer-header {
+    padding-left: 66px;
   }
 
   .conversation-node {

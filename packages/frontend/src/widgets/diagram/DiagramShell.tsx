@@ -1,4 +1,5 @@
-import { Button, Checkbox, Drawer, Modal, Space, Typography } from 'antd'
+import { Button, Checkbox, ConfigProvider, Drawer, Modal, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
+import { ApartmentOutlined, FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -30,7 +31,6 @@ import type { AgentId } from '../../shared/api'
 import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
-import { StatusTag } from '../../shared/ui'
 import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
 
@@ -91,14 +91,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     isFocused ? 'diagram-shell__nav--focused' : null,
   ].filter(Boolean).join(' ')
 
-  const selectedConversation = useMemo(
-    () => conversationNodes.find((node) => node.conversationId === selectedConversationId) ?? null,
-    [conversationNodes, selectedConversationId],
-  )
-  const lockedSendConversation = useMemo(
-    () => conversationNodes.find((node) => node.conversationId === lockedSendConversationId) ?? null,
-    [conversationNodes, lockedSendConversationId],
-  )
   const focusedConversation = useMemo(
     () => conversationNodes.find((node) => node.conversationId === focusedConversationId) ?? null,
     [conversationNodes, focusedConversationId],
@@ -430,8 +422,21 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   }
 
   return (
-    <section className="diagram-shell">
-      <div className="diagram-shell__canvas-layer">
+    <ConfigProvider
+      theme={{
+        algorithm: antdTheme.darkAlgorithm,
+        token: {
+          colorPrimary: '#34d399',
+          colorBgBase: '#070b13',
+          colorBgContainer: 'rgba(18, 25, 38, 0.96)',
+          colorBorder: 'rgba(148, 163, 184, 0.2)',
+          colorTextBase: '#f1f5f9',
+          borderRadius: 8,
+        },
+      }}
+    >
+      <section className="diagram-shell">
+        <div className="diagram-shell__canvas-layer">
         <ConversationCanvas
           currentSessionId={selectedSessionId}
           focusedConversationId={focusedConversationId}
@@ -457,123 +462,126 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           onNavPathTailChange={setNavPathTailId}
         />
 
-        <div className={navClassName}>
-          <Button
-            type="text"
-            shape="round"
-            data-testid="exit-focus-button"
-            className={`diagram-shell__exit-focus-overlay ${!isFocused ? 'diagram-shell__exit-focus-overlay--hidden' : ''}`}
-            aria-label="退出聚焦"
-            icon={
-              <svg viewBox="0 0 1024 1024" width="16" height="16" fill="currentColor">
-                <path d="M256 768v128H128V768h128m64-64H64v256h256V704zM576 768v128H448V768h128m64-64H384v256h256V704zM896 768v128H768V768h128m64-64H704v256h256V704zM607.7 127.9v191.5H416.3V127.9h191.4m64-64H352.3v319.5h96.4V448H126.1v64h1.9v128h63.3V512h257.4v128H576V512h256v128h63.3V512h0.7v-64H576v-64.6h95.7V63.9z" />
-              </svg>
-            }
-            onClick={() => setFocusedConversationId(null)}
-          />
-          <div className="diagram-shell__nav-head">
-            <div className="diagram-shell__nav-trigger-slot">
+        <nav className={navClassName} aria-label="图导航">
+          <Tooltip title={responsive.isMobile ? null : '会话历史'} placement="right">
+            <Button
+              type="text"
+              className="diagram-shell__brand"
+              aria-label="打开会话历史"
+              onClick={() => openSidebar('history')}
+            >
+              WB
+            </Button>
+          </Tooltip>
+
+          {isFocused ? (
+            <Tooltip title={responsive.isMobile ? null : '退出聚焦'} placement="right">
               <Button
                 type="text"
-                shape="round"
-                className={`diagram-shell__nav-trigger ${isFocused ? 'diagram-shell__nav-trigger--focused' : ''}`}
-                aria-label="打开侧边栏"
-                onClick={() => setActiveSidebar('history')}
-              >
-                WB
-              </Button>
-            </div>
+                data-testid="exit-focus-button"
+                className="diagram-shell__rail-button diagram-shell__rail-button--exit"
+                aria-label="退出聚焦"
+                icon={<FullscreenExitOutlined />}
+                onClick={() => setFocusedConversationId(null)}
+              />
+            </Tooltip>
+          ) : (
+            <>
+              <Tooltip title="对话图" placement="right">
+                <Button
+                  type="text"
+                  className={`diagram-shell__rail-button ${activeSidebar === null && !isSettingsRoute ? 'diagram-shell__rail-button--active' : ''}`}
+                  aria-label="对话图"
+                  icon={<ApartmentOutlined />}
+                  onClick={collapseNav}
+                />
+              </Tooltip>
+              <Tooltip title="会话历史" placement="right">
+                <Button
+                  type="text"
+                  className={`diagram-shell__rail-button ${activeSidebar === 'history' ? 'diagram-shell__rail-button--active' : ''}`}
+                  aria-label="会话历史"
+                  icon={<HistoryOutlined />}
+                  onClick={() => openSidebar('history')}
+                />
+              </Tooltip>
+              <Tooltip title="设置" placement="right">
+                <Button
+                  type="text"
+                  className={`diagram-shell__rail-button ${activeSidebar === 'settings' || isSettingsRoute ? 'diagram-shell__rail-button--active' : ''}`}
+                  aria-label="设置"
+                  icon={<SettingOutlined />}
+                  onClick={() => openSidebar('settings')}
+                />
+              </Tooltip>
+            </>
+          )}
+        </nav>
 
-            {!isFocused && (
-              <>
-                <Drawer
-                  open={activeSidebar !== null}
-                  placement="left"
-                  width={responsive.navWidth.open}
-                  onClose={collapseNav}
-                  title={
-                    <Space>
-                      <Button
-                        className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                        onClick={() => openSidebar('history')}
-                      >
-                        会话历史
-                      </Button>
-                      <Button
-                        className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
-                        onClick={() => openSidebar('settings')}
-                      >
-                        设置
-                      </Button>
-                    </Space>
-                  }
-                  className="diagram-shell__drawer"
+        {!isFocused ? (
+          <Drawer
+            open={activeSidebar !== null}
+            placement="left"
+            width={responsive.navWidth.open}
+            rootStyle={{ zIndex: 30 }}
+            onClose={collapseNav}
+            title={
+              <Space>
+                <Button
+                  className={activeSidebar === 'history' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                  onClick={() => openSidebar('history')}
                 >
-                  <div className="diagram-shell__drawer-content">
-                    {activeSidebar === 'history' && user ? (
-                      <SessionSidebar
-                        user={user}
-                        sessions={sessions}
-                        selectedSessionId={selectedSessionId}
-                        creatingSession={creatingSession}
-                        deletingSessionId={deletingSessionId}
-                        onCreateSession={handleCreateSession}
-                        onDeleteSession={handleDeleteSession}
-                        onSelectSession={handleSelectSession}
-                      />
-                    ) : null}
+                  会话历史
+                </Button>
+                <Button
+                  className={activeSidebar === 'settings' ? 'diagram-shell__nav-button diagram-shell__nav-button--active' : 'diagram-shell__nav-button'}
+                  onClick={() => openSidebar('settings')}
+                >
+                  设置
+                </Button>
+              </Space>
+            }
+            className="diagram-shell__drawer"
+          >
+            <div className="diagram-shell__drawer-content">
+              {activeSidebar === 'history' && user ? (
+                <SessionSidebar
+                  user={user}
+                  sessions={sessions}
+                  selectedSessionId={selectedSessionId}
+                  creatingSession={creatingSession}
+                  deletingSessionId={deletingSessionId}
+                  onCreateSession={handleCreateSession}
+                  onDeleteSession={handleDeleteSession}
+                  onSelectSession={handleSelectSession}
+                />
+              ) : null}
 
-                    {activeSidebar === 'settings' ? (
-                      <div className="diagram-shell__settings">
-                        <SettingsPage embedded />
-                      </div>
-                    ) : null}
-                  </div>
-                </Drawer>
-              </>
-            )}
-          </div>
-        </div>
+              {activeSidebar === 'settings' ? (
+                <div className="diagram-shell__settings">
+                  <SettingsPage embedded />
+                </div>
+              ) : null}
+            </div>
+          </Drawer>
+        ) : null}
 
         {showWorkspaceHud ? (
           <div className="diagram-shell__hud">
-            <Space direction="vertical" size={8}>
-              <Typography.Text className="diagram-shell__eyebrow">WorkBranch Diagram</Typography.Text>
-              <Space align="start" size={12} wrap>
-                <Typography.Title level={3} className="diagram-shell__title">
-                  {isSettingsRoute
-                    ? '系统设置'
-                    : focusedConversation
-                      ? `对话 ${focusedConversation.conversationId}`
-                      : sessionDetail
-                          ? `会话 ${sessionDetail.title}`
-                          : '当前暂无会话'}
-                </Typography.Title>
-              </Space>
-              <Space wrap>
-                {sessionDetail && !isSettingsRoute ? <StatusTag label={`会话 ${sessionDetail.title}`} tone="default" /> : null}
-                <StatusTag label="阶段十二" tone="processing" />
-                <StatusTag label={isSettingsRoute ? '侧边栏设置' : '对话图'} tone="success" />
-                <StatusTag
-                  label={focusedConversationId ? '聚焦态' : '概览态'}
-                  tone={focusedConversationId ? 'warning' : 'default'}
-                />
-                {(lockedSendConversation || selectedConversation) ? (
-                  <Space wrap size={6}>
-                    <Typography.Text>当前目标对话</Typography.Text>
-                    <StatusTag
-                      label={(lockedSendConversation ?? (selectedConversation as NonNullable<typeof selectedConversation>)).conversationId}
-                      tone="processing"
-                    />
-                  </Space>
-                ) : (
-                  <Typography.Text type="secondary">当前目标对话</Typography.Text>
-                )}
-              </Space>
-            </Space>
+            <Typography.Text strong className="diagram-shell__title">
+              {isSettingsRoute
+                ? '系统设置'
+                : focusedConversation
+                  ? focusedConversation.title?.trim() || `对话 ${focusedConversation.conversationId}`
+                  : sessionDetail?.title || '当前暂无会话'}
+            </Typography.Text>
+            <span className="diagram-shell__view-badge">
+              {isSettingsRoute ? '设置' : isFocused ? '聚焦态' : '概览态'}
+            </span>
           </div>
         ) : null}
-      </div>
-    </section>
+        </div>
+      </section>
+    </ConfigProvider>
   )
 }

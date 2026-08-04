@@ -1,4 +1,4 @@
-import { Background, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
+import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
@@ -408,7 +408,7 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       <Handle type="target" position={Position.Top} className="conversation-node__handle" isConnectable={false} />
       <Card
         size="small"
-        className="conversation-node__card conversation-node__card--overview conversation-node__card--assistant"
+        className="conversation-node__card conversation-node__card--overview"
         {...longPressHandlers}
       >
         <div className="conversation-node__body-frame">
@@ -2014,7 +2014,12 @@ function FlowViewport({
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={32} size={1} color="var(--app-grid-color)" />
+        <Background
+          variant={BackgroundVariant.Lines}
+          gap={24}
+          size={1}
+          color="rgba(148, 163, 184, 0.055)"
+        />
       </ReactFlow>
 
       {!conversationNodes.length ? (
@@ -2053,11 +2058,6 @@ export function ConversationCanvas(props: ConversationCanvasProps) {
 
   return (
     <section className="conversation-canvas">
-      <div className="conversation-canvas__backdrop" aria-hidden="true">
-        <div className="conversation-canvas__glow conversation-canvas__glow--primary" />
-        <div className="conversation-canvas__glow conversation-canvas__glow--secondary" />
-      </div>
-
       <ReactFlowProvider>
         <ContextMenuProvider>
           <FlowViewport {...props} />
