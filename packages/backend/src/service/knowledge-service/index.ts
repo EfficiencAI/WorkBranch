@@ -70,14 +70,14 @@ class KnowledgeService {
 
       // 向量化：未配置 API key 或失败时降级为纯关键词检索，不影响索引
       let embeddings: number[][] | null = null;
-      if (llmService.isConfigured()) {
+      if (llmService.isEmbeddingConfigured()) {
         try {
           embeddings = await llmService.embedTexts(chunks);
         } catch (err) {
           logger.warn(`[knowledge] embedding skipped for source ${sourceId}: ${String(err)}`);
         }
       } else {
-        logger.info(`[knowledge] LLM 未配置，source ${sourceId} 降级为纯关键词索引`);
+        logger.info(`[knowledge] embedding 未配置（llm:embedding_base_url），source ${sourceId} 使用纯关键词索引`);
       }
 
       chunks.forEach((content, index) => {

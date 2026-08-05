@@ -30,6 +30,11 @@ class LLMServiceImpl {
     return Boolean(settingsService.get('llm:api_key') as string);
   }
 
+  /** embedding 是否显式配置（DeepSeek 等无 embedding 端点的提供商需跳过） */
+  isEmbeddingConfigured(): boolean {
+    return Boolean(settingsService.get('llm:embedding_base_url') as string) && this.isConfigured();
+  }
+
   private getLLM(): ChatOpenAI {
     if (!this.llm) {
       this.llm = this.buildLLM();
@@ -273,17 +278,17 @@ class LLMServiceImpl {
     }
   }
 
-  /** 向量化文本（知识索引用）；未配置 API key 时抛错 */
+  /** 向量化文本（知识索引用）；未配置 llm:embedding_base_url 时抛错 */
   async embedTexts(texts: string[]): Promise<number[][]> {
     const apiKey = settingsService.get('llm:api_key') as string;
-    if (!apiKey) {
-      throw new Error('LLM API key not configured. Please set llm:api_key in settings.');
+    const embeddingBaseUrl = settingsService.get('llm:embedding_base_url') as string;
+    if (!apiKey || !embeddingBaseUrl) {
+      throw new Error('Embedding not configured. Please set llm:embedding_base_url (and llm:api_key) in settings.');
     }
-    const baseUrl = settingsService.get('llm:base_url') as string;
     const model = (settingsService.get('llm:embedding_model') as string) || 'text-embedding-3-small';
     const embeddings = new OpenAIEmbeddings({
       openAIApiKey: apiKey,
-      configuration: { basePath: baseUrl } as never,
+      configuration: { basePath: embeddingBaseUrl } as never,
       modelName: model,
       timeout: 60000,
     });
