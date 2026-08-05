@@ -1,5 +1,6 @@
 import { assistantDAO, type AssistantFaqRow } from '../../data';
 import { llmService, type LlmOptions } from '../agent-service/service/llm-service';
+import { visitorService } from '../visitor-service';
 
 export interface RagAnswer {
   content: string;
@@ -10,6 +11,12 @@ export interface RagQuestion {
   assistantId: number;
   message: string;
   history?: Array<{ role: 'user' | 'assistant'; content: string }>;
+}
+
+export interface AiCheckResult {
+  gaps: Array<{ question: string; count: number }>;
+  scanIssues: Array<{ title: string; reason: string }>;
+  complete: boolean;
 }
 
 interface ScoredHit {
@@ -76,6 +83,39 @@ class RagService {
       sources = part.sources;
     }
     return { content, sources };
+  }
+
+  /**
+   * AI 主动提问的一次检查（注入提示词后执行）：
+   * 1. 知识缺口（高优先级）：访客答不上来的高频问题
+   * 2. 知识库扫描（低优先级）：过短/失败的知识源等疑似不完善点
+   * complete=true 表示暂时没有需要完善的缺口
+   */
+  aiCheck(assistantId: number, gapLimit = 5): AiCheckResult {
+    const gaps = visitorService.listGaps(assistantId, gapLimit);
+    const sources = assistantDAO.listSources(assistantId);
+    const scanIssues: AiCheckResult['scanIssues'] = [];
+
+    if (sources.length === 0) {
+      scanIssues.push({ title: '知识库为空', reason: '尚未上传任何资料' });
+    } else {
+      for (const source of sources) {
+        if (source.status === 'failed') {
+          scanIssues.push({ title: source.title, reason: `解析失败：${source.error ?? '未知错误'}` });
+        } else if (source.status === 'indexed' && source.chunk_count <= 1) {
+          scanIssues.push({
+            title: source.title,
+            reason: `内容可能过短（仅 ${source.chunk_count} 个分块），建议补充完整`,
+          });
+        }
+      }
+    }
+
+    return {
+      gaps,
+      scanIssues,
+      complete: gaps.length === 0 && scanIssues.length === 0,
+    };
   }
 
   retrieve(assistantId: number, query: string, topK = TOP_K): ScoredHit[] {

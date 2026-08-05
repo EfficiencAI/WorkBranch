@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as path from 'path';
 import {
   assistantDAO,
   type Assistant,
@@ -5,11 +7,29 @@ import {
   type AssistantFaqRow,
   type TrainingMessageRow,
 } from '../../data';
+import { fileStorage } from '../../data';
+import { knowledgeService } from '../knowledge-service';
 
 export interface CreateFaqInput {
   question: string;
   answer: string;
   kind?: 'faq' | 'knowledge';
+}
+
+export interface ExportPackage {
+  format: 'workassistant-package';
+  version: number;
+  assistant: Assistant;
+  faqs: AssistantFaqRow[];
+  knowledge: Array<{ title: string; type: string; content: string }>;
+}
+
+export interface ImportPackage {
+  format?: string;
+  version?: number;
+  assistant: Partial<AssistantCreateInput> & { name: string };
+  faqs?: Array<{ question: string; answer: string; kind?: string }>;
+  knowledge?: Array<{ title: string; type?: string; content?: string }>;
 }
 
 /**
@@ -92,6 +112,73 @@ class AssistantService {
   addTrainingMessage(ownerId: number, assistantId: number, role: 'user' | 'assistant', content: string): void {
     this.getOwned(ownerId, assistantId);
     assistantDAO.addTrainingMessage(assistantId, role, content);
+  }
+
+  /** 导出助手包：助手配置 + 固定话术 + 知识文件内容 */
+  exportAssistant(ownerId: number, assistantId: number): ExportPackage {
+    const assistant = this.getOwned(ownerId, assistantId);
+    const faqs = assistantDAO.listFaqs(assistantId);
+    const sources = assistantDAO.listSources(assistantId);
+    const knowledge = sources.map((source) => ({
+      title: source.title,
+      type: source.type,
+      content: source.file_path && fs.existsSync(source.file_path) ? fs.readFileSync(source.file_path, 'utf-8') : '',
+    }));
+    return {
+      format: 'workassistant-package',
+      version: 1,
+      assistant,
+      faqs,
+      knowledge,
+    };
+  }
+
+  /** 导入助手包：重建助手 + 写入知识文件并异步索引 + 恢复固定话术 */
+  async importAssistant(ownerId: number, pkg: ImportPackage): Promise<Assistant> {
+    if (!pkg?.assistant?.name?.trim()) {
+      throw new Error('助手包缺少名称');
+    }
+    const source = pkg.assistant;
+    const assistantId = assistantDAO.create(ownerId, {
+      name: source.name.trim(),
+      description: source.description ?? null,
+      avatar: source.avatar ?? null,
+      welcome_message: source.welcome_message ?? null,
+      system_rules: source.system_rules ?? null,
+      model: source.model ?? null,
+      base_url: source.base_url ?? null,
+      temperature: source.temperature ?? null,
+      max_tokens: source.max_tokens ?? null,
+      quick_questions: source.quick_questions ?? null,
+      status: 'published',
+    });
+
+    for (const item of pkg.knowledge ?? []) {
+      if (!item?.title) continue;
+      const dir = path.join(fileStorage.getStorageRoot(), 'assistant-knowledge', String(assistantId));
+      const safeName = path.basename(item.title).replace(/[^\w.\-\u4e00-\u9fa5]/g, '_');
+      const filePath = path.join(dir, `${Date.now()}-${safeName}`);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(filePath, item.content ?? '', 'utf-8');
+      const sourceId = assistantDAO.addSource(assistantId, {
+        type: (item.type as 'file' | 'text' | 'code') ?? 'file',
+        title: item.title,
+        file_path: filePath,
+        status: 'pending',
+      });
+      void knowledgeService.ingest(assistantId, sourceId).catch(() => {
+        // 导入索引失败不阻断导入，状态会标记为 failed
+      });
+    }
+
+    for (const faq of pkg.faqs ?? []) {
+      if (!faq?.question || !faq?.answer) continue;
+      assistantDAO.createFaq(assistantId, faq.question, faq.answer, faq.kind ?? 'faq');
+    }
+
+    const assistant = assistantDAO.getById(assistantId);
+    if (!assistant) throw new Error('创建助手失败');
+    return assistant;
   }
 }
 

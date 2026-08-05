@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { App, Button, Card, Col, Empty, List, Row, Space, Tag, Typography } from 'antd'
-import { PlusOutlined } from '@ant-design/icons'
+import { ImportOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Assistant } from '../../entities'
 import { selectAuthUser, useAuthStore } from '../../features/auth'
-import { fetchAssistants } from '../../shared/api'
+import { fetchAssistants, importAssistant, type ExportAssistantPackage } from '../../shared/api'
 
 const STATUS_LABEL: Record<string, string> = {
   draft: '草稿',
@@ -19,6 +19,19 @@ export function WorkAssistantHomePage() {
   const loadSession = useAuthStore((state) => state.loadSession)
   const [assistants, setAssistants] = useState<Assistant[]>([])
   const [loading, setLoading] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  const handleImportFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      const pkg = JSON.parse(text) as ExportAssistantPackage
+      const assistant = await importAssistant(pkg)
+      message.success(`已导入「${assistant.name}」，知识正在重新索引`)
+      setAssistants((prev) => [assistant, ...prev])
+    } catch {
+      message.error('导入失败：请选择有效的 .wa.json 文件')
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -62,9 +75,25 @@ export function WorkAssistantHomePage() {
           </Typography.Title>
           <Typography.Text type="secondary">把知识沉淀成可并发接待的 AI 分身</Typography.Text>
         </div>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/assistant/new')}>
-          新建助手
-        </Button>
+        <Space>
+          <input
+            ref={fileRef}
+            type="file"
+            accept=".json,.wa.json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) void handleImportFile(file)
+              e.target.value = ''
+            }}
+          />
+          <Button icon={<ImportOutlined />} onClick={() => fileRef.current?.click()}>
+            导入助手包
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/assistant/new')}>
+            新建助手
+          </Button>
+        </Space>
       </div>
 
       <List

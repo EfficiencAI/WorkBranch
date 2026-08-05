@@ -1,4 +1,4 @@
-import { randomBytes } from 'crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 import { assistantDAO, type ShareInfo } from '../../data';
 
 export interface CreateShareInput {
@@ -44,9 +44,19 @@ class ShareService {
     return assistantDAO.getShareByToken(token);
   }
 
+  verifyPassword(share: ShareInfo, password: string): boolean {
+    if (share.mode !== 'password' || !share.password_hash) return true;
+    const [salt, hash] = share.password_hash.split(':');
+    if (!salt || !hash) return false;
+    const candidate = scryptSync(password, salt, 32);
+    const expected = Buffer.from(hash, 'hex');
+    return candidate.length === expected.length && timingSafeEqual(candidate, expected);
+  }
+
   private hashPassword(password: string): string {
-    // P1 支持访问密码；先做简单占位哈希（单机内部场景）
-    return `ph:${Buffer.from(password).toString('base64')}`;
+    const salt = randomBytes(16).toString('hex');
+    const hash = scryptSync(password, salt, 32).toString('hex');
+    return `${salt}:${hash}`;
   }
 }
 

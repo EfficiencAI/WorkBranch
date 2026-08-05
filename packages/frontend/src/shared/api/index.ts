@@ -28,14 +28,19 @@ export {
   deleteAssistant,
   deleteFaq,
   deleteSource,
+  exportAssistant,
   fetchAssistant,
   fetchAssistants,
+  fetchGaps,
   fetchFaqs,
   fetchShareMeta,
   fetchShares,
   fetchSources,
+  fetchStats,
+  importAssistant,
   reindexSource,
   setShareEnabled,
+  runAiCheck,
   streamTrainAnswer,
   streamVisitorAnswer,
   updateAssistant,
@@ -43,5 +48,5 @@ export {
   uploadSource,
 } from './assistant'
 export type { AgentId, ChatStreamEvent, StreamConversationMessageBody } from './workspace'
-export type { ShareMeta, VisitorStreamHandlers } from './assistant'
+export type { AiCheckResult, AssistantStats, ExportAssistantPackage, ShareMeta, VisitorStreamHandlers } from './assistant'
 export type { ApiEnvelope, HttpRequestOptions, RequestMethod, ResponseParseMode, SseEventMessage, SseEventName } from './types'

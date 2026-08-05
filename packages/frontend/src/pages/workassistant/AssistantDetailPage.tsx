@@ -6,26 +6,24 @@ import {
   Empty,
   List,
   Space,
-  Switch,
   Tabs,
   Tag,
   Typography,
   Upload,
 } from 'antd'
-import { DeleteOutlined, LinkOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, UploadOutlined } from '@ant-design/icons'
 import { useNavigate, useParams } from 'react-router-dom'
-import type { Assistant, KnowledgeSource, ShareInfo } from '../../entities'
+import type { Assistant, KnowledgeSource } from '../../entities'
 import {
-  createShare,
   deleteSource,
   fetchAssistant,
-  fetchShares,
   fetchSources,
   reindexSource,
-  setShareEnabled,
   uploadSource,
 } from '../../shared/api'
 import { RulesTab } from './components/RulesTab'
+import { SharesTab } from './components/SharesTab'
+import { StatsTab } from './components/StatsTab'
 import { TrainTab } from './components/TrainTab'
 
 const SOURCE_STATUS: Record<string, { label: string; color: string }> = {
@@ -43,7 +41,6 @@ export function AssistantDetailPage() {
 
   const [assistant, setAssistant] = useState<Assistant | null>(null)
   const [sources, setSources] = useState<KnowledgeSource[]>([])
-  const [shares, setShares] = useState<ShareInfo[]>([])
   const [loading, setLoading] = useState(true)
 
   const quickQuestions = useMemo(() => {
@@ -64,14 +61,6 @@ export function AssistantDetailPage() {
     }
   }, [id])
 
-  const loadShares = useCallback(async () => {
-    try {
-      setShares(await fetchShares(id))
-    } catch {
-      // 静默
-    }
-  }, [id])
-
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -79,7 +68,7 @@ export function AssistantDetailPage() {
       try {
         const detail = await fetchAssistant(id)
         if (!cancelled) setAssistant(detail)
-        await Promise.all([loadSources(), loadShares()])
+        await loadSources()
       } catch {
         if (!cancelled) message.error('助手加载失败')
       } finally {
@@ -90,7 +79,7 @@ export function AssistantDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [id, loadSources, loadShares, message])
+  }, [id, loadSources, message])
 
   const handleUpload = async (file: File) => {
     try {
@@ -124,30 +113,9 @@ export function AssistantDetailPage() {
     }
   }
 
-  const handleCreateShare = async () => {
-    try {
-      const share = await createShare(id, { mode: 'public' })
-      setShares((prev) => [share, ...prev])
-      message.success('分享链接已生成')
-    } catch {
-      message.error('创建分享失败')
-    }
-  }
-
-  const handleToggleShare = async (share: ShareInfo, enabled: boolean) => {
-    try {
-      const updated = await setShareEnabled(id, share.id, enabled)
-      setShares((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-    } catch {
-      message.error('操作失败')
-    }
-  }
-
   if (!assistant) {
     return <Card loading={loading} />
   }
-
-  const baseUrl = `${window.location.origin}/s`
 
   return (
     <div className="wa-page">
@@ -252,45 +220,12 @@ export function AssistantDetailPage() {
           {
             key: 'shares',
             label: '分享',
-            children: (
-              <Space direction="vertical" size={14} style={{ width: '100%' }}>
-                <Card size="small">
-                  <Space>
-                    <Button type="primary" icon={<PlusOutlined />} onClick={() => void handleCreateShare()}>
-                      创建分享链接
-                    </Button>
-                    <Typography.Text type="secondary">P1 支持访问密码、过期时间、二维码与导出助手包</Typography.Text>
-                  </Space>
-                </Card>
-                <List
-                  dataSource={shares}
-                  locale={{ emptyText: <Empty description="还没有分享入口" /> }}
-                  renderItem={(share) => (
-                    <List.Item
-                      actions={[
-                        <Switch
-                          key="enabled"
-                          checked={Boolean(share.enabled)}
-                          onChange={(checked) => void handleToggleShare(share, checked)}
-                        />,
-                      ]}
-                    >
-                      <List.Item.Meta
-                        title={
-                          <Space>
-                            <LinkOutlined />
-                            <Typography.Text copyable code>
-                              {`${baseUrl}/${share.token}`}
-                            </Typography.Text>
-                          </Space>
-                        }
-                        description={share.mode === 'password' ? '密码访问' : '公开访问'}
-                      />
-                    </List.Item>
-                  )}
-                />
-              </Space>
-            ),
+            children: <SharesTab assistantId={id} />,
+          },
+          {
+            key: 'stats',
+            label: '统计',
+            children: <StatsTab assistantId={id} />,
           },
         ]}
       />

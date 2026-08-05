@@ -2,7 +2,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { App, Button, Card, Input, Modal, Segmented, Space, Tag, Typography } from 'antd'
 import { DeleteOutlined, SendOutlined } from '@ant-design/icons'
 import type { AssistantFaq } from '../../../entities'
-import { createFaq, deleteFaq, fetchFaqs, streamTrainAnswer } from '../../../shared/api'
+import {
+  createFaq,
+  deleteFaq,
+  fetchFaqs,
+  runAiCheck,
+  streamTrainAnswer,
+} from '../../../shared/api'
 
 interface TrainMessage {
   role: 'user' | 'assistant'
@@ -14,6 +20,9 @@ interface TrainTabProps {
   assistantId: number
   quickQuestions?: string[]
 }
+
+type TrainMode = 'user' | 'ai'
+type AiPhase = 'idle' | 'gap' | 'scan' | 'done'
 
 function upsertAssistant(prev: TrainMessage[], content: string, sources?: string[]): TrainMessage[] {
   const next = [...prev]
@@ -31,6 +40,15 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [faqs, setFaqs] = useState<AssistantFaq[]>([])
+
+  const [trainMode, setTrainMode] = useState<TrainMode>('user')
+  const [aiStarted, setAiStarted] = useState(false)
+  const [aiPhase, setAiPhase] = useState<AiPhase>('idle')
+  const [gaps, setGaps] = useState<Array<{ question: string; count: number }>>([])
+  const [gapIndex, setGapIndex] = useState(0)
+  const [scans, setScans] = useState<Array<{ title: string; reason: string }>>([])
+  const [scanIndex, setScanIndex] = useState(0)
+
   const [correcting, setCorrecting] = useState(false)
   const [correction, setCorrection] = useState<{ question: string; answer: string; kind: 'faq' | 'knowledge' }>({
     question: '',
@@ -57,9 +75,14 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
     }
   }, [messages, sending])
 
+  const pushAssistant = (content: string, sources?: string[]) => {
+    setMessages((prev) => [...prev, { role: 'assistant', content, sources }])
+  }
+
   const lastUserContent = () => [...messages].reverse().find((m) => m.role === 'user')?.content ?? ''
   const lastAssistantContent = () => [...messages].reverse().find((m) => m.role === 'assistant')?.content ?? ''
 
+  /* ---------- 用户说明模式 ---------- */
   const send = async (text?: string) => {
     const question = (text ?? input).trim()
     if (!question || sending) return
@@ -94,10 +117,83 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
     }
   }
 
-  const openCorrection = () => {
-    setCorrection({ question: lastUserContent(), answer: lastAssistantContent(), kind: 'faq' })
+  /* ---------- AI 主动提问模式 ---------- */
+  const askCurrentGap = (gap: { question: string; count: number }, index: number) => {
+    pushAssistant(`【知识缺口 · 高优先级】${index + 1}/${gaps.length}：${gap.question}（×${gap.count} 次）。请补充标准答案。`)
+  }
+
+  const askCurrentScan = (issue: { title: string; reason: string }, index: number) => {
+    pushAssistant(`【知识库扫描 · 低优先级】${index + 1}/${scans.length}：${issue.title}（${issue.reason}）。是否补充？`)
+  }
+
+  const finishAiCheck = () => {
+    setAiPhase('done')
+    pushAssistant('✅ 暂时没有发现需要完善的缺口，知识库相对完整。')
+  }
+
+  const moveToScan = () => {
+    setAiPhase('scan')
+    if (scans.length === 0) {
+      finishAiCheck()
+      return
+    }
+    askCurrentScan(scans[0], 0)
+  }
+
+  const advanceAi = () => {
+    if (aiPhase === 'gap') {
+      const next = gapIndex + 1
+      if (next < gaps.length) {
+        setGapIndex(next)
+        askCurrentGap(gaps[next], next)
+      } else {
+        moveToScan()
+      }
+    } else if (aiPhase === 'scan') {
+      const next = scanIndex + 1
+      if (next < scans.length) {
+        setScanIndex(next)
+        askCurrentScan(scans[next], next)
+      } else {
+        finishAiCheck()
+      }
+    }
+  }
+
+  const startAiCheck = async () => {
+    setAiStarted(true)
+    pushAssistant('⚡ 已注入检查提示词：读取知识缺口（高优先）→ 扫描知识库（低优先）')
+    try {
+      const result = await runAiCheck(assistantId)
+      setGaps(result.gaps)
+      setGapIndex(0)
+      setScans(result.scanIssues)
+      setScanIndex(0)
+      if (result.complete) {
+        setAiPhase('gap')
+        finishAiCheck()
+        return
+      }
+      if (result.gaps.length > 0) {
+        setAiPhase('gap')
+        askCurrentGap(result.gaps[0], 0)
+      } else {
+        moveToScan()
+      }
+    } catch {
+      pushAssistant('出错了：AI 检查失败，请稍后再试')
+    }
+  }
+
+  const skipGap = () => moveToScan()
+  const skipScan = () => advanceAi()
+
+  const openCorrectionFor = (question: string, kind: 'faq' | 'knowledge') => {
+    setCorrection({ question, answer: '', kind })
     setCorrecting(true)
   }
+
+  const openCorrection = () => openCorrectionFor(lastUserContent(), 'faq')
 
   const sinkKnowledge = async () => {
     const question = lastUserContent()
@@ -122,6 +218,9 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
       setCorrecting(false)
       await refreshFaqs()
       message.success(`已保存为${correction.kind === 'faq' ? '固定话术' : '知识条目'}，立即生效`)
+      if (trainMode === 'ai') {
+        advanceAi()
+      }
     } catch {
       message.error('保存失败')
     }
@@ -137,15 +236,79 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
     }
   }
 
-  const chips = quickQuestions.length > 0 ? quickQuestions : ['试用版能用多久？', '私有化部署最低要几台机器？']
+  /* ---------- 模式切换与动态快捷项 ---------- */
+  const switchMode = (mode: TrainMode) => {
+    setTrainMode(mode)
+    if (mode === 'ai' && !aiStarted) {
+      pushAssistant('开启后我会先读取知识缺口（高优先级），再扫描知识库内容判断是否完善（低优先级）；若已完善会直接告诉你。')
+    }
+  }
+
+  const renderChips = () => {
+    if (trainMode === 'user') {
+      const chips = quickQuestions.length > 0 ? quickQuestions : ['试用版能用多久？', '私有化部署最低要几台机器？']
+      return chips.map((q) => (
+        <button key={q} type="button" className="visitor-chip" disabled={sending} onClick={() => void send(q)}>
+          {q}
+        </button>
+      ))
+    }
+    if (!aiStarted) {
+      return (
+        <button type="button" className="visitor-chip" onClick={() => void startAiCheck()}>
+          ⚡ 注入提示词并开始检查
+        </button>
+      )
+    }
+    if (aiPhase === 'gap') {
+      return (
+        <>
+          <button type="button" className="visitor-chip" onClick={() => openCorrectionFor(gaps[gapIndex]?.question ?? '', 'faq')}>
+            ✏️ 补充标准答案
+          </button>
+          <button type="button" className="visitor-chip" onClick={skipGap}>
+            跳过缺口
+          </button>
+        </>
+      )
+    }
+    if (aiPhase === 'scan') {
+      return (
+        <>
+          <button type="button" className="visitor-chip" onClick={() => openCorrectionFor(scans[scanIndex]?.title ?? '', 'knowledge')}>
+            ✏️ 补充这个点
+          </button>
+          <button type="button" className="visitor-chip" onClick={skipScan}>
+            跳过
+          </button>
+          <button type="button" className="visitor-chip" onClick={finishAiCheck}>
+            扫描结果已完善
+          </button>
+        </>
+      )
+    }
+    return null
+  }
+
+  const placeholder = trainMode === 'ai' ? 'AI 在主导检查，可点击上方快捷操作…' : '向助手提问，或输入要沉淀的内容…'
 
   return (
     <Space direction="vertical" size={14} style={{ width: '100%' }}>
+      <Segmented
+        block
+        value={trainMode}
+        onChange={(value) => switchMode(value as TrainMode)}
+        options={[
+          { label: '用户说明', value: 'user' },
+          { label: 'AI 主动提问', value: 'ai' },
+        ]}
+      />
+
       <Card size="small" className="train-chat-card">
         <div className="train-chat-body" ref={bodyRef}>
           {messages.length === 0 ? (
             <div className="train-hint">
-              直接提问或纠正回答；回答下方可「纠正回答」（沉淀为固定话术/知识条目）或「沉淀为知识」，立即生效。
+              直接提问或纠正回答；回答下方可「纠正回答」（沉淀为固定话术/知识条目）或「沉淀为知识」，立即生效。切换到「AI 主动提问」可让助手基于缺口与知识扫描主动找你补齐。
             </div>
           ) : null}
           {messages.map((msg, index) => (
@@ -155,7 +318,7 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
                 {msg.sources && msg.sources.length > 0 ? (
                   <span className="visitor-msg-sources">📎 引用：{msg.sources.join('、')}</span>
                 ) : null}
-                {msg.role === 'assistant' && index === messages.length - 1 && !sending ? (
+                {trainMode === 'user' && msg.role === 'assistant' && index === messages.length - 1 && !sending ? (
                   <span className="train-actions">
                     <Button size="small" onClick={openCorrection}>
                       ✏️ 纠正回答
@@ -174,20 +337,14 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
             </div>
           ) : null}
         </div>
-        <div className="visitor-quick">
-          {chips.map((q) => (
-            <button key={q} type="button" className="visitor-chip" disabled={sending} onClick={() => void send(q)}>
-              {q}
-            </button>
-          ))}
-        </div>
+        {renderChips() ? <div className="visitor-quick">{renderChips()}</div> : null}
         <div className="visitor-input-row">
           <Input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onPressEnter={() => void send()}
-            placeholder="向助手提问，或输入要沉淀的内容…"
-            disabled={sending}
+            placeholder={placeholder}
+            disabled={sending || trainMode === 'ai'}
           />
           <Button type="primary" icon={<SendOutlined />} loading={sending} onClick={() => void send()}>
             发送
@@ -222,7 +379,7 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
       </Card>
 
       <Modal
-        title="纠正回答（对齐）"
+        title={trainMode === 'ai' ? (aiPhase === 'scan' ? '补充知识条目' : '补充标准答案') : '纠正回答（对齐）'}
         open={correcting}
         onCancel={() => setCorrecting(false)}
         onOk={() => void confirmCorrection()}
@@ -243,21 +400,24 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
               rows={4}
               value={correction.answer}
               onChange={(e) => setCorrection((c) => ({ ...c, answer: e.target.value }))}
+              placeholder={trainMode === 'ai' ? '请输入标准答案，保存后立即生效…' : '例如：试用版时长调整为 21 天…'}
             />
           </div>
-          <div>
-            <Typography.Text type="secondary">沉淀到</Typography.Text>
-            <Segmented
-              block
-              value={correction.kind}
-              onChange={(value) => setCorrection((c) => ({ ...c, kind: value as 'faq' | 'knowledge' }))}
-              options={[
-                { label: '固定话术', value: 'faq' },
-                { label: '知识条目', value: 'knowledge' },
-              ]}
-              style={{ marginTop: 6 }}
-            />
-          </div>
+          {trainMode !== 'ai' ? (
+            <div>
+              <Typography.Text type="secondary">沉淀到</Typography.Text>
+              <Segmented
+                block
+                value={correction.kind}
+                onChange={(value) => setCorrection((c) => ({ ...c, kind: value as 'faq' | 'knowledge' }))}
+                options={[
+                  { label: '固定话术', value: 'faq' },
+                  { label: '知识条目', value: 'knowledge' },
+                ]}
+                style={{ marginTop: 6 }}
+              />
+            </div>
+          ) : null}
         </Space>
       </Modal>
     </Space>

@@ -7,6 +7,7 @@ import { assistantService } from '../service/assistant-service';
 import { knowledgeService } from '../service/knowledge-service';
 import { ragService } from '../service/rag-service';
 import { shareService } from '../service/share-service';
+import { usageService } from '../service/usage-service';
 import { success } from './result';
 
 const KNOWLEDGE_DIR = 'assistant-knowledge';
@@ -167,6 +168,7 @@ export class AssistantController {
       'Connection': 'keep-alive',
     });
     const write = (obj: unknown) => reply.raw.write(`data: ${JSON.stringify(obj)}\n\n`);
+    const startedAt = Date.now();
 
     const history = assistantService.listTrainingMessages(request.userId!, assistantId, 20)
       .filter((m) => m.role === 'assistant' || (m.role === 'user' && m.content !== message))
@@ -184,6 +186,11 @@ export class AssistantController {
       }
       assistantService.addTrainingMessage(request.userId!, assistantId, 'assistant', full);
       write({ type: 'done', content: full, sources });
+      usageService.record({
+        assistantId,
+        latencyMs: Date.now() - startedAt,
+        cached: sources.length === 0,
+      });
     } catch (err) {
       write({ type: 'error', content: String(err) });
     } finally {
@@ -242,6 +249,50 @@ export class AssistantController {
     try {
       assistantService.deleteFaq(request.userId!, Number(request.params.assistantId), Number(request.params.faqId));
       return reply.send(success(null));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  listGaps(request: FastifyRequest<{ Params: { assistantId: string } }>, reply: FastifyReply) {
+    try {
+      assistantService.getOwned(request.userId!, Number(request.params.assistantId));
+      return reply.send(success(ragService.aiCheck(Number(request.params.assistantId)).gaps));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  runAiCheck(request: FastifyRequest<{ Params: { assistantId: string } }>, reply: FastifyReply) {
+    try {
+      assistantService.getOwned(request.userId!, Number(request.params.assistantId));
+      return reply.send(success(ragService.aiCheck(Number(request.params.assistantId))));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  exportAssistant(request: FastifyRequest<{ Params: { assistantId: string } }>, reply: FastifyReply) {
+    try {
+      return reply.send(success(assistantService.exportAssistant(request.userId!, Number(request.params.assistantId))));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  async importAssistant(request: FastifyRequest<{ Body: unknown }>, reply: FastifyReply) {
+    try {
+      const assistant = await assistantService.importAssistant(request.userId!, request.body as never);
+      return reply.status(201).send(success(assistant));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
+  }
+
+  getStats(request: FastifyRequest<{ Params: { assistantId: string } }>, reply: FastifyReply) {
+    try {
+      assistantService.getOwned(request.userId!, Number(request.params.assistantId));
+      return reply.send(success(usageService.getStats(Number(request.params.assistantId))));
     } catch (err) {
       return reply.status(404).send({ code: 404, message: String(err), data: null });
     }

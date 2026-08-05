@@ -18,6 +18,11 @@ export interface VisitorMessageRow {
   created_at: string;
 }
 
+export interface KnowledgeGap {
+  question: string;
+  count: number;
+}
+
 /**
  * 访客服务（P0 骨架）：免登录会话与助手公开信息。
  * P1 实现访客消息落库、SSE 流式问答、反馈与知识缺口记录。
@@ -26,6 +31,7 @@ class VisitorService {
   getShareMeta(token: string): { share: ShareInfo; assistant: Assistant } | null {
     const share = assistantDAO.getShareByToken(token);
     if (!share || !share.enabled) return null;
+    if (share.expires_at && new Date(share.expires_at).getTime() < Date.now()) return null;
     const assistant = assistantDAO.getById(share.assistant_id);
     if (!assistant || assistant.status === 'disabled') return null;
     return { share, assistant };
@@ -53,6 +59,42 @@ class VisitorService {
     return db.prepare(
       'SELECT * FROM visitor_messages WHERE session_id = ? ORDER BY id DESC LIMIT ?',
     ).all<VisitorMessageRow>(sessionId, limit).reverse();
+  }
+
+  /** 知识缺口：访客提问后助手回复没有引用任何来源（兜底回答）的问题，按次数聚合 */
+  listGaps(assistantId: number, limit = 10): KnowledgeGap[] {
+    return db.prepare(`
+      SELECT v1.content AS question, COUNT(*) AS count
+      FROM visitor_messages v1
+      JOIN visitor_sessions s ON s.id = v1.session_id
+      JOIN shares sh ON sh.id = s.share_id
+      WHERE sh.assistant_id = ?
+        AND v1.role = 'user'
+        AND EXISTS (
+          SELECT 1 FROM visitor_messages v2
+          WHERE v2.session_id = v1.session_id
+            AND v2.role = 'assistant'
+            AND v2.id > v1.id
+            AND (v2.sources_json IS NULL OR v2.sources_json = '[]')
+        )
+      GROUP BY v1.content
+      ORDER BY count DESC, MAX(v1.id) DESC
+      LIMIT ?
+    `).all<KnowledgeGap>(assistantId, limit);
+  }
+
+  /** 全部访客提问排行（用于统计看板） */
+  getTopQuestions(assistantId: number, limit = 5): KnowledgeGap[] {
+    return db.prepare(`
+      SELECT v1.content AS question, COUNT(*) AS count
+      FROM visitor_messages v1
+      JOIN visitor_sessions s ON s.id = v1.session_id
+      JOIN shares sh ON sh.id = s.share_id
+      WHERE sh.assistant_id = ? AND v1.role = 'user'
+      GROUP BY v1.content
+      ORDER BY count DESC
+      LIMIT ?
+    `).all<KnowledgeGap>(assistantId, limit);
   }
 }
 

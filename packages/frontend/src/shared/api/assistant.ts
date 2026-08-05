@@ -58,6 +58,7 @@ export function setShareEnabled(assistantId: number, shareId: number, enabled: b
 
 export interface ShareMeta {
   token: string
+  requires_password: boolean
   assistant: {
     id: number
     name: string
@@ -71,8 +72,11 @@ export function fetchShareMeta(token: string) {
   return get<ShareMeta>(`/api/share/${token}`)
 }
 
-export function createVisitorConversation(token: string) {
-  return post<{ session_id: number; assistant: string }>(`/api/share/${token}/conversations`)
+export function createVisitorConversation(token: string, password?: string) {
+  return post<{ session_id: number; assistant: string }, { password?: string }>(
+    `/api/share/${token}/conversations`,
+    { password },
+  )
 }
 
 export interface VisitorStreamHandlers {
@@ -168,4 +172,46 @@ export function updateFaq(assistantId: number, faqId: number, input: { question:
 
 export function deleteFaq(assistantId: number, faqId: number) {
   return del<null>(`/api/assistants/${assistantId}/faqs/${faqId}`)
+}
+
+export interface AiCheckResult {
+  gaps: Array<{ question: string; count: number }>
+  scanIssues: Array<{ title: string; reason: string }>
+  complete: boolean
+}
+
+export function fetchGaps(assistantId: number) {
+  return get<AiCheckResult['gaps']>(`/api/assistants/${assistantId}/train/gaps`)
+}
+
+export function runAiCheck(assistantId: number) {
+  return post<AiCheckResult, undefined>(`/api/assistants/${assistantId}/train/ai-check`)
+}
+
+export interface ExportAssistantPackage {
+  format: string
+  version: number
+  assistant: Partial<Assistant> & { name: string }
+  faqs: AssistantFaq[]
+  knowledge: Array<{ title: string; type: string; content: string }>
+}
+
+export function exportAssistant(assistantId: number) {
+  return get<ExportAssistantPackage>(`/api/assistants/${assistantId}/export`)
+}
+
+export function importAssistant(pkg: ExportAssistantPackage) {
+  return post<Assistant, ExportAssistantPackage>('/api/assistants/import', pkg)
+}
+
+export interface AssistantStats {
+  todayAnswers: number
+  totalAnswers: number
+  last7d: Array<{ date: string; count: number }>
+  topQuestions: Array<{ question: string; count: number }>
+  gapCount: number
+}
+
+export function fetchStats(assistantId: number) {
+  return get<AssistantStats>(`/api/assistants/${assistantId}/stats`)
 }

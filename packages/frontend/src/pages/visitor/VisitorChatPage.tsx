@@ -22,6 +22,8 @@ export function VisitorChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
+  const [password, setPassword] = useState('')
+  const [passwordError, setPasswordError] = useState(false)
   const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -52,11 +54,13 @@ export function VisitorChatPage() {
   const handleStart = async () => {
     if (!shareToken) return
     setStarting(true)
+    setPasswordError(false)
     try {
-      const session = await createVisitorConversation(shareToken)
+      const session = await createVisitorConversation(shareToken, meta?.requires_password ? password : undefined)
       setSessionId(session.session_id)
     } catch {
-      messageApi.error('会话创建失败')
+      setPasswordError(true)
+      messageApi.error('访问密码错误或会话创建失败')
     } finally {
       setStarting(false)
     }
@@ -159,6 +163,16 @@ export function VisitorChatPage() {
             <div className="visitor-welcome">
               {meta.assistant.welcome_message || `你好，我是「${meta.assistant.name}」。有什么可以帮你？`}
             </div>
+            {meta.requires_password ? (
+              <Input.Password
+                status={passwordError ? 'error' : undefined}
+                placeholder="请输入访问密码"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onPressEnter={() => void handleStart()}
+                style={{ marginTop: 12 }}
+              />
+            ) : null}
             <Button type="primary" block loading={starting} onClick={() => void handleStart()} style={{ marginTop: 12 }}>
               开始对话
             </Button>
