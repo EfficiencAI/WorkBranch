@@ -2,9 +2,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { logger } from '../core/logging';
-import { fileStorage } from '../data';
+import { fileStorage, type AssistantCreateInput } from '../data';
 import { assistantService } from '../service/assistant-service';
 import { knowledgeService } from '../service/knowledge-service';
+import { ragService } from '../service/rag-service';
 import { shareService } from '../service/share-service';
 import { success } from './result';
 
@@ -52,12 +53,20 @@ export class AssistantController {
   update(
     request: FastifyRequest<{
       Params: { assistantId: string };
-      Body: Partial<{ name: string; description: string; avatar: string; welcome_message: string; system_rules: string; status: string }>;
+      Body: Partial<{ name: string; description: string; avatar: string; welcome_message: string; system_rules: string; quick_questions: string[]; status: string }>;
     }>,
     reply: FastifyReply,
   ) {
     try {
-      const assistant = assistantService.update(request.userId!, Number(request.params.assistantId), request.body ?? {});
+      const body = request.body ?? {};
+      const { quick_questions, ...rest } = body;
+      const input: Partial<AssistantCreateInput> = {
+        ...rest,
+        ...(quick_questions !== undefined
+          ? { quick_questions: Array.isArray(quick_questions) ? JSON.stringify(quick_questions) : (quick_questions as string) }
+          : {}),
+      };
+      const assistant = assistantService.update(request.userId!, Number(request.params.assistantId), input);
       return reply.send(success(assistant));
     } catch (err) {
       return reply.status(404).send({ code: 404, message: String(err), data: null });
@@ -134,6 +143,107 @@ export class AssistantController {
       return reply.send(success(source));
     } catch (err) {
       return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
+  }
+
+  async streamTrainMessage(
+    request: FastifyRequest<{ Params: { assistantId: string }; Body: { message?: string } }>,
+    reply: FastifyReply,
+  ) {
+    const assistantId = Number(request.params.assistantId);
+    const message = (request.body?.message ?? '').trim();
+    try {
+      assistantService.getOwned(request.userId!, assistantId);
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+    if (!message) {
+      return reply.status(400).send({ code: 400, message: '消息不能为空', data: null });
+    }
+
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    const write = (obj: unknown) => reply.raw.write(`data: ${JSON.stringify(obj)}\n\n`);
+
+    const history = assistantService.listTrainingMessages(request.userId!, assistantId, 20)
+      .filter((m) => m.role === 'assistant' || (m.role === 'user' && m.content !== message))
+      .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+      .slice(-8);
+    assistantService.addTrainingMessage(request.userId!, assistantId, 'user', message);
+
+    try {
+      let full = '';
+      let sources: string[] = [];
+      for await (const part of ragService.streamAnswer({ assistantId, message, history })) {
+        full += part.delta;
+        sources = part.sources;
+        write({ type: 'text_delta', content: part.delta });
+      }
+      assistantService.addTrainingMessage(request.userId!, assistantId, 'assistant', full);
+      write({ type: 'done', content: full, sources });
+    } catch (err) {
+      write({ type: 'error', content: String(err) });
+    } finally {
+      reply.raw.end();
+    }
+  }
+
+  createFaq(
+    request: FastifyRequest<{
+      Params: { assistantId: string };
+      Body: { question?: string; answer?: string; kind?: 'faq' | 'knowledge' };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const faq = assistantService.createFaq(request.userId!, Number(request.params.assistantId), {
+        question: request.body?.question ?? '',
+        answer: request.body?.answer ?? '',
+        kind: request.body?.kind,
+      });
+      return reply.status(201).send(success(faq));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
+  }
+
+  listFaqs(request: FastifyRequest<{ Params: { assistantId: string } }>, reply: FastifyReply) {
+    try {
+      return reply.send(success(assistantService.listFaqs(request.userId!, Number(request.params.assistantId))));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  updateFaq(
+    request: FastifyRequest<{
+      Params: { assistantId: string; faqId: string };
+      Body: { question?: string; answer?: string };
+    }>,
+    reply: FastifyReply,
+  ) {
+    try {
+      const faq = assistantService.updateFaq(
+        request.userId!,
+        Number(request.params.assistantId),
+        Number(request.params.faqId),
+        { question: request.body?.question ?? '', answer: request.body?.answer ?? '' },
+      );
+      return reply.send(success(faq));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  deleteFaq(request: FastifyRequest<{ Params: { assistantId: string; faqId: string } }>, reply: FastifyReply) {
+    try {
+      assistantService.deleteFaq(request.userId!, Number(request.params.assistantId), Number(request.params.faqId));
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(404).send({ code: 404, message: String(err), data: null });
     }
   }
 

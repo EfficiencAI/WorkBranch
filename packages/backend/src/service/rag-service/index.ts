@@ -1,4 +1,4 @@
-import { assistantDAO } from '../../data';
+import { assistantDAO, type AssistantFaqRow } from '../../data';
 import { llmService, type LlmOptions } from '../agent-service/service/llm-service';
 
 export interface RagAnswer {
@@ -16,6 +16,7 @@ interface ScoredHit {
   content: string;
   title: string;
   score: number;
+  kind: 'chunk' | 'faq' | 'knowledge';
 }
 
 const TOP_K = 6;
@@ -38,6 +39,14 @@ class RagService {
 
     if (hits.length === 0) {
       yield { delta: NO_ANSWER_FALLBACK, sources: [] };
+      return;
+    }
+
+    // 固定话术优先：问题高度重合时直接命中，不调 LLM，立即生效
+    const faqs = assistantDAO.listFaqs(question.assistantId);
+    const directFaq = this.findFaqMatch(question.message, faqs);
+    if (directFaq) {
+      yield { delta: directFaq.answer, sources: ['固定话术'] };
       return;
     }
 
@@ -71,7 +80,8 @@ class RagService {
 
   retrieve(assistantId: number, query: string, topK = TOP_K): ScoredHit[] {
     const chunks = assistantDAO.getChunksByAssistant(assistantId);
-    if (chunks.length === 0) return [];
+    const faqs = assistantDAO.listFaqs(assistantId);
+    if (chunks.length === 0 && faqs.length === 0) return [];
 
     const queryTokens = this.tokenize(query);
     if (queryTokens.length === 0) return [];
@@ -79,18 +89,32 @@ class RagService {
     const sourceTitles = new Map<number, string>();
     assistantDAO.listSources(assistantId).forEach((s) => sourceTitles.set(s.id, s.title));
 
-    const docCount = chunks.length;
+    const pool: ScoredHit[] = [
+      ...chunks.map((chunk) => ({
+        content: chunk.content,
+        title: sourceTitles.get(chunk.source_id) ?? `来源 ${chunk.source_id}`,
+        score: 0,
+        kind: 'chunk' as const,
+      })),
+      ...faqs.map((faq) => ({
+        content: faq.kind === 'knowledge' ? `${faq.question}\n${faq.answer}` : faq.question,
+        title: faq.kind === 'faq' ? '固定话术' : '知识条目',
+        score: 0,
+        kind: faq.kind as 'faq' | 'knowledge',
+      })),
+    ];
+    const docCount = pool.length;
     const df: Record<string, number> = {};
-    for (const chunk of chunks) {
-      const seen = new Set(this.tokenize(chunk.content));
+    for (const doc of pool) {
+      const seen = new Set(this.tokenize(doc.content));
       seen.forEach((t) => { df[t] = (df[t] ?? 0) + 1; });
     }
     const idf = (t: string) => Math.log(1 + (docCount - (df[t] ?? 0) + 0.5) / ((df[t] ?? 0) + 0.5));
 
     const scored: ScoredHit[] = [];
-    for (const chunk of chunks) {
+    for (const doc of pool) {
       const termFreq: Record<string, number> = {};
-      this.tokenize(chunk.content).forEach((t) => { termFreq[t] = (termFreq[t] ?? 0) + 1; });
+      this.tokenize(doc.content).forEach((t) => { termFreq[t] = (termFreq[t] ?? 0) + 1; });
       let score = 0;
       for (const t of queryTokens) {
         const f = termFreq[t] ?? 0;
@@ -98,15 +122,38 @@ class RagService {
       }
       if (score > 0) {
         scored.push({
-          content: chunk.content,
-          title: sourceTitles.get(chunk.source_id) ?? `来源 ${chunk.source_id}`,
+          content: doc.content,
+          title: doc.title,
           score,
+          kind: doc.kind,
         });
       }
     }
 
     scored.sort((a, b) => b.score - a.score);
     return scored.slice(0, topK);
+  }
+
+  /** 固定话术优先命中：问题分词重合度 >= 60% 直接采用 */
+  private findFaqMatch(question: string, faqs: AssistantFaqRow[]): AssistantFaqRow | null {
+    const tokens = new Set(this.tokenize(question));
+    if (tokens.size < 2) return null;
+    let best: AssistantFaqRow | null = null;
+    let bestRatio = 0;
+    for (const faq of faqs) {
+      if (faq.kind !== 'faq') continue;
+      const faqTokens = new Set(this.tokenize(faq.question));
+      let hit = 0;
+      tokens.forEach((t) => {
+        if (faqTokens.has(t)) hit++;
+      });
+      const ratio = hit / tokens.size;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
+        best = faq;
+      }
+    }
+    return bestRatio >= 0.6 ? best : null;
   }
 
   private buildSystemPrompt(name: string, rules: string | null, context: string): string {

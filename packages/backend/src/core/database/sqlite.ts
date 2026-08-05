@@ -409,6 +409,7 @@ export class SQLiteDatabase {
         base_url TEXT,
         temperature REAL,
         max_tokens INTEGER,
+        quick_questions TEXT,
         status TEXT DEFAULT 'draft',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -487,6 +488,26 @@ export class SQLiteDatabase {
         FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS assistant_faqs (
+        id INTEGER PRIMARY KEY,
+        assistant_id INTEGER NOT NULL,
+        question TEXT NOT NULL,
+        answer TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'faq',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
+      );
+
+      CREATE TABLE IF NOT EXISTS assistant_training_messages (
+        id INTEGER PRIMARY KEY,
+        assistant_id INTEGER NOT NULL,
+        role TEXT NOT NULL,
+        content TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -500,6 +521,8 @@ export class SQLiteDatabase {
       CREATE INDEX IF NOT EXISTS idx_visitor_sessions_share ON visitor_sessions(share_id);
       CREATE INDEX IF NOT EXISTS idx_visitor_messages_session ON visitor_messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_usage_assistant ON usage_records(assistant_id);
+      CREATE INDEX IF NOT EXISTS idx_assistant_faqs_assistant ON assistant_faqs(assistant_id);
+      CREATE INDEX IF NOT EXISTS idx_training_messages_assistant ON assistant_training_messages(assistant_id);
     `;
 
     this.db.exec(createTables);
@@ -509,6 +532,7 @@ export class SQLiteDatabase {
     this.migrateAddMessageContentBlocks();
     this.migrateUsersForAuth();
     this.migrateAddChunkEmbedding();
+    this.migrateAddAssistantQuickQuestions();
 
     this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)').run(1, 'Default User');
   }
@@ -545,6 +569,21 @@ export class SQLiteDatabase {
       }
     } catch (e) {
       logger.warn(`migrateAddChunkEmbedding failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  private migrateAddAssistantQuickQuestions(): void {
+    const dbRef = this.db;
+    if (!dbRef) return;
+
+    try {
+      const columns = dbRef.pragma('table_info(assistants)');
+      if (!this.hasTableColumn(columns, 'quick_questions')) {
+        dbRef.exec('ALTER TABLE assistants ADD COLUMN quick_questions TEXT');
+        logger.info('Migrated assistants table: added quick_questions column');
+      }
+    } catch (e) {
+      logger.warn(`migrateAddAssistantQuickQuestions failed: ${e instanceof Error ? e.message : e}`);
     }
   }
 

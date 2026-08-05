@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   App,
   Button,
@@ -25,6 +25,8 @@ import {
   setShareEnabled,
   uploadSource,
 } from '../../shared/api'
+import { RulesTab } from './components/RulesTab'
+import { TrainTab } from './components/TrainTab'
 
 const SOURCE_STATUS: Record<string, { label: string; color: string }> = {
   pending: { label: '待处理', color: 'default' },
@@ -43,6 +45,16 @@ export function AssistantDetailPage() {
   const [sources, setSources] = useState<KnowledgeSource[]>([])
   const [shares, setShares] = useState<ShareInfo[]>([])
   const [loading, setLoading] = useState(true)
+
+  const quickQuestions = useMemo(() => {
+    if (!assistant?.quick_questions) return []
+    try {
+      const parsed = JSON.parse(assistant.quick_questions)
+      return Array.isArray(parsed) ? parsed.map(String) : []
+    } catch {
+      return []
+    }
+  }, [assistant?.quick_questions])
 
   const loadSources = useCallback(async () => {
     try {
@@ -215,23 +227,17 @@ export function AssistantDetailPage() {
           {
             key: 'train',
             label: '对话训练',
-            children: (
-              <Card>
-                <Empty description="P1 实现：用户主动说明 / AI 主动提问（知识缺口优先，知识库扫描其次），沉淀立即生效">
-                  <Typography.Text type="secondary">
-                    请先在知识库上传资料；对话训练能力（纠正、沉淀、AI 主动提问）将在 P1 接入。
-                  </Typography.Text>
-                </Empty>
-              </Card>
-            ),
+            children: <TrainTab assistantId={id} quickQuestions={quickQuestions} />,
           },
           {
             key: 'rules',
             label: '规则',
             children: (
-              <Card>
-                <Empty description="P1 实现：语气/边界/固定话术（FAQ）/模型设置" />
-              </Card>
+              <RulesTab
+                assistantId={id}
+                assistant={assistant}
+                onAssistantSaved={(updated) => setAssistant(updated)}
+              />
             ),
           },
           {

@@ -1,4 +1,4 @@
-import type { Assistant, KnowledgeSource, ShareInfo } from '../../entities'
+import type { Assistant, AssistantFaq, KnowledgeSource, ShareInfo } from '../../entities'
 import { AUTH_TOKEN_KEY, getApiUrl } from './config'
 import { ApiError } from './error'
 import { del, get, post, put } from './http'
@@ -81,23 +81,7 @@ export interface VisitorStreamHandlers {
   onError?: (message: string) => void
 }
 
-/** POST 消息并从 text/event-stream 响应中解析 data: 事件（EventSource 不支持 POST） */
-export async function streamVisitorAnswer(
-  token: string,
-  conversationId: number,
-  message: string,
-  handlers: VisitorStreamHandlers,
-): Promise<void> {
-  const url = getApiUrl(`/api/share/${token}/conversations/${conversationId}/messages`)
-  const authToken = typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-    },
-    body: JSON.stringify({ message }),
-  })
+async function readSseStream(response: Response, handlers: VisitorStreamHandlers): Promise<void> {
   if (!response.ok || !response.body) {
     const text = await response.text().catch(() => '')
     throw new ApiError(`请求失败：${response.status}`, { status: response.status, details: text })
@@ -130,4 +114,58 @@ export async function streamVisitorAnswer(
       }
     }
   }
+}
+
+/** POST 消息并从 text/event-stream 响应中解析 data: 事件（EventSource 不支持 POST） */
+export async function streamVisitorAnswer(
+  token: string,
+  conversationId: number,
+  message: string,
+  handlers: VisitorStreamHandlers,
+): Promise<void> {
+  const url = getApiUrl(`/api/share/${token}/conversations/${conversationId}/messages`)
+  const authToken = typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({ message }),
+  })
+  await readSseStream(response, handlers)
+}
+
+export async function streamTrainAnswer(
+  assistantId: number,
+  message: string,
+  handlers: VisitorStreamHandlers,
+): Promise<void> {
+  const url = getApiUrl(`/api/assistants/${assistantId}/train/messages`)
+  const authToken = typeof localStorage !== 'undefined' ? localStorage.getItem(AUTH_TOKEN_KEY) : null
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+    },
+    body: JSON.stringify({ message }),
+  })
+  await readSseStream(response, handlers)
+}
+
+export function fetchFaqs(assistantId: number) {
+  return get<AssistantFaq[]>(`/api/assistants/${assistantId}/faqs`)
+}
+
+export function createFaq(assistantId: number, input: { question: string; answer: string; kind?: 'faq' | 'knowledge' }) {
+  return post<AssistantFaq, typeof input>(`/api/assistants/${assistantId}/faqs`, input)
+}
+
+export function updateFaq(assistantId: number, faqId: number, input: { question: string; answer: string }) {
+  return put<AssistantFaq, typeof input>(`/api/assistants/${assistantId}/faqs/${faqId}`, input)
+}
+
+export function deleteFaq(assistantId: number, faqId: number) {
+  return del<null>(`/api/assistants/${assistantId}/faqs/${faqId}`)
 }

@@ -12,6 +12,7 @@ export interface Assistant {
   base_url: string | null
   temperature: number | null
   max_tokens: number | null
+  quick_questions: string | null
   status: AssistantStatus | string
   created_at: string
   updated_at: string
@@ -40,6 +41,16 @@ export interface ShareInfo {
   expires_at: string | null
   enabled: number
   created_at: string
+}
+
+export interface AssistantFaq {
+  id: number
+  assistant_id: number
+  question: string
+  answer: string
+  kind: 'faq' | 'knowledge' | string
+  created_at: string
+  updated_at: string
 }
 
 export interface AuthUser {

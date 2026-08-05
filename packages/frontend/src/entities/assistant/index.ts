@@ -1,5 +1,6 @@
 export type {
   Assistant,
+  AssistantFaq,
   AssistantStatus,
   AuthSession,
   AuthUser,

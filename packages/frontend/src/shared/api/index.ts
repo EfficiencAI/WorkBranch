@@ -22,19 +22,24 @@ export { fetchUserProfile, updateUserName } from './user'
 export { fetchCurrentUser, login, logout, register } from './auth'
 export {
   createAssistant,
+  createFaq,
   createShare,
   createVisitorConversation,
   deleteAssistant,
+  deleteFaq,
   deleteSource,
   fetchAssistant,
   fetchAssistants,
+  fetchFaqs,
   fetchShareMeta,
   fetchShares,
   fetchSources,
   reindexSource,
   setShareEnabled,
+  streamTrainAnswer,
   streamVisitorAnswer,
   updateAssistant,
+  updateFaq,
   uploadSource,
 } from './assistant'
 export type { AgentId, ChatStreamEvent, StreamConversationMessageBody } from './workspace'

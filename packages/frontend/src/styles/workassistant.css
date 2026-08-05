@@ -257,6 +257,48 @@
   gap: 8px;
 }
 
+.train-chat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.train-chat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 52vh;
+  min-height: 240px;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+
+.train-hint {
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(34, 211, 238, 0.08);
+  border: 1px dashed rgba(34, 211, 238, 0.3);
+  color: var(--app-text-soft);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.train-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.train-align-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 4px;
+}
+
+.train-align-row + .train-align-row {
+  border-top: 1px solid var(--app-border);
+}
+
 .visitor-welcome {
   padding: 12px 14px;
   border-radius: 12px;

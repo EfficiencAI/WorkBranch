@@ -14,6 +14,7 @@ export type { UserId, UserProfile } from './user'
 export type { WorkspaceDetail } from './workspace'
 export type {
   Assistant,
+  AssistantFaq,
   AssistantStatus,
   AuthSession,
   AuthUser,

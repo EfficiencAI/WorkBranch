@@ -12,6 +12,7 @@ export interface Assistant {
   base_url: string | null;
   temperature: number | null;
   max_tokens: number | null;
+  quick_questions: string | null;
   status: string;
   created_at: string;
   updated_at: string;
@@ -52,14 +53,32 @@ export interface KnowledgeChunkRow {
   embedding: string | null;
 }
 
+export interface AssistantFaqRow {
+  id: number;
+  assistant_id: number;
+  question: string;
+  answer: string;
+  kind: 'faq' | 'knowledge' | string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TrainingMessageRow {
+  id: number;
+  assistant_id: number;
+  role: string;
+  content: string;
+  created_at: string;
+}
+
 export type AssistantCreateInput = Pick<Assistant, 'name'> &
-  Partial<Pick<Assistant, 'avatar' | 'description' | 'welcome_message' | 'system_rules' | 'model' | 'base_url' | 'temperature' | 'max_tokens' | 'status'>>;
+  Partial<Pick<Assistant, 'avatar' | 'description' | 'welcome_message' | 'system_rules' | 'model' | 'base_url' | 'temperature' | 'max_tokens' | 'quick_questions' | 'status'>>;
 
 export class AssistantDAO {
   create(ownerId: number, input: AssistantCreateInput): number {
     const stmt = db.prepare(`
-      INSERT INTO assistants (owner_id, name, avatar, description, welcome_message, system_rules, model, base_url, temperature, max_tokens, status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO assistants (owner_id, name, avatar, description, welcome_message, system_rules, model, base_url, temperature, max_tokens, quick_questions, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       ownerId,
@@ -72,6 +91,7 @@ export class AssistantDAO {
       input.base_url ?? null,
       input.temperature ?? null,
       input.max_tokens ?? null,
+      input.quick_questions ?? null,
       input.status ?? 'draft',
     );
     return result.lastInsertRowid as number;
@@ -92,12 +112,12 @@ export class AssistantDAO {
     db.prepare(`
       UPDATE assistants SET
         name = ?, avatar = ?, description = ?, welcome_message = ?, system_rules = ?,
-        model = ?, base_url = ?, temperature = ?, max_tokens = ?, status = ?,
+        model = ?, base_url = ?, temperature = ?, max_tokens = ?, quick_questions = ?, status = ?,
         updated_at = datetime('now')
       WHERE id = ?
     `).run(
       next.name, next.avatar, next.description, next.welcome_message, next.system_rules,
-      next.model, next.base_url, next.temperature, next.max_tokens, next.status, id,
+      next.model, next.base_url, next.temperature, next.max_tokens, next.quick_questions, next.status, id,
     );
   }
 
@@ -160,6 +180,36 @@ export class AssistantDAO {
 
   getChunksByAssistant(assistantId: number): KnowledgeChunkRow[] {
     return db.prepare('SELECT * FROM knowledge_chunks WHERE assistant_id = ?').all<KnowledgeChunkRow>(assistantId);
+  }
+
+  listFaqs(assistantId: number): AssistantFaqRow[] {
+    return db.prepare('SELECT * FROM assistant_faqs WHERE assistant_id = ? ORDER BY updated_at DESC').all<AssistantFaqRow>(assistantId);
+  }
+
+  createFaq(assistantId: number, question: string, answer: string, kind: string): number {
+    const stmt = db.prepare('INSERT INTO assistant_faqs (assistant_id, question, answer, kind) VALUES (?, ?, ?, ?)');
+    const result = stmt.run(assistantId, question, answer, kind);
+    return result.lastInsertRowid as number;
+  }
+
+  updateFaq(faqId: number, question: string, answer: string): void {
+    db.prepare('UPDATE assistant_faqs SET question = ?, answer = ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .run(question, answer, faqId);
+  }
+
+  deleteFaq(faqId: number): void {
+    db.prepare('DELETE FROM assistant_faqs WHERE id = ?').run(faqId);
+  }
+
+  addTrainingMessage(assistantId: number, role: string, content: string): void {
+    db.prepare('INSERT INTO assistant_training_messages (assistant_id, role, content) VALUES (?, ?, ?)')
+      .run(assistantId, role, content);
+  }
+
+  listTrainingMessages(assistantId: number, limit = 20): TrainingMessageRow[] {
+    return db.prepare(
+      'SELECT * FROM assistant_training_messages WHERE assistant_id = ? ORDER BY id DESC LIMIT ?',
+    ).all<TrainingMessageRow>(assistantId, limit).reverse();
   }
 
   createShare(assistantId: number, token: string, mode: string, passwordHash: string | null, expiresAt: string | null): number {
