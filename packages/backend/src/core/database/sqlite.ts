@@ -437,6 +437,7 @@ export class SQLiteDatabase {
         seq INTEGER NOT NULL,
         content TEXT NOT NULL,
         token_count INTEGER,
+        embedding TEXT,
         UNIQUE (source_id, seq),
         FOREIGN KEY(source_id) REFERENCES knowledge_sources(id) ON DELETE CASCADE,
         FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
@@ -507,6 +508,7 @@ export class SQLiteDatabase {
     this.migrateAddWorkspaceId();
     this.migrateAddMessageContentBlocks();
     this.migrateUsersForAuth();
+    this.migrateAddChunkEmbedding();
 
     this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)').run(1, 'Default User');
   }
@@ -528,6 +530,21 @@ export class SQLiteDatabase {
       addColumn('role', "role TEXT DEFAULT 'user'");
     } catch (e) {
       logger.warn(`migrateUsersForAuth failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  private migrateAddChunkEmbedding(): void {
+    const dbRef = this.db;
+    if (!dbRef) return;
+
+    try {
+      const columns = dbRef.pragma('table_info(knowledge_chunks)');
+      if (!this.hasTableColumn(columns, 'embedding')) {
+        dbRef.exec('ALTER TABLE knowledge_chunks ADD COLUMN embedding TEXT');
+        logger.info('Migrated knowledge_chunks table: added embedding column');
+      }
+    } catch (e) {
+      logger.warn(`migrateAddChunkEmbedding failed: ${e instanceof Error ? e.message : e}`);
     }
   }
 

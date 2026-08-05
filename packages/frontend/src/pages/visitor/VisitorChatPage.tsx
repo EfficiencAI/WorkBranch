@@ -1,15 +1,28 @@
-import { useEffect, useState } from 'react'
-import { App, Button, Card, Input, Space, Typography } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { App, Avatar, Button, Card, Input, Space, Spin, Typography } from 'antd'
+import { SendOutlined } from '@ant-design/icons'
 import { useParams } from 'react-router-dom'
-import { createVisitorConversation, fetchShareMeta, type ShareMeta } from '../../shared/api'
+import { createVisitorConversation, fetchShareMeta, streamVisitorAnswer, type ShareMeta } from '../../shared/api'
+
+interface ChatMessage {
+  role: 'user' | 'assistant'
+  content: string
+  sources?: string[]
+}
+
+const QUICK_QUESTIONS = ['支持哪些部署方式？', '报价是怎么计算的？', '有 API 文档吗？']
 
 export function VisitorChatPage() {
   const { shareToken } = useParams()
-  const { message } = App.useApp()
+  const { message: messageApi } = App.useApp()
   const [meta, setMeta] = useState<ShareMeta | null>(null)
   const [sessionId, setSessionId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
+  const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [input, setInput] = useState('')
+  const [sending, setSending] = useState(false)
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -19,7 +32,7 @@ export function VisitorChatPage() {
         const data = await fetchShareMeta(shareToken)
         if (!cancelled) setMeta(data)
       } catch {
-        if (!cancelled) message.error('分享不存在或已停用')
+        if (!cancelled) messageApi.error('分享不存在或已停用')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -28,7 +41,13 @@ export function VisitorChatPage() {
     return () => {
       cancelled = true
     }
-  }, [shareToken, message])
+  }, [shareToken, messageApi])
+
+  useEffect(() => {
+    if (bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight
+    }
+  }, [messages, sending])
 
   const handleStart = async () => {
     if (!shareToken) return
@@ -37,14 +56,70 @@ export function VisitorChatPage() {
       const session = await createVisitorConversation(shareToken)
       setSessionId(session.session_id)
     } catch {
-      message.error('会话创建失败')
+      messageApi.error('会话创建失败')
     } finally {
       setStarting(false)
     }
   }
 
+  const send = async (text?: string) => {
+    const question = (text ?? input).trim()
+    if (!question || !shareToken || sessionId === null || sending) return
+    setInput('')
+    setSending(true)
+    setMessages((prev) => [...prev, { role: 'user', content: question }])
+
+    let answer = ''
+    let finished = false
+    try {
+      await streamVisitorAnswer(shareToken, sessionId, question, {
+        onDelta: (delta) => {
+          answer += delta
+          setMessages((prev) => {
+            const next = [...prev]
+            if (next[next.length - 1]?.role === 'assistant') {
+              next[next.length - 1] = { ...next[next.length - 1], content: answer }
+            } else {
+              next.push({ role: 'assistant', content: answer })
+            }
+            return next
+          })
+        },
+        onDone: (content, sources) => {
+          finished = true
+          setMessages((prev) => {
+            const next = [...prev]
+            if (next[next.length - 1]?.role === 'assistant') {
+              next[next.length - 1] = { ...next[next.length - 1], content, sources }
+            } else {
+              next.push({ role: 'assistant', content, sources })
+            }
+            return next
+          })
+        },
+        onError: (errorMessage) => {
+          finished = true
+          setMessages((prev) => [...prev, { role: 'assistant', content: `出错了：${errorMessage}` }])
+        },
+      })
+      if (!finished) {
+        setMessages((prev) => [...prev, { role: 'assistant', content: answer || '（无响应）' }])
+      }
+    } catch {
+      if (!finished) {
+        setMessages((prev) => [...prev, { role: 'assistant', content: '请求失败，请稍后再试' }])
+      }
+    } finally {
+      setSending(false)
+    }
+  }
+
   if (loading) {
-    return <Card loading className="visitor-page" />
+    return (
+      <div className="visitor-page">
+        <Spin />
+      </div>
+    )
   }
 
   if (!meta) {
@@ -60,45 +135,85 @@ export function VisitorChatPage() {
 
   return (
     <div className="visitor-page">
-      <Card className="visitor-card">
-        <Space align="center" size={12} style={{ marginBottom: 14 }}>
-          <span className="wa-avatar wa-avatar--lg">{meta.assistant.avatar ?? '🤖'}</span>
+      <Card className="visitor-card visitor-chat-card">
+        <Space align="center" size={12} style={{ marginBottom: 12 }}>
+          <Avatar size={44} style={{ background: 'rgba(34,211,238,0.18)', color: '#22d3ee' }}>
+            {meta.assistant.avatar ?? '🤖'}
+          </Avatar>
           <div>
             <Typography.Title level={4} style={{ margin: 0 }}>
               {meta.assistant.name}
             </Typography.Title>
-            <Typography.Text type="secondary">
-              AI 助手 · 在线 · 免登录
-            </Typography.Text>
+            <Typography.Text type="secondary">AI 助手 · 在线 · 免登录</Typography.Text>
           </div>
         </Space>
 
-        <div className="visitor-welcome">
-          {meta.assistant.welcome_message || `你好，我是「${meta.assistant.name}」。有什么可以帮你？`}
-        </div>
+        {meta.assistant.description ? (
+          <Typography.Paragraph type="secondary" style={{ marginBottom: 10 }}>
+            {meta.assistant.description}
+          </Typography.Paragraph>
+        ) : null}
 
-        {sessionId ? (
+        {!sessionId ? (
           <>
-            <div className="visitor-conv">
-              <Typography.Text type="secondary">会话已创建（#{sessionId}）</Typography.Text>
-              <Typography.Paragraph type="secondary" style={{ marginTop: 8 }}>
-                RAG 问答将在 P1 接入：回复会标注引用来源，答不上来的问题会自动记录为知识缺口。
-              </Typography.Paragraph>
+            <div className="visitor-welcome">
+              {meta.assistant.welcome_message || `你好，我是「${meta.assistant.name}」。有什么可以帮你？`}
             </div>
-            <Input.TextArea
-              rows={3}
-              disabled
-              placeholder="提问功能将在 P1 开放…"
-              style={{ marginTop: 8 }}
-            />
+            <Button type="primary" block loading={starting} onClick={() => void handleStart()} style={{ marginTop: 12 }}>
+              开始对话
+            </Button>
           </>
         ) : (
-          <Button type="primary" block loading={starting} onClick={() => void handleStart()} style={{ marginTop: 12 }}>
-            开始对话
-          </Button>
+          <>
+            <div className="visitor-chat-body" ref={bodyRef}>
+              {messages.length === 0 ? (
+                <div className="visitor-welcome">
+                  {meta.assistant.welcome_message || `你好，我是「${meta.assistant.name}」。有什么可以帮你？`}
+                </div>
+              ) : null}
+              {messages.map((msg, index) => (
+                <div key={index} className={`visitor-msg visitor-msg--${msg.role}`}>
+                  <div className="visitor-msg-bubble">
+                    <span className="visitor-msg-text">{msg.content}</span>
+                    {msg.sources && msg.sources.length > 0 ? (
+                      <span className="visitor-msg-sources">
+                        📎 引用：{msg.sources.join('、')}
+                      </span>
+                    ) : null}
+                  </div>
+                </div>
+              ))}
+              {sending ? (
+                <div className="visitor-msg visitor-msg--assistant">
+                  <div className="visitor-msg-bubble">
+                    <span className="visitor-msg-text">…</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="visitor-quick">
+              {QUICK_QUESTIONS.map((q) => (
+                <button key={q} type="button" className="visitor-chip" disabled={sending} onClick={() => void send(q)}>
+                  {q}
+                </button>
+              ))}
+            </div>
+            <div className="visitor-input-row">
+              <Input
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onPressEnter={() => void send()}
+                placeholder="输入你的问题…"
+                disabled={sending}
+              />
+              <Button type="primary" icon={<SendOutlined />} loading={sending} onClick={() => void send()}>
+                发送
+              </Button>
+            </div>
+          </>
         )}
 
-        <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 16, fontSize: 12 }}>
+        <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 12 }}>
           AI 助手 · 内容仅供内部参考
         </Typography.Text>
       </Card>

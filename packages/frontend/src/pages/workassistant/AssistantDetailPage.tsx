@@ -21,6 +21,7 @@ import {
   fetchAssistant,
   fetchShares,
   fetchSources,
+  reindexSource,
   setShareEnabled,
   uploadSource,
 } from '../../shared/api'
@@ -101,6 +102,16 @@ export function AssistantDetailPage() {
     }
   }
 
+  const handleReindexSource = async (sourceId: number) => {
+    try {
+      const updated = await reindexSource(id, sourceId)
+      setSources((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+      message.success('已加入重新索引队列')
+    } catch {
+      message.error('重新索引失败')
+    }
+  }
+
   const handleCreateShare = async () => {
     try {
       const share = await createShare(id, { mode: 'public' })
@@ -170,6 +181,14 @@ export function AssistantDetailPage() {
                     renderItem={(source) => (
                       <List.Item
                         actions={[
+                          <Button
+                            key="reindex"
+                            type="text"
+                            onClick={() => void handleReindexSource(source.id)}
+                            disabled={source.status === 'processing'}
+                          >
+                            重新索引
+                          </Button>,
                           <Button
                             key="del"
                             type="text"

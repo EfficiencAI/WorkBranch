@@ -1,4 +1,4 @@
-import { ChatOpenAI } from '@langchain/openai';
+import { ChatOpenAI, OpenAIEmbeddings } from '@langchain/openai';
 import { HumanMessage, SystemMessage, AIMessage, BaseMessage } from '@langchain/core/messages';
 import { settingsService } from '../../settings-service';
 import { logger } from '../../../core/logging';
@@ -16,8 +16,19 @@ interface UsageInfo {
   total_tokens?: number;
 }
 
+export interface LlmOptions {
+  model?: string;
+  baseUrl?: string;
+  temperature?: number;
+  maxTokens?: number;
+}
+
 class LLMServiceImpl {
   private llm: ChatOpenAI | null = null;
+
+  isConfigured(): boolean {
+    return Boolean(settingsService.get('llm:api_key') as string);
+  }
 
   private getLLM(): ChatOpenAI {
     if (!this.llm) {
@@ -26,7 +37,7 @@ class LLMServiceImpl {
     return this.llm;
   }
 
-  private buildLLM(): ChatOpenAI {
+  private buildLLM(options?: LlmOptions): ChatOpenAI {
     const apiKey = settingsService.get('llm:api_key') as string;
     const baseUrl = settingsService.get('llm:base_url') as string;
     const model = settingsService.get('llm:model') as string;
@@ -40,11 +51,11 @@ class LLMServiceImpl {
     return new ChatOpenAI({
       openAIApiKey: apiKey,
       configuration: {
-        basePath: baseUrl,
+        basePath: options?.baseUrl ?? baseUrl,
       },
-      modelName: model,
-      temperature,
-      maxTokens,
+      modelName: options?.model ?? model,
+      temperature: options?.temperature ?? temperature,
+      maxTokens: options?.maxTokens ?? maxTokens,
       timeout: 120000,
     });
   }
@@ -95,7 +106,11 @@ class LLMServiceImpl {
     };
   }
 
-  async chat(messages: Message[], systemPrompt?: string): Promise<string> {
+  async chat(messages: Message[], systemPrompt?: string, options?: LlmOptions): Promise<string> {
+    if (options) {
+      return this.chatUncached(messages, systemPrompt, options);
+    }
+
     const cacheKey = CacheKeyGenerator.generate(
       { role: 'user', content: JSON.stringify({ messages, systemPrompt }) },
       1.0,
@@ -155,8 +170,31 @@ class LLMServiceImpl {
     }
   }
 
-  async *chatStream(messages: Message[], systemPrompt?: string): AsyncGenerator<string> {
-    const llm = this.getLLM();
+  private async chatUncached(messages: Message[], systemPrompt: string | undefined, options: LlmOptions): Promise<string> {
+    const llm = this.buildLLM(options);
+    const lcMessages = this.buildLLMMessages(messages, systemPrompt);
+    const startTime = Date.now();
+    try {
+      const response = await llm.invoke(lcMessages);
+      logger.info({
+        event: 'llm.call.completed',
+        operation: 'chat_uncached',
+        latency_ms: Date.now() - startTime,
+      });
+      return response.content as string;
+    } catch (err) {
+      logger.error({
+        event: 'llm.call.failed',
+        operation: 'chat_uncached',
+        latency_ms: Date.now() - startTime,
+        error: String(err),
+      });
+      throw err;
+    }
+  }
+
+  async *chatStream(messages: Message[], systemPrompt?: string, options?: LlmOptions): AsyncGenerator<string> {
+    const llm = options ? this.buildLLM(options) : this.getLLM();
     const lcMessages = this.buildLLMMessages(messages, systemPrompt);
 
     logger.info({
@@ -233,6 +271,23 @@ class LLMServiceImpl {
       });
       throw err;
     }
+  }
+
+  /** 向量化文本（知识索引用）；未配置 API key 时抛错 */
+  async embedTexts(texts: string[]): Promise<number[][]> {
+    const apiKey = settingsService.get('llm:api_key') as string;
+    if (!apiKey) {
+      throw new Error('LLM API key not configured. Please set llm:api_key in settings.');
+    }
+    const baseUrl = settingsService.get('llm:base_url') as string;
+    const model = (settingsService.get('llm:embedding_model') as string) || 'text-embedding-3-small';
+    const embeddings = new OpenAIEmbeddings({
+      openAIApiKey: apiKey,
+      configuration: { basePath: baseUrl } as never,
+      modelName: model,
+      timeout: 60000,
+    });
+    return embeddings.embedDocuments(texts);
   }
 }
 

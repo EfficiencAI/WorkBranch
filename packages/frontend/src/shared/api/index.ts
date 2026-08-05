@@ -31,10 +31,12 @@ export {
   fetchShareMeta,
   fetchShares,
   fetchSources,
+  reindexSource,
   setShareEnabled,
+  streamVisitorAnswer,
   updateAssistant,
   uploadSource,
 } from './assistant'
 export type { AgentId, ChatStreamEvent, StreamConversationMessageBody } from './workspace'
-export type { ShareMeta } from './assistant'
+export type { ShareMeta, VisitorStreamHandlers } from './assistant'
 export type { ApiEnvelope, HttpRequestOptions, RequestMethod, ResponseParseMode, SseEventMessage, SseEventName } from './types'

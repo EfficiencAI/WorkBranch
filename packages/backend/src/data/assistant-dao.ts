@@ -42,6 +42,16 @@ export interface ShareInfo {
   created_at: string;
 }
 
+export interface KnowledgeChunkRow {
+  id: number;
+  source_id: number;
+  assistant_id: number;
+  seq: number;
+  content: string;
+  token_count: number | null;
+  embedding: string | null;
+}
+
 export type AssistantCreateInput = Pick<Assistant, 'name'> &
   Partial<Pick<Assistant, 'avatar' | 'description' | 'welcome_message' | 'system_rules' | 'model' | 'base_url' | 'temperature' | 'max_tokens' | 'status'>>;
 
@@ -110,6 +120,46 @@ export class AssistantDAO {
 
   deleteSource(id: number): void {
     db.prepare('DELETE FROM knowledge_sources WHERE id = ?').run(id);
+  }
+
+  getSourceById(assistantId: number, sourceId: number): KnowledgeSource | null {
+    return db.prepare('SELECT * FROM knowledge_sources WHERE id = ? AND assistant_id = ?')
+      .get<KnowledgeSource>(sourceId, assistantId) ?? null;
+  }
+
+  setSourceStatus(sourceId: number, status: string, error: string | null = null, chunkCount?: number): void {
+    if (chunkCount !== undefined) {
+      db.prepare('UPDATE knowledge_sources SET status = ?, error = ?, chunk_count = ? WHERE id = ?')
+        .run(status, error, chunkCount, sourceId);
+    } else {
+      db.prepare('UPDATE knowledge_sources SET status = ?, error = ? WHERE id = ?')
+        .run(status, error, sourceId);
+    }
+  }
+
+  bumpSourceVersion(sourceId: number): void {
+    db.prepare('UPDATE knowledge_sources SET version = version + 1 WHERE id = ?').run(sourceId);
+  }
+
+  deleteChunks(sourceId: number): void {
+    db.prepare('DELETE FROM knowledge_chunks WHERE source_id = ?').run(sourceId);
+  }
+
+  insertChunk(sourceId: number, assistantId: number, seq: number, content: string, tokenCount: number, embedding: number[] | null): number {
+    const stmt = db.prepare(`
+      INSERT INTO knowledge_chunks (source_id, assistant_id, seq, content, token_count, embedding)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    const result = stmt.run(sourceId, assistantId, seq, content, tokenCount, embedding ? JSON.stringify(embedding) : null);
+    return result.lastInsertRowid as number;
+  }
+
+  getChunksBySource(sourceId: number): KnowledgeChunkRow[] {
+    return db.prepare('SELECT * FROM knowledge_chunks WHERE source_id = ? ORDER BY seq').all<KnowledgeChunkRow>(sourceId);
+  }
+
+  getChunksByAssistant(assistantId: number): KnowledgeChunkRow[] {
+    return db.prepare('SELECT * FROM knowledge_chunks WHERE assistant_id = ?').all<KnowledgeChunkRow>(assistantId);
   }
 
   createShare(assistantId: number, token: string, mode: string, passwordHash: string | null, expiresAt: string | null): number {

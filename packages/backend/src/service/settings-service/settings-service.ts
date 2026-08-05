@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     api_key: '',
     base_url: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
+    embedding_model: 'text-embedding-3-small',
     temperature: 0.7,
     max_tokens: 4096,
   },

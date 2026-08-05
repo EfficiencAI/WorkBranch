@@ -16,6 +16,7 @@ export default async function assistantRoutes(app: FastifyInstance) {
   app.get('/:assistantId/sources', controller.listSources.bind(controller));
   app.post('/:assistantId/sources', controller.uploadSource.bind(controller));
   app.delete('/:assistantId/sources/:sourceId', controller.deleteSource.bind(controller));
+  app.post('/:assistantId/sources/:sourceId/reindex', controller.reindexSource.bind(controller));
 
   app.post('/:assistantId/shares', controller.createShare.bind(controller));
   app.get('/:assistantId/shares', controller.listShares.bind(controller));

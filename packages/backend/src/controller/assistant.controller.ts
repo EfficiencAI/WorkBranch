@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { logger } from '../core/logging';
 import { fileStorage } from '../data';
 import { assistantService } from '../service/assistant-service';
 import { knowledgeService } from '../service/knowledge-service';
@@ -106,6 +107,9 @@ export class AssistantController {
         type: extToType(file.filename),
         size: buffer.length,
       });
+      void knowledgeService.ingest(assistantId, source.id).catch((err) => {
+        logger.error(`[knowledge] ingest failed for source ${source.id}: ${String(err)}`);
+      });
       return reply.status(201).send(success(source));
     } catch (err) {
       return reply.status(400).send({ code: 400, message: String(err), data: null });
@@ -118,6 +122,18 @@ export class AssistantController {
       return reply.send(success(null));
     } catch (err) {
       return reply.status(404).send({ code: 404, message: String(err), data: null });
+    }
+  }
+
+  async reindexSource(request: FastifyRequest<{ Params: { assistantId: string; sourceId: string } }>, reply: FastifyReply) {
+    const assistantId = Number(request.params.assistantId);
+    const sourceId = Number(request.params.sourceId);
+    try {
+      assistantService.getOwned(request.userId!, assistantId);
+      const source = await knowledgeService.reindex(assistantId, sourceId);
+      return reply.send(success(source));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
     }
   }
 
