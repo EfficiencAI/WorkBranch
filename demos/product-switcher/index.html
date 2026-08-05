@@ -1,0 +1,819 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WB / WA 产品切换 · 表面 Demo（基于原始悬浮菜单增强）</title>
+  <!--
+    表面 Demo：基于「原始悬浮菜单」增强，而不是参考后来新加的那套 product-rail。
+
+    原始菜单 = DiagramShell 中的 diagram-shell__nav：
+      WB 品牌按钮（diagram-shell__brand）+ 对话图 / 会话历史 / 设置 三个图标按钮，
+      fixed 定位在左上角，宽度 54px，高度自动包裹内容（不会拖到页面底部）。
+
+    增强交互：
+      1. 默认：竖排菜单，顶部是当前产品（WB）logo，下面三个图标按钮。
+      2. 点击 WB：菜单图标收起，悬浮栏水平展开，右侧露出同款式的 WA 按钮。
+      3. 点击 WA：WA 左滑覆盖 WB，内容区局部刷新，菜单恢复竖排并换成 WA。
+
+    落地时：改造 packages/frontend/src/widgets/diagram/DiagramShell.tsx 里的
+    diagram-shell__nav（含 styles/index.css），并移除 ProductShell 里新加的
+    product-rail，避免出现两套悬浮菜单。
+  -->
+  <style>
+    :root {
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color-scheme: dark;
+      --app-text: #f8fafc;
+      --app-text-muted: rgba(226, 232, 240, 0.8);
+      --app-text-soft: rgba(226, 232, 240, 0.72);
+      --app-border: rgba(148, 163, 184, 0.16);
+      --app-border-strong: rgba(148, 163, 184, 0.24);
+      --app-page-bg: #020617;
+      --app-body-bg:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
+        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      --app-panel-bg: rgba(15, 23, 42, 0.88);
+      --app-card-bg: rgba(15, 23, 42, 0.84);
+      --app-item-bg: rgba(15, 23, 42, 0.62);
+      --app-input-bg: rgba(2, 6, 23, 0.56);
+      --app-hover-bg: rgba(255, 255, 255, 0.03);
+      --app-shadow-sm: 0 16px 40px rgba(2, 6, 23, 0.24);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+    }
+
+    html,
+    body {
+      overflow-x: hidden;
+    }
+
+    body {
+      min-height: 100vh;
+      color: var(--app-text);
+      background: var(--app-body-bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    /* ---------- 页面外壳：左侧留白固定，悬浮栏展开只覆盖、不挤压 ---------- */
+    .demo-shell {
+      min-height: 100vh;
+      padding-left: 84px;
+    }
+
+    .demo-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 60px;
+      padding: 0 24px 0 36px;
+      border-bottom: 1px solid var(--app-border);
+      background: rgba(10, 15, 25, 0.72);
+      backdrop-filter: blur(12px);
+    }
+
+    .demo-header__eyebrow {
+      color: var(--app-text-soft);
+      font-size: 10px;
+      letter-spacing: 0.08em;
+    }
+
+    .demo-header h1 {
+      margin: 3px 0 0;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 22px;
+    }
+
+    .demo-hint {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 0 12px;
+      border: 1px solid var(--app-border);
+      border-radius: 999px;
+      color: var(--app-text-soft);
+      background: var(--app-panel-bg);
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .demo-hint b {
+      color: #a7f3d0;
+      font-weight: 700;
+    }
+
+    /* ---------- 视图堆叠：切换时仅内容区局部刷新 ---------- */
+    .view-stack {
+      position: relative;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      min-height: calc(100vh - 130px);
+    }
+
+    .app-view {
+      grid-area: 1 / 1;
+      min-width: 0;
+      opacity: 0;
+      transform: none;
+      pointer-events: none;
+      transition: opacity 0.32s ease, transform 0.32s ease;
+    }
+
+    .app-view.is-active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .app-view.is-entering {
+      transform: translateX(14px);
+    }
+
+    /* ---------- WorkBranch 视图：会话历史 + 聊天画布 ---------- */
+    .view-wb {
+      display: flex;
+      gap: 18px;
+      padding: 22px 24px 40px 0;
+    }
+
+    /*
+      会话侧栏内容左侧留 82px 空白（与真实 session-sidebar 一致），
+      悬浮菜单展开到 102px 时只盖住这段空白，不压内容。
+    */
+    .session-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 0 0 264px;
+      width: 264px;
+      padding: 16px 16px 16px 82px;
+      border: 1px solid var(--app-border);
+      border-radius: 14px;
+      background: var(--app-panel-bg);
+      box-shadow: var(--app-shadow-sm);
+    }
+
+    .ss-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 4px 8px;
+    }
+
+    .ss-head strong {
+      color: var(--app-text);
+      font-size: 12px;
+    }
+
+    .ss-head span {
+      color: var(--app-text-soft);
+      font-size: 10px;
+    }
+
+    .ss-search {
+      width: 100%;
+      height: 36px;
+      padding: 0 12px;
+      border: 1px solid var(--app-border);
+      border-radius: 8px;
+      outline: none;
+      color: var(--app-text-soft);
+      background: var(--app-input-bg);
+      font-size: 11px;
+    }
+
+    .ss-search::placeholder {
+      color: #64748b;
+    }
+
+    .ss-list {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      margin-top: 6px;
+    }
+
+    .ss-item {
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 9px;
+      background: transparent;
+      text-align: left;
+      transition: background 0.15s ease, border-color 0.15s ease;
+    }
+
+    .ss-item:hover {
+      background: var(--app-hover-bg);
+    }
+
+    .ss-item--active {
+      border-color: rgba(52, 211, 153, 0.24);
+      background: rgba(52, 211, 153, 0.12);
+    }
+
+    .ss-item__title {
+      display: block;
+      overflow: hidden;
+      color: var(--app-text-soft);
+      font-size: 12px;
+      font-weight: 600;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ss-item--active .ss-item__title {
+      color: var(--app-text);
+    }
+
+    .ss-item__meta {
+      display: block;
+      margin-top: 3px;
+      color: var(--app-text-soft);
+      font-size: 10px;
+      opacity: 0.7;
+    }
+
+    .chat-canvas {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+      flex: 1 1 auto;
+    }
+
+    .chat-canvas__bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 2px;
+    }
+
+    .chat-canvas__bar strong {
+      font-size: 14px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 2px 9px;
+      border: 1px solid var(--app-border);
+      border-radius: 999px;
+      color: var(--app-text-muted);
+      background: rgba(15, 23, 42, 0.72);
+      font-size: 10px;
+      white-space: nowrap;
+    }
+
+    .tag--green {
+      color: #a7f3d0;
+      border-color: rgba(52, 211, 153, 0.24);
+      background: rgba(52, 211, 153, 0.12);
+    }
+
+    .tag--blue {
+      color: #bfdbfe;
+      border-color: rgba(96, 165, 250, 0.24);
+      background: rgba(59, 130, 246, 0.13);
+    }
+
+    .msg {
+      max-width: 72%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .msg--user {
+      align-self: flex-end;
+      border: 1px solid rgba(96, 165, 250, 0.2);
+      color: var(--app-text-soft);
+      background: rgba(30, 48, 72, 0.42);
+    }
+
+    .msg--ai {
+      align-self: flex-start;
+      border: 1px solid rgba(52, 211, 153, 0.2);
+      color: var(--app-text-soft);
+      background: var(--app-card-bg);
+      box-shadow: var(--app-shadow-sm);
+    }
+
+    .chat-canvas__composer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-top: auto;
+      padding: 12px 14px;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 12px;
+      background: var(--app-panel-bg);
+      box-shadow: var(--app-shadow-sm);
+    }
+
+    .cc-input {
+      flex: 1 1 auto;
+      color: var(--app-text-soft);
+      font-size: 12px;
+      opacity: 0.55;
+    }
+
+    .cc-send {
+      min-height: 32px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 9px;
+      color: #06231a;
+      background: #34d399;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    /* ---------- WorkAssistant 视图：助手中心 ---------- */
+    .view-wa {
+      padding: 22px 24px 40px 0;
+    }
+
+    .wa-page {
+      max-width: 920px;
+    }
+
+    .wa-page__head {
+      margin-bottom: 18px;
+    }
+
+    .wa-page__head h2 {
+      margin: 0;
+      font-size: 16px;
+    }
+
+    .wa-page__head p {
+      margin: 5px 0 0;
+      color: var(--app-text-soft);
+      font-size: 12px;
+    }
+
+    .wa-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .wa-card {
+      padding: 16px;
+      border: 1px solid var(--app-border);
+      border-radius: 14px;
+      background: var(--app-card-bg);
+      box-shadow: var(--app-shadow-sm);
+    }
+
+    .wa-card__avatar {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(34, 211, 238, 0.3);
+      border-radius: 12px;
+      background: rgba(34, 211, 238, 0.16);
+      font-size: 20px;
+    }
+
+    .wa-card strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .wa-card p {
+      margin: 6px 0 0;
+      color: var(--app-text-soft);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    /* ---------- 原始悬浮菜单（diagram-shell__nav）增强 ---------- */
+    /*
+      尺寸/颜色照抄 DiagramShell 的原始样式：
+      54px 宽、8px 圆角、rgba(18,25,38,.95) 面板、42×42 的 WB 品牌按钮。
+      高度自动包裹内容，不会拖到页面底部。
+      增强点：WB / WA 同一款式；点击 WB 收起菜单图标并水平展开露出 WA；
+      点击 WA 左滑覆盖切换。
+    */
+    .diagram-shell__nav {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 14px);
+      left: 14px;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      /*
+        原始样式是 align-items: center；增强后产品切换行（WB|WA 共 92px）
+        比收起状态的栏宽（54px）宽，居中会导致 WB 左半边被裁掉，
+        所以改为 flex-start。原始菜单所有子项都是 42px，视觉完全一致。
+      */
+      align-items: flex-start;
+      gap: 4px;
+      width: 54px;
+      min-height: 0;
+      padding: 5px;
+      overflow: hidden;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 8px;
+      background: rgba(18, 25, 38, 0.95);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+      transition: width 0.34s cubic-bezier(0.22, 0.8, 0.26, 1);
+    }
+
+    /* 水平展开：露出右侧另一个产品 logo */
+    .diagram-shell__nav.is-expanded {
+      width: 102px;
+    }
+
+    /* 切换瞬间：宽度收回，配合 WA 左滑覆盖 */
+    .diagram-shell__nav.is-switching {
+      width: 54px;
+    }
+
+    /* 产品切换行：WB | WA（收起时 WA 被裁切在栏内） */
+    .product-switch {
+      display: flex;
+      gap: 8px;
+    }
+
+    /*
+      WB / WA 同一款式：42×42、圆角 6px、同底色，只有字母不同。
+      （想换统一颜色只需改这一处 background。）
+    */
+    .diagram-shell__brand,
+    .diagram-shell__brand.is-current,
+    .diagram-shell__brand.is-alt {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      min-width: 42px;
+      height: 42px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      color: #07120d;
+      background: #34d399;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: none;
+      transition: transform 0.34s cubic-bezier(0.22, 0.8, 0.26, 1), opacity 0.25s ease;
+    }
+
+    .diagram-shell__brand:hover {
+      background: #6ee7b7;
+    }
+
+    /* 非当前产品：默认隐藏，展开时滑入 */
+    .diagram-shell__brand.is-alt {
+      opacity: 0;
+      transform: translateX(-12px) scale(0.88);
+      pointer-events: none;
+    }
+
+    .diagram-shell__nav.is-expanded .diagram-shell__brand.is-alt {
+      opacity: 1;
+      transform: none;
+      pointer-events: auto;
+    }
+
+    /* 选中：WA 左滑 50px（42px 按钮 + 8px 间距），正好覆盖 WB 槽位 */
+    .diagram-shell__nav.is-switching .diagram-shell__brand.is-alt {
+      opacity: 1;
+      transform: translateX(-50px);
+      pointer-events: auto;
+    }
+
+    .diagram-shell__nav.is-switching .diagram-shell__brand.is-current {
+      opacity: 0;
+      transform: scale(0.9);
+    }
+
+    /* 菜单图标（对话图 / 会话历史 / 设置）：展开与切换时收起 */
+    .rail-menu {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      max-height: 140px;
+      overflow: hidden;
+      transition: max-height 0.3s cubic-bezier(0.22, 0.8, 0.26, 1), opacity 0.22s ease;
+    }
+
+    .diagram-shell__nav.is-expanded .rail-menu,
+    .diagram-shell__nav.is-switching .rail-menu {
+      max-height: 0;
+      opacity: 0;
+    }
+
+    .diagram-shell__rail-button {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      min-width: 42px;
+      height: 40px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      color: var(--app-text-muted);
+      background: transparent;
+      box-shadow: none;
+    }
+
+    .diagram-shell__rail-button:hover,
+    .diagram-shell__rail-button:focus-visible {
+      color: var(--app-text);
+      background: rgba(148, 163, 184, 0.12);
+    }
+
+    /* 角色交换瞬间关闭过渡，避免闪烁 */
+    .diagram-shell__nav.no-anim,
+    .diagram-shell__nav.no-anim .diagram-shell__brand {
+      transition: none !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="demo-shell">
+    <header class="demo-header">
+      <div>
+        <div class="demo-header__eyebrow">WorkBranch Frontend · Surface Demo</div>
+        <h1 id="view-title">WorkBranch · 会话历史</h1>
+      </div>
+      <div class="demo-hint" id="demo-hint">点击左侧 <b>WB</b> 展开产品切换</div>
+    </header>
+
+    <main class="view-stack">
+      <!-- WorkBranch：会话历史 -->
+      <section class="app-view view-wb is-active" data-view="wb">
+        <aside class="session-sidebar">
+          <div class="ss-head">
+            <strong>会话历史</strong>
+            <span>12 个会话</span>
+          </div>
+          <input class="ss-search" type="text" placeholder="搜索会话…" />
+          <div class="ss-list">
+            <div class="ss-item ss-item--active">
+              <span class="ss-item__title">产品切换的交互设计</span>
+              <span class="ss-item__meta">3 分钟前 · 8 条消息</span>
+            </div>
+            <div class="ss-item">
+              <span class="ss-item__title">侧边栏布局调整方案</span>
+              <span class="ss-item__meta">昨天 · 23 条消息</span>
+            </div>
+            <div class="ss-item">
+              <span class="ss-item__title">会话历史导入导出</span>
+              <span class="ss-item__meta">周二 · 15 条消息</span>
+            </div>
+            <div class="ss-item">
+              <span class="ss-item__title">阶段图节点样式</span>
+              <span class="ss-item__meta">上周 · 31 条消息</span>
+            </div>
+            <div class="ss-item">
+              <span class="ss-item__title">移动端适配验证</span>
+              <span class="ss-item__meta">上周 · 6 条消息</span>
+            </div>
+          </div>
+        </aside>
+
+        <div class="chat-canvas">
+          <div class="chat-canvas__bar">
+            <strong>产品切换的交互设计</strong>
+            <span class="tag tag--green">阶段图</span>
+            <span class="tag tag--blue">静态 UI</span>
+          </div>
+          <div class="msg msg--user">侧边栏 WB 和 WA 现在样式不一样，能不能改成同一个按钮？</div>
+          <div class="msg msg--ai">
+            可以。方案是：默认只显示当前产品的 logo；点击后悬浮菜单收起图标并水平展开露出另一个产品，
+            选中时新 logo 左滑覆盖旧 logo，内容区局部刷新即可。
+          </div>
+          <div class="msg msg--user">先出一个表面 demo 看看样式对不对。</div>
+          <div class="chat-canvas__composer">
+            <div class="cc-input">输入消息…</div>
+            <button class="cc-send" type="button">发送</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- WorkAssistant：助手中心 -->
+      <section class="app-view view-wa" data-view="wa">
+        <div class="wa-page">
+          <div class="wa-page__head">
+            <h2>WorkAssistant · 助手中心</h2>
+            <p>管理你的智能助手，导入或创建新的 .wa.json 助手。</p>
+          </div>
+          <div class="wa-cards">
+            <div class="wa-card">
+              <div class="wa-card__avatar">🤖</div>
+              <strong>通用助手</strong>
+              <p>适合日常问答与文本处理任务。</p>
+            </div>
+            <div class="wa-card">
+              <div class="wa-card__avatar">🐞</div>
+              <strong>代码调试助手</strong>
+              <p>定位报错、解释堆栈并给出修复建议。</p>
+            </div>
+            <div class="wa-card">
+              <div class="wa-card__avatar">✍️</div>
+              <strong>文档撰写助手</strong>
+              <p>把要点整理成结构化文档。</p>
+            </div>
+            <div class="wa-card">
+              <div class="wa-card__avatar">📊</div>
+              <strong>数据分析助手</strong>
+              <p>清洗数据、生成图表与结论摘要。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- 原始悬浮菜单增强：WB 品牌按钮 + 三个图标按钮 -->
+  <nav class="diagram-shell__nav" id="product-rail" aria-label="产品切换">
+    <div class="product-switch">
+      <button
+        type="button"
+        class="diagram-shell__brand is-current"
+        title="WorkBranch（当前产品）"
+        aria-label="WorkBranch（当前产品）"
+      >
+        WB
+      </button>
+      <button
+        type="button"
+        class="diagram-shell__brand is-alt"
+        title="切换到 WorkAssistant"
+        aria-label="切换到 WorkAssistant"
+      >
+        WA
+      </button>
+    </div>
+
+    <div class="rail-menu">
+      <button type="button" class="diagram-shell__rail-button" title="对话图" aria-label="对话图">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1" />
+          <rect x="9" y="9" width="4.5" height="4.5" rx="1" />
+          <path d="M4.75 7v1.5A1.5 1.5 0 0 0 6.25 10H9" />
+        </svg>
+      </button>
+      <button type="button" class="diagram-shell__rail-button" title="会话历史" aria-label="会话历史">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="5.2" />
+          <path d="M8 5v3.2l2 1.2" />
+        </svg>
+      </button>
+      <button type="button" class="diagram-shell__rail-button" title="设置" aria-label="设置">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="8" cy="8" r="2.2" />
+          <path d="M8 2v2M8 12v2M2 8h2M12 8h2M3.7 3.7l1.4 1.4M10.9 10.9l1.4 1.4M12.3 3.7l-1.4 1.4M5.1 10.9l-1.4 1.4" />
+        </svg>
+      </button>
+    </div>
+  </nav>
+
+  <script>
+    (function () {
+      const rail = document.getElementById('product-rail')
+      const track = rail.querySelector('.product-switch')
+      const viewTitle = document.getElementById('view-title')
+      const hint = document.getElementById('demo-hint')
+
+      const META = {
+        wb: {
+          title: 'WorkBranch · 会话历史',
+          productName: 'WorkBranch',
+          altName: 'WorkAssistant',
+          altLetter: 'WA',
+          collapsedHint: '点击左侧 <b>WB</b>：菜单收起并展开产品切换',
+        },
+        wa: {
+          title: 'WorkAssistant · 助手中心',
+          productName: 'WorkAssistant',
+          altName: 'WorkBranch',
+          altLetter: 'WB',
+          collapsedHint: '点击左侧 <b>WA</b>：菜单收起并展开产品切换',
+        },
+      }
+
+      let product = 'wb'
+      let expanded = false
+      let switching = false
+
+      const currentTile = () => track.querySelector('.diagram-shell__brand.is-current')
+      const altTile = () => track.querySelector('.diagram-shell__brand.is-alt')
+
+      function updateUi() {
+        const meta = META[product]
+        viewTitle.textContent = meta.title
+        hint.innerHTML = expanded ? `点击 <b>${meta.altLetter}</b> 左滑覆盖并切换` : meta.collapsedHint
+        currentTile().title = `${meta.productName}（当前产品）`
+        currentTile().setAttribute('aria-label', `${meta.productName}（当前产品）`)
+        altTile().title = `切换到 ${meta.altName}`
+        altTile().setAttribute('aria-label', `切换到 ${meta.altName}`)
+      }
+
+      function setExpanded(next) {
+        expanded = next
+        rail.scrollLeft = 0
+        rail.classList.toggle('is-expanded', expanded)
+        rail.setAttribute('aria-expanded', String(expanded))
+        updateUi()
+      }
+
+      function setActiveView(name) {
+        document.querySelectorAll('.app-view').forEach(function (view) {
+          const on = view.dataset.view === name
+          view.classList.toggle('is-active', on)
+          if (on) {
+            view.classList.add('is-entering')
+            requestAnimationFrame(function () {
+              requestAnimationFrame(function () {
+                view.classList.remove('is-entering')
+              })
+            })
+          }
+        })
+      }
+
+      function switchProduct() {
+        if (switching) return
+        switching = true
+
+        const cur = track.querySelector('.diagram-shell__brand.is-current')
+        const alt = track.querySelector('.diagram-shell__brand.is-alt')
+
+        // 1) WA 左滑覆盖 WB，悬浮菜单同时收回
+        rail.classList.add('is-switching')
+        rail.classList.remove('is-expanded')
+
+        // 2) 覆盖完成后：角色交换 + 内容区局部刷新
+        setTimeout(function () {
+          rail.classList.add('no-anim')
+          // alt 已滑到左侧覆盖 current：把 DOM 顺序也换过来，
+          // 让新的当前产品始终占据左侧第一个槽位
+          track.insertBefore(alt, cur)
+          cur.classList.remove('is-current')
+          cur.classList.add('is-alt')
+          alt.classList.remove('is-alt')
+          alt.classList.add('is-current')
+          rail.classList.remove('is-switching')
+          void rail.offsetWidth // 强制回流，让角色在无过渡状态下瞬间落位
+          rail.classList.remove('no-anim')
+          rail.scrollLeft = 0
+
+          product = product === 'wb' ? 'wa' : 'wb'
+          expanded = false
+          switching = false
+
+          setActiveView(product)
+          updateUi()
+        }, 400)
+      }
+
+      // 事件委托：监听跟随角色（current / alt），角色交换后依然正确
+      rail.addEventListener('click', function (event) {
+        if (switching) return
+        const tile = event.target.closest('.diagram-shell__brand')
+        if (!tile) return
+        if (tile.classList.contains('is-current')) {
+          setExpanded(!expanded)
+        } else if (tile.classList.contains('is-alt') && expanded) {
+          switchProduct()
+        }
+      })
+
+      // 点击外部：收起
+      document.addEventListener('click', function (event) {
+        if (expanded && !switching && !rail.contains(event.target)) {
+          setExpanded(false)
+        }
+      })
+
+      updateUi()
+    })()
+  </script>
+</body>
+</html>

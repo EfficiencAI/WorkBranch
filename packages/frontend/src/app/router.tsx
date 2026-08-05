@@ -1,7 +1,7 @@
 import { Navigate, createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from './layouts/AppLayout'
-import { ProductShell } from './layouts/ProductShell'
 import { WorkAssistantLayout } from './layouts/WorkAssistantLayout'
+import { RequireAuth } from './guards/RequireAuth'
 import {
   AssistantDetailPage,
   AssistantWizardPage,
@@ -15,7 +15,6 @@ import {
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <ProductShell />,
     children: [
       {
         index: true,
@@ -33,11 +32,16 @@ export const router = createBrowserRouter([
       },
       {
         path: 'assistant',
-        element: <WorkAssistantLayout />,
+        element: <RequireAuth />,
         children: [
-          { index: true, element: <WorkAssistantHomePage /> },
-          { path: 'new', element: <AssistantWizardPage /> },
-          { path: ':assistantId', element: <AssistantDetailPage /> },
+          {
+            element: <WorkAssistantLayout />,
+            children: [
+              { index: true, element: <WorkAssistantHomePage /> },
+              { path: 'new', element: <AssistantWizardPage /> },
+              { path: ':assistantId', element: <AssistantDetailPage /> },
+            ],
+          },
         ],
       },
       {

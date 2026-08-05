@@ -33,6 +33,8 @@ import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
 import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
+import { ProductRail } from '../product-rail/ProductRail'
+import type { ProductId } from '../product-rail/ProductRail'
 
 type SidebarMode = 'history' | 'settings'
 
@@ -421,6 +423,15 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     }
   }
 
+  const handleProductSwitch = useCallback(
+    (next: ProductId) => {
+      if (next === 'wa') {
+        navigate('/assistant')
+      }
+    },
+    [navigate],
+  )
+
   return (
     <ConfigProvider
       theme={{
@@ -462,8 +473,8 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           onNavPathTailChange={setNavPathTailId}
         />
 
-        <nav className={navClassName} aria-label="图导航">
-          {isFocused ? (
+        {isFocused ? (
+          <nav className={navClassName} aria-label="图导航">
             <Tooltip title={responsive.isMobile ? null : '退出聚焦'} placement="right">
               <Button
                 type="text"
@@ -474,18 +485,9 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
                 onClick={() => setFocusedConversationId(null)}
               />
             </Tooltip>
-          ) : (
-            <>
-              <Tooltip title={responsive.isMobile ? null : '会话历史'} placement="right">
-                <Button
-                  type="text"
-                  className="diagram-shell__brand"
-                  aria-label="打开会话历史"
-                  onClick={() => openSidebar('history')}
-                >
-                  WB
-                </Button>
-              </Tooltip>
+          </nav>
+        ) : (
+            <ProductRail product="wb" onSwitch={handleProductSwitch}>
               <Tooltip title="对话图" placement="right">
                 <Button
                   type="text"
@@ -513,9 +515,8 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
                   onClick={() => openSidebar('settings')}
                 />
               </Tooltip>
-            </>
-          )}
-        </nav>
+            </ProductRail>
+        )}
 
         {!isFocused ? (
           <Drawer

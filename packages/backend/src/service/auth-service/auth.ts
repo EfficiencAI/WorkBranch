@@ -13,6 +13,9 @@ export interface AuthSession {
   token: string;
 }
 
+/** 本地离线用户固定 token，与前端 packages/frontend/src/shared/api/config.ts 保持一致 */
+const LOCAL_OFFLINE_TOKEN = 'local-offline';
+
 /**
  * 多用户认证（P0 骨架）：
  * - 密码使用 node:crypto scrypt 加盐哈希，不引入外部依赖
@@ -73,6 +76,11 @@ export class AuthService {
 
   verifyToken(token: string): User | null {
     if (!token) return null;
+    if (token === LOCAL_OFFLINE_TOKEN) {
+      // 本地离线用户：免密映射到本机默认用户，数据照常存本机数据库（不参与云同步）
+      const local = db.prepare('SELECT id, name FROM users WHERE id = 1').get() as User | undefined;
+      return { id: local?.id ?? 1, name: '本地离线用户' };
+    }
     const row = db.prepare(`
       SELECT u.id, u.name
       FROM auth_tokens t

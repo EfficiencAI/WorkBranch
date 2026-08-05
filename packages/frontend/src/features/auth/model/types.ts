@@ -10,6 +10,7 @@ export type AuthState = {
 export type AuthActions = {
   login: (username: string, password: string) => Promise<boolean>
   register: (username: string, password: string, displayName?: string) => Promise<boolean>
+  loginLocal: () => void
   loadSession: () => Promise<boolean>
   logout: () => Promise<void>
   clearError: () => void

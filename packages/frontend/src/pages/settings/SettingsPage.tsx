@@ -1,12 +1,14 @@
-import { Alert, App as AntdApp, Button, Card, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
-import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons'
+import { Alert, App as AntdApp, Button, Card, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Tooltip, Typography } from 'antd'
+import { ApiOutlined, ApartmentOutlined, ControlOutlined, DesktopOutlined, HistoryOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { NumericSettingMetadata, SettingMetadataNode, SettingValue } from '../../entities'
 import { getErrorMessage } from '../../shared/api'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { EmptyState, LoadingState, StatusTag } from '../../shared/ui'
+import { ProductRail } from '../../widgets'
 import { useTheme } from '../../app/theme'
 import { useSettings } from '../../app/settings'
 
@@ -412,6 +414,7 @@ type SettingsPageProps = {
 
 export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const { message } = AntdApp.useApp()
+  const navigate = useNavigate()
   const { settings, settingsMetadata, loading, error, patchSettings, reloadSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [draftRoot, setDraftRoot] = useState<SettingValue | null>(null)
@@ -1171,7 +1174,24 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   }
 
   return (
-    <Space direction="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
+    <>
+      <ProductRail
+        product="wb"
+        onSwitch={(next) => {
+          if (next === 'wa') navigate('/assistant')
+        }}
+      >
+        <Tooltip title="对话图" placement="right">
+          <Button type="text" className="diagram-shell__rail-button" aria-label="对话图" icon={<ApartmentOutlined />} onClick={() => navigate('/chat')} />
+        </Tooltip>
+        <Tooltip title="会话历史" placement="right">
+          <Button type="text" className="diagram-shell__rail-button" aria-label="会话历史" icon={<HistoryOutlined />} onClick={() => navigate('/chat')} />
+        </Tooltip>
+        <Tooltip title="设置" placement="right">
+          <Button type="text" className="diagram-shell__rail-button diagram-shell__rail-button--active" aria-label="设置" icon={<SettingOutlined />} onClick={() => navigate('/settings')} />
+        </Tooltip>
+      </ProductRail>
+      <Space direction="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <Flex align="center" gap={12}>
           <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>
@@ -1231,5 +1251,6 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
         </Space>
       ) : null}
     </Space>
+    </>
   )
 }

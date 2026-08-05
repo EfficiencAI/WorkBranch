@@ -1,18 +1,22 @@
 import { useState } from 'react'
-import { App, Button, Card, Form, Input, Tabs, Typography } from 'antd'
-import { useNavigate } from 'react-router-dom'
+import { App, Button, Card, Divider, Form, Input, Tabs, Typography } from 'antd'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { selectAuthError, selectAuthLoading, useAuthStore } from '../../features/auth'
 
 type AuthMode = 'login' | 'register'
 
 export function AuthPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { message } = App.useApp()
   const [mode, setMode] = useState<AuthMode>('login')
   const loading = useAuthStore(selectAuthLoading)
   const error = useAuthStore(selectAuthError)
   const login = useAuthStore((state) => state.login)
   const register = useAuthStore((state) => state.register)
+  const loginLocal = useAuthStore((state) => state.loginLocal)
+
+  const from = (location.state as { from?: string } | null)?.from
 
   const handleFinish = async (values: { username: string; password: string; display_name?: string }) => {
     const ok = mode === 'login'
@@ -20,15 +24,20 @@ export function AuthPage() {
       : await register(values.username, values.password, values.display_name)
     if (ok) {
       message.success(mode === 'login' ? '欢迎回来' : '注册成功，已自动登录')
-      navigate('/assistant')
+      navigate(from && from.startsWith('/assistant') ? from : '/assistant')
     }
+  }
+
+  const handleLocalOffline = () => {
+    loginLocal()
+    message.info('已进入本地离线模式')
+    navigate('/chat')
   }
 
   return (
     <div className="auth-page">
       <Card className="auth-card">
         <div className="auth-brand">
-          <span className="wa-logo wa-logo--lg">WA</span>
           <Typography.Title level={4} style={{ margin: '10px 0 2px' }}>
             WorkAssistant
           </Typography.Title>
@@ -59,6 +68,18 @@ export function AuthPage() {
             {mode === 'login' ? '登录' : '注册并登录'}
           </Button>
         </Form>
+        <Divider plain style={{ fontSize: 11, color: '#64748b', margin: '18px 0 12px' }}>
+          或
+        </Divider>
+        <Button block type="dashed" onClick={handleLocalOffline}>
+          本地离线使用（无需账号）
+        </Button>
+        <Typography.Text
+          type="secondary"
+          style={{ display: 'block', textAlign: 'center', marginTop: 8, fontSize: 11 }}
+        >
+          数据保存在本地，登录后可与账号数据分开管理
+        </Typography.Text>
       </Card>
     </div>
   )

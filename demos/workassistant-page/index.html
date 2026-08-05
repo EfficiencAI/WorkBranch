@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>WorkAssistant 页面 · 正常版表面 Demo</title>
+  <!--
+    针对三个界面问题的「正常版」表面 Demo：
+
+    1. 顶部不再有半透明黑横幅，也不再放 <span class="wa-logo">WA</span> 色块。
+       —— 产品身份由左侧悬浮菜单承担，顶部只保留「页面标题 + 登录状态」。
+    2. 未登录访问 /assistant 会直接停在登录页，根本进不到助手中心 / 新建助手，
+       悬浮菜单（产品切换）只属于已登录的工作界面。
+    3. 已登录后：悬浮菜单 WA + 图标导航，顶部标题栏清晰，新建助手可正常进入。
+
+    操作：登录页点「登录」进入助手中心；右上角「退出」回到登录页；
+    已登录点悬浮菜单「新建助手」进入创建流程。
+  -->
+  <style>
+    :root {
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color-scheme: dark;
+      --app-text: #f8fafc;
+      --app-text-muted: rgba(226, 232, 240, 0.78);
+      --app-text-soft: rgba(226, 232, 240, 0.66);
+      --app-border: rgba(148, 163, 184, 0.16);
+      --app-border-strong: rgba(148, 163, 184, 0.24);
+      --app-body-bg:
+        radial-gradient(circle at top left, rgba(34, 197, 94, 0.12), transparent 30%),
+        radial-gradient(circle at top right, rgba(59, 130, 246, 0.18), transparent 28%),
+        linear-gradient(180deg, #020617 0%, #0f172a 100%);
+      --app-panel-bg: rgba(15, 23, 42, 0.88);
+      --app-card-bg: rgba(15, 23, 42, 0.84);
+      --app-input-bg: rgba(2, 6, 23, 0.56);
+      --app-hover-bg: rgba(255, 255, 255, 0.03);
+      --app-shadow-md: 0 18px 48px rgba(2, 6, 23, 0.3);
+      --app-shadow-sm: 0 16px 40px rgba(2, 6, 23, 0.24);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      overflow-x: hidden;
+    }
+
+    body {
+      min-height: 100vh;
+      color: var(--app-text);
+      background: var(--app-body-bg);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    button {
+      font: inherit;
+      cursor: pointer;
+    }
+
+    input {
+      font: inherit;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* ================= 登录页（未登录唯一能看到的界面） ================= */
+    .auth-view {
+      display: grid;
+      place-items: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+
+    .auth-card {
+      width: min(380px, 100%);
+      padding: 30px 28px 26px;
+      border: 1px solid var(--app-border);
+      border-radius: 16px;
+      background: var(--app-panel-bg);
+      box-shadow: var(--app-shadow-md);
+    }
+
+    .auth-brand {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .auth-brand strong {
+      font-size: 20px;
+      letter-spacing: 0.02em;
+    }
+
+    .auth-brand span {
+      color: var(--app-text-soft);
+      font-size: 12px;
+    }
+
+    .auth-card p {
+      margin: 4px 0 22px;
+      color: var(--app-text-soft);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--app-text-muted);
+      font-size: 11px;
+    }
+
+    .field input {
+      width: 100%;
+      height: 40px;
+      padding: 0 12px;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 9px;
+      outline: none;
+      color: var(--app-text);
+      background: var(--app-input-bg);
+      font-size: 13px;
+    }
+
+    .field input:focus {
+      border-color: rgba(52, 211, 153, 0.55);
+      box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.1);
+    }
+
+    .auth-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 18px;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 9px;
+      color: var(--app-text);
+      background: var(--app-panel-bg);
+      font-size: 13px;
+      font-weight: 600;
+      transition: filter 0.15s ease, background 0.15s ease;
+    }
+
+    .btn:hover {
+      filter: brightness(1.08);
+    }
+
+    .btn--primary {
+      flex: 1 1 auto;
+      border: 0;
+      color: #06231a;
+      background: #34d399;
+    }
+
+    .btn--primary:hover {
+      background: #6ee7b7;
+    }
+
+    .auth-note {
+      margin-top: 18px;
+      padding: 10px 12px;
+      border: 1px dashed var(--app-border);
+      border-radius: 9px;
+      color: var(--app-text-soft);
+      background: rgba(2, 6, 23, 0.3);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    /* ================= 已登录工作界面 ================= */
+    .app-view {
+      min-height: 100vh;
+      padding-left: 84px;
+    }
+
+    /* 顶部：普通标题栏（不是半透明黑横幅，没有 WA 色块） */
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 60px;
+      padding: 0 24px 0 36px;
+      border-bottom: 1px solid var(--app-border);
+      background: rgba(10, 15, 25, 0.5);
+      backdrop-filter: blur(10px);
+    }
+
+    .topbar__title h1 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      line-height: 22px;
+    }
+
+    .topbar__title p {
+      margin: 2px 0 0;
+      color: var(--app-text-soft);
+      font-size: 11px;
+    }
+
+    .topbar__user {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .user-avatar {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border: 1px solid rgba(52, 211, 153, 0.3);
+      border-radius: 50%;
+      color: #d1fae5;
+      background: #16362f;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .topbar__user-name {
+      color: var(--app-text-muted);
+      font-size: 12px;
+    }
+
+    .btn--ghost {
+      min-height: 32px;
+      padding: 0 12px;
+      border-color: var(--app-border);
+      color: var(--app-text-muted);
+      background: transparent;
+      font-size: 12px;
+    }
+
+    .btn--ghost:hover {
+      color: var(--app-text);
+      background: var(--app-hover-bg);
+    }
+
+    .app-content {
+      padding: 24px 24px 48px 36px;
+    }
+
+    .wa-page {
+      max-width: 1180px;
+    }
+
+    .wa-page--narrow {
+      max-width: 620px;
+    }
+
+    .page-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .page-head h2 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .page-head p {
+      margin: 4px 0 0;
+      color: var(--app-text-soft);
+      font-size: 12px;
+    }
+
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 12px;
+    }
+
+    .assistant-card {
+      padding: 16px;
+      border: 1px solid var(--app-border);
+      border-radius: 14px;
+      background: var(--app-card-bg);
+      box-shadow: var(--app-shadow-sm);
+      transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+
+    .assistant-card:hover {
+      border-color: rgba(52, 211, 153, 0.3);
+      transform: translateY(-1px);
+    }
+
+    .assistant-card__avatar {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+      border: 1px solid rgba(52, 211, 153, 0.24);
+      border-radius: 12px;
+      background: rgba(52, 211, 153, 0.12);
+      font-size: 20px;
+    }
+
+    .assistant-card strong {
+      display: block;
+      font-size: 13px;
+    }
+
+    .assistant-card p {
+      margin: 6px 0 0;
+      color: var(--app-text-soft);
+      font-size: 11px;
+      line-height: 1.6;
+    }
+
+    .assistant-card .tag-row {
+      display: flex;
+      gap: 6px;
+      margin-top: 12px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 20px;
+      padding: 1px 8px;
+      border: 1px solid var(--app-border);
+      border-radius: 999px;
+      color: var(--app-text-muted);
+      background: rgba(15, 23, 42, 0.72);
+      font-size: 10px;
+    }
+
+    /* 新建助手表单 mock */
+    .wizard-card {
+      padding: 22px;
+      border: 1px solid var(--app-border);
+      border-radius: 14px;
+      background: var(--app-card-bg);
+      box-shadow: var(--app-shadow-sm);
+    }
+
+    .steps {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      color: var(--app-text-soft);
+      font-size: 11px;
+    }
+
+    .step {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .step--active {
+      color: #a7f3d0;
+    }
+
+    .step-dot {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 50%;
+      font-size: 10px;
+    }
+
+    .step--active .step-dot {
+      border-color: rgba(52, 211, 153, 0.45);
+      background: rgba(52, 211, 153, 0.14);
+    }
+
+    .steps .divider {
+      flex: 0 0 34px;
+      height: 1px;
+      background: var(--app-border-strong);
+    }
+
+    .form-row {
+      margin-bottom: 14px;
+    }
+
+    .form-row label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--app-text-muted);
+      font-size: 11px;
+    }
+
+    .form-row input,
+    .form-row textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 9px;
+      outline: none;
+      color: var(--app-text);
+      background: var(--app-input-bg);
+      font-size: 12px;
+    }
+
+    .form-row textarea {
+      resize: vertical;
+    }
+
+    .form-row input:focus,
+    .form-row textarea:focus {
+      border-color: rgba(52, 211, 153, 0.55);
+    }
+
+    .form-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    /* ================= 悬浮菜单（WA 产品） ================= */
+    .diagram-shell__nav {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 14px);
+      left: 14px;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 4px;
+      width: 54px;
+      min-height: 0;
+      padding: 5px;
+      overflow: hidden;
+      border: 1px solid var(--app-border-strong);
+      border-radius: 8px;
+      background: rgba(18, 25, 38, 0.95);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
+    }
+
+    .diagram-shell__brand {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      min-width: 42px;
+      height: 42px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      color: #07120d;
+      background: #34d399;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: none;
+    }
+
+    .diagram-shell__rail-button {
+      display: grid;
+      place-items: center;
+      width: 42px;
+      min-width: 42px;
+      height: 40px;
+      padding: 0;
+      border: 0;
+      border-radius: 6px;
+      color: var(--app-text-muted);
+      background: transparent;
+    }
+
+    .diagram-shell__rail-button:hover,
+    .diagram-shell__rail-button--active {
+      color: var(--app-text);
+      background: rgba(148, 163, 184, 0.12);
+    }
+
+    /* toast */
+    .toast {
+      position: fixed;
+      top: 18px;
+      left: 50%;
+      z-index: 100;
+      transform: translateX(-50%) translateY(-8px);
+      min-height: 36px;
+      padding: 0 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(245, 158, 11, 0.35);
+      border-radius: 10px;
+      color: #fde68a;
+      background: rgba(15, 23, 42, 0.95);
+      box-shadow: var(--app-shadow-md);
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
+</head>
+<body>
+  <!-- 登录页（未登录唯一界面） -->
+  <div class="auth-view" id="auth-view">
+    <div class="auth-card">
+      <div class="auth-brand">
+        <strong>WorkAssistant</strong>
+        <span>企业内部 AI 助手中心</span>
+      </div>
+      <p>登录后即可创建、训练和分享你的 AI 助手。未登录访问 /assistant 会先停在这一页。</p>
+      <div class="field">
+        <label for="email">邮箱</label>
+        <input id="email" type="email" placeholder="you@company.com" value="lin@company.com" />
+      </div>
+      <div class="field">
+        <label for="password">密码</label>
+        <input id="password" type="password" placeholder="••••••••" value="demo1234" />
+      </div>
+      <div class="auth-actions">
+        <button type="button" class="btn">注册</button>
+        <button type="button" class="btn btn--primary" id="login-btn">登录</button>
+      </div>
+      <div class="auth-note">
+        说明：这是「正常版」——未登录时悬浮菜单与新建助手界面都不可见，必须登录后才能进入工作界面。
+      </div>
+    </div>
+  </div>
+
+  <!-- 已登录工作界面 -->
+  <div class="app-view hidden" id="app-view">
+    <header class="topbar">
+      <div class="topbar__title">
+        <h1 id="page-title">我的助手</h1>
+        <p id="page-subtitle">把知识沉淀成可并发接待的 AI 分身</p>
+      </div>
+      <div class="topbar__user">
+        <span class="user-avatar">林</span>
+        <span class="topbar__user-name">lin@company.com</span>
+        <button type="button" class="btn btn--ghost" id="logout-btn">退出</button>
+      </div>
+    </header>
+
+    <div class="app-content">
+      <!-- 助手中心 -->
+      <div class="wa-page" id="home-page">
+        <div class="page-head">
+          <div>
+            <h2>我的助手</h2>
+            <p>把知识沉淀成可并发接待的 AI 分身</p>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button type="button" class="btn">导入助手包</button>
+            <button type="button" class="btn btn--primary" id="new-assistant-btn">新建助手</button>
+          </div>
+        </div>
+        <div class="card-grid">
+          <div class="assistant-card">
+            <div class="assistant-card__avatar">🤖</div>
+            <strong>通用助手</strong>
+            <p>适合日常问答与文本处理任务。</p>
+            <div class="tag-row"><span class="tag">已发布</span></div>
+          </div>
+          <div class="assistant-card">
+            <div class="assistant-card__avatar">🐞</div>
+            <strong>代码调试助手</strong>
+            <p>定位报错、解释堆栈并给出修复建议。</p>
+            <div class="tag-row"><span class="tag">草稿</span></div>
+          </div>
+          <div class="assistant-card">
+            <div class="assistant-card__avatar">📊</div>
+            <strong>数据分析助手</strong>
+            <p>清洗数据、生成图表与结论摘要。</p>
+            <div class="tag-row"><span class="tag">已发布</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 新建助手 -->
+      <div class="wa-page wa-page--narrow hidden" id="new-page">
+        <div class="wizard-card">
+          <div class="steps">
+            <span class="step step--active"><span class="step-dot">1</span>基本信息</span>
+            <span class="divider"></span>
+            <span class="step"><span class="step-dot">2</span>创建</span>
+          </div>
+          <div class="form-row">
+            <label for="assistant-name">助手名称</label>
+            <input id="assistant-name" type="text" placeholder="例如：售前产品专家" />
+          </div>
+          <div class="form-row">
+            <label for="assistant-avatar">头像（emoji）</label>
+            <input id="assistant-avatar" type="text" value="🤖" maxlength="4" />
+          </div>
+          <div class="form-row">
+            <label for="assistant-desc">一句话介绍</label>
+            <textarea id="assistant-desc" rows="3" placeholder="这个助手负责什么信息？"></textarea>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" id="back-home-btn">取消</button>
+            <button type="button" class="btn btn--primary">下一步</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 悬浮菜单（WA 产品） -->
+  <nav class="diagram-shell__nav hidden" id="product-rail" aria-label="产品切换">
+    <button type="button" class="diagram-shell__brand" title="WorkAssistant（当前产品）">WA</button>
+    <button type="button" class="diagram-shell__rail-button diagram-shell__rail-button--active" id="rail-home" title="助手中心" aria-label="助手中心">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2.5 7.2 8 2.8l5.5 4.4" />
+        <path d="M4 6.5V13h8V6.5" />
+      </svg>
+    </button>
+    <button type="button" class="diagram-shell__rail-button" id="rail-new" title="新建助手" aria-label="新建助手">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round">
+        <path d="M8 3v10M3 8h10" />
+      </svg>
+    </button>
+    <button type="button" class="diagram-shell__rail-button" id="rail-settings" title="设置" aria-label="设置">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round">
+        <circle cx="8" cy="8" r="2.2" />
+        <path d="M8 2v2M8 12v2M2 8h2M12 8h2M3.7 3.7l1.4 1.4M10.9 10.9l1.4 1.4M12.3 3.7l-1.4 1.4M5.1 10.9l-1.4 1.4" />
+      </svg>
+    </button>
+  </nav>
+
+  <div class="toast" id="toast">请先登录</div>
+
+  <script>
+    (function () {
+      const authView = document.getElementById('auth-view')
+      const appView = document.getElementById('app-view')
+      const rail = document.getElementById('product-rail')
+      const toast = document.getElementById('toast')
+      const pageTitle = document.getElementById('page-title')
+      const pageSubtitle = document.getElementById('page-subtitle')
+      const homePage = document.getElementById('home-page')
+      const newPage = document.getElementById('new-page')
+      const railHome = document.getElementById('rail-home')
+      const railNew = document.getElementById('rail-new')
+      const railSettings = document.getElementById('rail-settings')
+
+      let authed = false
+      let toastTimer = null
+
+      function showToast(text) {
+        toast.textContent = text
+        toast.classList.add('show')
+        clearTimeout(toastTimer)
+        toastTimer = setTimeout(function () {
+          toast.classList.remove('show')
+        }, 2200)
+      }
+
+      function setAuthed(next) {
+        authed = next
+        authView.classList.toggle('hidden', authed)
+        appView.classList.toggle('hidden', !authed)
+        rail.classList.toggle('hidden', !authed)
+        if (authed) {
+          showHome()
+        }
+      }
+
+      function showHome() {
+        homePage.classList.remove('hidden')
+        newPage.classList.add('hidden')
+        pageTitle.textContent = '我的助手'
+        pageSubtitle.textContent = '把知识沉淀成可并发接待的 AI 分身'
+        railHome.classList.add('diagram-shell__rail-button--active')
+        railNew.classList.remove('diagram-shell__rail-button--active')
+      }
+
+      function showNew() {
+        homePage.classList.add('hidden')
+        newPage.classList.remove('hidden')
+        pageTitle.textContent = '新建助手'
+        pageSubtitle.textContent = '填写基本信息，创建后进入训练页'
+        railHome.classList.remove('diagram-shell__rail-button--active')
+        railNew.classList.add('diagram-shell__rail-button--active')
+      }
+
+      document.getElementById('login-btn').addEventListener('click', function () {
+        setAuthed(true)
+      })
+      document.getElementById('logout-btn').addEventListener('click', function () {
+        setAuthed(false)
+      })
+      document.getElementById('new-assistant-btn').addEventListener('click', showNew)
+      document.getElementById('back-home-btn').addEventListener('click', showHome)
+
+      railNew.addEventListener('click', function () {
+        if (authed) {
+          showNew()
+        } else {
+          showToast('请先登录后再创建助手')
+        }
+      })
+      railHome.addEventListener('click', function () {
+        if (authed) {
+          showHome()
+        } else {
+          showToast('请先登录')
+        }
+      })
+      railSettings.addEventListener('click', function () {
+        showToast('设置页（演示占位）')
+      })
+
+      setAuthed(false)
+    })()
+  </script>
+</body>
+</html>
