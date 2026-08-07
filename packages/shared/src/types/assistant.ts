@@ -21,6 +21,11 @@ export interface Assistant {
 export type KnowledgeSourceType = 'file' | 'text' | 'code';
 export type KnowledgeSourceStatus = 'pending' | 'processing' | 'indexed' | 'failed';
 
+export interface KnowledgeSourceEntry {
+  path: string;
+  size: number;
+}
+
 export interface KnowledgeSource {
   id: number;
   assistant_id: number;
@@ -32,6 +37,7 @@ export interface KnowledgeSource {
   error: string | null;
   version: number;
   chunk_count: number;
+  entries: KnowledgeSourceEntry[];
   created_at: string;
 }
 

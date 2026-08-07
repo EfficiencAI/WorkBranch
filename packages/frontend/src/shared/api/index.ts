@@ -46,6 +46,7 @@ export {
   updateAssistant,
   updateFaq,
   uploadSource,
+  uploadDirectorySource,
 } from './assistant'
 export type { AgentId, ChatStreamEvent, StreamConversationMessageBody } from './workspace'
 export type { AiCheckResult, AssistantStats, ExportAssistantPackage, ShareMeta, VisitorStreamHandlers } from './assistant'

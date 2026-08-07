@@ -11,6 +11,16 @@ function getDataDir(): string {
 
 const dataDir = getDataDir();
 
+function positiveIntegerEnv(name: string, defaultValue: number): number {
+  const raw = process.env[name];
+  if (raw === undefined) return defaultValue;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+  return value;
+}
+
 const configSchema = z.object({
   port: z.number().default(3000),
   host: z.string().default('127.0.0.1'),
@@ -30,6 +40,10 @@ const configSchema = z.object({
   }),
   workspace: z.object({
     baseDir: z.string().default('workspaces'),
+  }),
+  knowledge: z.object({
+    uploadMaxBytes: z.number().int().positive().default(100 * 1024 * 1024),
+    uploadMaxFiles: z.number().int().positive().default(5000),
   }),
   agent: z.object({
     memoryMode: z.enum(['accumulate', 'sliding']).default('accumulate'),
@@ -63,6 +77,10 @@ function loadConfig(): AppConfig {
     },
     workspace: {
       baseDir: process.env.WORKSPACE_BASE_DIR || 'workspaces',
+    },
+    knowledge: {
+      uploadMaxBytes: positiveIntegerEnv('KNOWLEDGE_UPLOAD_MAX_BYTES', 100 * 1024 * 1024),
+      uploadMaxFiles: positiveIntegerEnv('KNOWLEDGE_UPLOAD_MAX_FILES', 5000),
     },
     agent: {
       memoryMode: (process.env.AGENT_MEMORY_MODE as AppConfig['agent']['memoryMode']) || 'accumulate',

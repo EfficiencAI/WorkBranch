@@ -29,6 +29,7 @@ export interface KnowledgeSource {
   error: string | null;
   version: number;
   chunk_count: number;
+  entry_manifest: string | null;
   created_at: string;
 }
 
@@ -129,12 +130,23 @@ export class AssistantDAO {
     return db.prepare('SELECT * FROM knowledge_sources WHERE assistant_id = ? ORDER BY created_at DESC').all<KnowledgeSource>(assistantId);
   }
 
-  addSource(assistantId: number, input: Pick<KnowledgeSource, 'type' | 'title'> & Partial<Pick<KnowledgeSource, 'file_path' | 'size' | 'status'>>): number {
+  addSource(
+    assistantId: number,
+    input: Pick<KnowledgeSource, 'type' | 'title'> & Partial<Pick<KnowledgeSource, 'file_path' | 'size' | 'status' | 'entry_manifest'>>,
+  ): number {
     const stmt = db.prepare(`
-      INSERT INTO knowledge_sources (assistant_id, type, title, file_path, size, status)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT INTO knowledge_sources (assistant_id, type, title, file_path, size, status, entry_manifest)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `);
-    const result = stmt.run(assistantId, input.type, input.title, input.file_path ?? null, input.size ?? null, input.status ?? 'pending');
+    const result = stmt.run(
+      assistantId,
+      input.type,
+      input.title,
+      input.file_path ?? null,
+      input.size ?? null,
+      input.status ?? 'pending',
+      input.entry_manifest ?? null,
+    );
     return result.lastInsertRowid as number;
   }
 

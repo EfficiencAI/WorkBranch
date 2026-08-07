@@ -9,6 +9,14 @@ import {
 } from '../../data';
 import { fileStorage } from '../../data';
 import { knowledgeService } from '../knowledge-service';
+import { knowledgePackageService } from '../knowledge-service/package-service';
+
+interface PackageKnowledgeItem {
+  title: string;
+  type?: string;
+  content?: string;
+  entries?: Array<{ path: string; content: string }>;
+}
 
 export interface CreateFaqInput {
   question: string;
@@ -21,7 +29,7 @@ export interface ExportPackage {
   version: number;
   assistant: Assistant;
   faqs: AssistantFaqRow[];
-  knowledge: Array<{ title: string; type: string; content: string }>;
+  knowledge: PackageKnowledgeItem[];
 }
 
 export interface ImportPackage {
@@ -29,7 +37,7 @@ export interface ImportPackage {
   version?: number;
   assistant: Partial<AssistantCreateInput> & { name: string };
   faqs?: Array<{ question: string; answer: string; kind?: string }>;
-  knowledge?: Array<{ title: string; type?: string; content?: string }>;
+  knowledge?: PackageKnowledgeItem[];
 }
 
 /**
@@ -122,11 +130,11 @@ class AssistantService {
     const knowledge = sources.map((source) => ({
       title: source.title,
       type: source.type,
-      content: source.file_path && fs.existsSync(source.file_path) ? fs.readFileSync(source.file_path, 'utf-8') : '',
+      entries: knowledgeService.readSourceContents(assistantId, source.id),
     }));
     return {
       format: 'workassistant-package',
-      version: 1,
+      version: 2,
       assistant,
       faqs,
       knowledge,
@@ -155,6 +163,34 @@ class AssistantService {
 
     for (const item of pkg.knowledge ?? []) {
       if (!item?.title) continue;
+      if (item.entries) {
+        const prepared = await knowledgePackageService.prepare(fileStorage.getStorageRoot(), assistantId, {
+          kind: 'directory',
+          title: item.title,
+          files: item.entries.map((entry) => ({
+            relativePath: entry.path,
+            content: Buffer.from(entry.content, 'utf8'),
+          })),
+        });
+        let sourceId: number;
+        try {
+          const restored = knowledgeService.addSource(assistantId, {
+            type: item.type === 'archive' || item.type === 'directory' || item.type === 'code' || item.type === 'text' ? item.type : 'file',
+            title: prepared.title,
+            filePath: prepared.storagePath,
+            size: prepared.size,
+            entries: prepared.entries,
+          });
+          sourceId = restored.id;
+        } catch (error) {
+          knowledgePackageService.remove(prepared.storagePath);
+          throw error;
+        }
+        void knowledgeService.ingest(assistantId, sourceId).catch(() => {
+          // 导入索引失败不阻断导入，状态会标记为 failed
+        });
+        continue;
+      }
       const dir = path.join(fileStorage.getStorageRoot(), 'assistant-knowledge', String(assistantId));
       const safeName = path.basename(item.title).replace(/[^\w.\-\u4e00-\u9fa5]/g, '_');
       const filePath = path.join(dir, `${Date.now()}-${safeName}`);

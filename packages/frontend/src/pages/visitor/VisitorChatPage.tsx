@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { App, Avatar, Button, Card, Input, Space, Spin, Typography } from 'antd'
+import { App, Avatar, Button, Card, Input, Spin, Typography } from 'antd'
 import { SendOutlined } from '@ant-design/icons'
 import { useParams } from 'react-router-dom'
 import { createVisitorConversation, fetchShareMeta, streamVisitorAnswer, type ShareMeta } from '../../shared/api'
@@ -129,7 +129,7 @@ export function VisitorChatPage() {
   if (!meta) {
     return (
       <div className="visitor-page">
-        <Card>
+        <Card className="visitor-card">
           <Typography.Title level={4}>分享不存在或已停用</Typography.Title>
           <Typography.Text type="secondary">请联系分享者确认链接是否有效。</Typography.Text>
         </Card>
@@ -140,8 +140,8 @@ export function VisitorChatPage() {
   return (
     <div className="visitor-page">
       <Card className="visitor-card visitor-chat-card">
-        <Space align="center" size={12} style={{ marginBottom: 12 }}>
-          <Avatar size={44} style={{ background: 'rgba(34,211,238,0.18)', color: '#22d3ee' }}>
+        <div className="visitor-chat-header">
+          <Avatar className="visitor-avatar" size={44}>
             {meta.assistant.avatar ?? '🤖'}
           </Avatar>
           <div>
@@ -150,7 +150,7 @@ export function VisitorChatPage() {
             </Typography.Title>
             <Typography.Text type="secondary">AI 助手 · 在线 · 免登录</Typography.Text>
           </div>
-        </Space>
+        </div>
 
         {meta.assistant.description ? (
           <Typography.Paragraph type="secondary" style={{ marginBottom: 10 }}>
@@ -227,7 +227,7 @@ export function VisitorChatPage() {
           </>
         )}
 
-        <Typography.Text type="secondary" style={{ display: 'block', textAlign: 'center', marginTop: 14, fontSize: 12 }}>
+        <Typography.Text type="secondary" className="auth-local-note" style={{ marginTop: 14 }}>
           AI 助手 · 内容仅供内部参考
         </Typography.Text>
       </Card>

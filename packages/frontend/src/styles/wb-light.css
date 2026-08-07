@@ -1,0 +1,268 @@
+/* ====== WorkBranch 浅色主题变体（保留深色质感，仅切换明暗） ====== */
+
+:root[data-theme='light'] .diagram-shell {
+  --app-text: #0f172a;
+  --app-text-muted: rgba(51, 65, 85, 0.86);
+  --app-text-soft: rgba(71, 85, 105, 0.92);
+  --app-border: rgba(148, 163, 184, 0.24);
+  --app-border-strong: rgba(148, 163, 184, 0.36);
+  --app-panel-bg: rgba(255, 255, 255, 0.9);
+  --app-panel-bg-strong: rgba(255, 255, 255, 0.97);
+  --app-panel-bg-soft: rgba(255, 255, 255, 0.84);
+  --app-panel-bg-strongest: rgba(255, 255, 255, 0.98);
+  --app-panel-muted: rgba(241, 245, 249, 0.92);
+  --app-card-bg: rgba(255, 255, 255, 0.93);
+  --app-card-bg-strong: #ffffff;
+  --app-item-bg: rgba(255, 255, 255, 0.8);
+  --app-floating-bg: rgba(255, 255, 255, 0.88);
+  --app-input-bg: rgba(255, 255, 255, 0.9);
+  --app-hover-bg: rgba(148, 163, 184, 0.12);
+  --app-grid-color: rgba(148, 163, 184, 0.14);
+  --app-grid-bg: #eef2f6;
+  --app-shadow-sm: 0 8px 28px rgba(30, 41, 59, 0.08);
+  --app-shadow-md: 0 14px 34px rgba(30, 41, 59, 0.1);
+  --app-shadow-lg: 0 24px 60px rgba(30, 41, 59, 0.12);
+  --app-shadow-xl: 0 28px 70px rgba(30, 41, 59, 0.14);
+  --app-scrim-bg: rgba(15, 23, 42, 0.16);
+  --app-scrim-detail-bg: rgba(15, 23, 42, 0.28);
+  color: var(--app-text);
+  background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+}
+
+:root[data-theme='light'] .diagram-shell__drawer {
+  --app-text: #0f172a;
+  --app-text-muted: rgba(51, 65, 85, 0.86);
+  --app-text-soft: rgba(71, 85, 105, 0.92);
+  --app-border: rgba(148, 163, 184, 0.24);
+  --app-border-strong: rgba(148, 163, 184, 0.36);
+  --app-panel-bg: rgba(255, 255, 255, 0.96);
+  --app-panel-bg-strong: rgba(255, 255, 255, 0.98);
+  --app-panel-bg-soft: rgba(241, 245, 249, 0.95);
+  --app-panel-muted: rgba(241, 245, 249, 0.9);
+  --app-card-bg: rgba(255, 255, 255, 0.96);
+  --app-card-bg-strong: #ffffff;
+  --app-item-bg: rgba(255, 255, 255, 0.88);
+  --app-input-bg: rgba(255, 255, 255, 0.94);
+  --app-hover-bg: rgba(148, 163, 184, 0.1);
+}
+
+/* ---------- 悬浮菜单 ---------- */
+:root[data-theme='light'] .diagram-shell__nav {
+  border-color: var(--app-border-strong);
+  background: color-mix(in srgb, var(--app-panel-bg-strongest) 96%, transparent);
+  box-shadow: var(--app-shadow-sm);
+}
+
+:root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn,
+:root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn:hover,
+:root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn:focus-visible {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ---------- 概览徽章与元信息 ---------- */
+:root[data-theme='light'] .diagram-shell__view-badge,
+:root[data-theme='light'] .focus-view__meta-pill {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .focus-view__view-badge {
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.28);
+  background: rgba(5, 150, 105, 0.08);
+}
+
+/* ---------- 聚焦态：树与顶栏 ---------- */
+:root[data-theme='light'] .focus-overlay .focus-view__tree {
+  background: rgba(248, 250, 252, 0.97);
+}
+
+:root[data-theme='light'] .focus-view__tree-footer {
+  background: rgba(226, 232, 240, 0.4);
+}
+
+:root[data-theme='light'] .focus-view__tree-label.ant-typography {
+  color: rgba(71, 85, 105, 0.85);
+}
+
+:root[data-theme='light'] .focus-view__topbar {
+  background: rgba(255, 255, 255, 0.9);
+}
+
+:root[data-theme='light'] .focus-overlay .focus-view__breadcrumb-sep {
+  color: rgba(100, 116, 139, 0.6);
+}
+
+:root[data-theme='light'] .focus-overlay .focus-view__breadcrumb-link:hover,
+:root[data-theme='light'] .focus-overlay .focus-view__breadcrumb-link:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+}
+
+/* ---------- 聚焦态：内容流与消息 ---------- */
+:root[data-theme='light'] .flow-section__id.ant-typography {
+  color: rgba(100, 116, 139, 0.9);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__actions .ant-tag {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__actions .ant-tag-success {
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.24);
+  background: rgba(5, 150, 105, 0.08);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__actions .ant-tag-processing {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+:root[data-theme='light'] .flow-section__tooltip-row span {
+  color: #64748b;
+}
+
+:root[data-theme='light'] .flow-section__tooltip-row strong {
+  color: #0f172a;
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__messages-list-inner .conversation-node__message-card--user .ant-card-body {
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__messages-list-inner .conversation-node__message-card--user::before {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__messages-list-inner .conversation-node__message-card--assistant::before {
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.24);
+  background: rgba(5, 150, 105, 0.08);
+}
+
+:root[data-theme='light'] .focus-overlay .flow-section__loading,
+:root[data-theme='light'] .focus-overlay .flow-section__empty-messages {
+  background: rgba(241, 245, 249, 0.7);
+}
+
+:root[data-theme='light'] .focus-overlay .focus-view__branch-card {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+:root[data-theme='light'] .focus-overlay .focus-view__branch-card:hover,
+:root[data-theme='light'] .focus-overlay .focus-view__branch-card:focus-visible {
+  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+/* ---------- 聚焦态：输入区 ---------- */
+:root[data-theme='light'] .focus-overlay .focus-view__composer {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer--focused {
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 14px 34px rgba(30, 41, 59, 0.12);
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer--focused:focus-within {
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12), 0 14px 34px rgba(30, 41, 59, 0.12);
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer__tool-btn--active.ant-btn {
+  color: #2563eb !important;
+  background: rgba(59, 130, 246, 0.1) !important;
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer__send-btn.ant-btn-dangerous {
+  color: #b91c1c;
+  background: rgba(239, 68, 68, 0.1);
+}
+
+/* ---------- 画布节点 ---------- */
+:root[data-theme='light'] .conversation-node__overview-id.ant-typography {
+  color: rgba(100, 116, 139, 0.85);
+}
+
+:root[data-theme='light'] .conversation-node__meta--root {
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.28);
+}
+
+:root[data-theme='light'] .conversation-node__card--focused {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+:root[data-theme='light'] .conversation-node--search-selected .conversation-node__card {
+  box-shadow:
+    0 0 0 3px rgba(59, 130, 246, 0.18),
+    0 18px 42px rgba(30, 41, 59, 0.18),
+    var(--app-shadow-md);
+}
+
+:root[data-theme='light'] .conversation-search__highlight {
+  color: #7c4a03;
+  background: rgba(217, 119, 6, 0.2);
+}
+
+:root[data-theme='light'] .conversation-search__input.ant-input::placeholder {
+  color: rgba(100, 116, 139, 0.7);
+}
+
+/* ---------- 抽屉与侧栏 ---------- */
+:root[data-theme='light'] .diagram-shell__drawer.ant-drawer-section,
+:root[data-theme='light'] .diagram-shell__drawer .ant-drawer-content {
+  background: var(--app-panel-bg-strong);
+  box-shadow: 20px 0 54px rgba(30, 41, 59, 0.14);
+}
+
+:root[data-theme='light'] .diagram-shell__drawer-tabs {
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .diagram-shell__drawer .diagram-shell__drawer-tabs .diagram-shell__nav-button--active.ant-btn {
+  background: rgba(255, 255, 255, 0.95) !important;
+  box-shadow: 0 2px 8px rgba(30, 41, 59, 0.1);
+}
+
+:root[data-theme='light'] .diagram-shell__drawer .session-sidebar__profile .ant-avatar {
+  color: #065f46;
+  border-color: rgba(5, 150, 105, 0.3);
+  background: #d1fae5;
+}
+
+:root[data-theme='light'] .diagram-shell__drawer .session-sidebar__item--active {
+  border-color: rgba(5, 150, 105, 0.24);
+  background: rgba(5, 150, 105, 0.08);
+}
+
+:root[data-theme='light'] .session-sidebar__item-title mark,
+:root[data-theme='light'] .session-sidebar__item-summary mark {
+  color: #7c4a03;
+  background: rgba(245, 158, 11, 0.18);
+}
+
+/* ---------- 设置侧栏 ---------- */
+:root[data-theme='light'] .settings-sidebar__category--active.ant-btn {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.3);
+  background: rgba(59, 130, 246, 0.1);
+}
+
+:root[data-theme='light'] .settings-page--embedded .settings-tree-leaf__path.ant-typography {
+  color: #64748b !important;
+}
+
+/* ---------- 聚焦背景（内联色改为 CSS 变量） ---------- */
+:root[data-theme='light'] {
+  --wb-focus-backdrop: #f3f6f9;
+  --wb-focus-grid: rgba(148, 163, 184, 0.14);
+}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { App, Button, Card, Col, Empty, List, Row, Space, Tag, Typography } from 'antd'
+import { App, Button, Card, Empty, Tag, Typography } from 'antd'
 import { ImportOutlined, PlusOutlined } from '@ant-design/icons'
 import { useNavigate } from 'react-router-dom'
 import type { Assistant } from '../../entities'
@@ -10,6 +10,18 @@ const STATUS_LABEL: Record<string, string> = {
   draft: '草稿',
   published: '已发布',
   disabled: '已停用',
+}
+
+function formatUpdatedAt(value: string): string {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const short = date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+  return `更新于 ${short}`
 }
 
 export function WorkAssistantHomePage() {
@@ -69,13 +81,16 @@ export function WorkAssistantHomePage() {
   return (
     <div className="wa-page">
       <div className="wa-page-head">
-        <div>
-          <Typography.Title level={4} style={{ margin: 0 }}>
+        <div className="wa-page-head__copy">
+          <span className="wa-page-head__eyebrow">工作区 · 助手中心</span>
+          <Typography.Title level={4} className="wa-page-head__title">
             我的助手
           </Typography.Title>
-          <Typography.Text type="secondary">把知识沉淀成可并发接待的 AI 分身</Typography.Text>
+          <Typography.Text type="secondary" className="wa-page-head__desc">
+            把知识沉淀成可并发接待的 AI 分身
+          </Typography.Text>
         </div>
-        <Space>
+        <div className="wa-page-head__actions">
           <input
             ref={fileRef}
             type="file"
@@ -93,41 +108,49 @@ export function WorkAssistantHomePage() {
           <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate('/assistant/new')}>
             新建助手
           </Button>
-        </Space>
+        </div>
       </div>
 
-      <List
-        grid={{ gutter: 14, xs: 1, sm: 2, lg: 3 }}
-        dataSource={assistants}
-        loading={loading}
-        locale={{ emptyText: <Empty description="还没有助手，点击右上角创建一个" /> }}
-        renderItem={(assistant) => (
-          <List.Item>
+      {loading ? (
+        <div className="wa-card-grid">
+          <Card loading className="wa-assistant-card" />
+        </div>
+      ) : null}
+
+      {!loading && assistants.length === 0 ? (
+        <div className="wa-empty">
+          <Empty description="还没有助手，点击右上角创建一个" />
+        </div>
+      ) : null}
+
+      {!loading && assistants.length > 0 ? (
+        <div className="wa-card-grid">
+          {assistants.map((assistant) => (
             <Card
+              key={assistant.id}
               hoverable
+              className="wa-assistant-card"
               onClick={() => navigate(`/assistant/${assistant.id}`)}
-              styles={{ body: { padding: 16 } }}
             >
-              <Row align="middle" gutter={12}>
-                <Col flex="none">
-                  <span className="wa-avatar">{assistant.avatar ?? '🤖'}</span>
-                </Col>
-                <Col flex="auto">
-                  <Space direction="vertical" size={2}>
-                    <Typography.Text strong>{assistant.name}</Typography.Text>
-                    <Tag color={assistant.status === 'published' ? 'success' : 'default'}>
-                      {STATUS_LABEL[assistant.status] ?? assistant.status}
-                    </Tag>
-                  </Space>
-                </Col>
-              </Row>
-              <Typography.Paragraph type="secondary" style={{ margin: '12px 0 4px', minHeight: 38 }}>
+              <div className="wa-assistant-card__top">
+                <span className="wa-avatar">{assistant.avatar ?? '🤖'}</span>
+                <Tag className={`wa-status wa-status--${assistant.status}`}>
+                  {STATUS_LABEL[assistant.status] ?? assistant.status}
+                </Tag>
+              </div>
+              <Typography.Text strong className="wa-assistant-card__name">
+                {assistant.name}
+              </Typography.Text>
+              <Typography.Paragraph type="secondary" className="wa-assistant-card__desc" ellipsis={{ rows: 2 }}>
                 {assistant.description || '暂无简介'}
               </Typography.Paragraph>
+              <div className="wa-assistant-card__meta">
+                <span>{formatUpdatedAt(assistant.updated_at)}</span>
+              </div>
             </Card>
-          </List.Item>
-        )}
-      />
+          ))}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -27,16 +27,20 @@
     "pino-pretty": "^10.3.0",
     "sql.js": "^1.14.1",
     "uuid": "^9.0.1",
+    "yauzl": "^3.4.0",
     "zod": "^3.25.28"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
     "@types/uuid": "^9.0.7",
+    "@types/yauzl": "^3.4.0",
+    "@types/yazl": "^3.3.1",
     "@vitest/coverage-v8": "^2.0.0",
     "esbuild": "^0.28.1",
     "rimraf": "^5.0.5",
     "tsx": "^4.6.2",
     "typescript": "^5.3.0",
-    "vitest": "^2.0.0"
+    "vitest": "^2.0.0",
+    "yazl": "^3.3.1"
   }
 }

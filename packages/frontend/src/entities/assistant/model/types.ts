@@ -29,6 +29,7 @@ export interface KnowledgeSource {
   error: string | null
   version: number
   chunk_count: number
+  entries: Array<{ path: string; size: number }>
   created_at: string
 }
 

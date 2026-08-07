@@ -31,11 +31,11 @@ export function AssistantWizardPage() {
   return (
     <div className="wa-page wa-page--narrow">
       <Steps
+        className="wa-wizard__steps"
         current={step}
         items={[{ title: '基本信息' }, { title: '创建' }]}
-        style={{ margin: '12px 0 20px' }}
       />
-      <Card>
+      <Card className="wa-wizard__card">
         <Form layout="vertical" onFinish={handleFinish} requiredMark={false} initialValues={{ avatar: '🤖' }}>
           {step === 0 ? (
             <>
@@ -46,12 +46,12 @@ export function AssistantWizardPage() {
                 <Input placeholder="🤖" maxLength={4} />
               </Form.Item>
               <Form.Item label="一句话介绍" name="description">
-                <Input.TextArea rows={2} placeholder="这个助手负责什么信息？" />
+                <Input.TextArea rows={3} placeholder="这个助手负责什么信息？" />
               </Form.Item>
-              <Typography.Text type="secondary">
-                创建后进入助手详情：上传知识 → 对话训练（用户说明 / AI 主动提问）→ 分享给同事。
-              </Typography.Text>
-              <div style={{ marginTop: 18, textAlign: 'right' }}>
+              <div className="wa-wizard__hint">
+                <span>创建后进入助手详情：上传知识 → 对话训练（用户说明 / AI 主动提问）→ 分享给同事。</span>
+              </div>
+              <div className="wa-wizard__actions">
                 <Button type="primary" onClick={() => setStep(1)}>
                   下一步
                 </Button>
@@ -62,10 +62,10 @@ export function AssistantWizardPage() {
               <Form.Item label="助手名称" name="name" hidden />
               <Form.Item label="头像（emoji）" name="avatar" hidden />
               <Form.Item label="一句话介绍" name="description" hidden />
-              <Typography.Paragraph style={{ textAlign: 'center', margin: '10px 0' }}>
+              <Typography.Paragraph className="wa-wizard__review">
                 确认信息无误后创建助手，随后进入训练页。
               </Typography.Paragraph>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <div className="wa-wizard__review-actions">
                 <Button onClick={() => setStep(0)}>上一步</Button>
                 <Button type="primary" htmlType="submit" loading={submitting}>
                   创建并进入训练

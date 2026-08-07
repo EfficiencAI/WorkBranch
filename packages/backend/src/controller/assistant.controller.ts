@@ -1,16 +1,15 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { FastifyReply, FastifyRequest } from 'fastify';
+import { appConfig } from '../core/config';
 import { logger } from '../core/logging';
 import { fileStorage, type AssistantCreateInput } from '../data';
 import { assistantService } from '../service/assistant-service';
 import { knowledgeService } from '../service/knowledge-service';
+import { knowledgePackageService, type KnowledgePackageKind, type KnowledgeUploadFile } from '../service/knowledge-service/package-service';
 import { ragService } from '../service/rag-service';
 import { shareService } from '../service/share-service';
 import { usageService } from '../service/usage-service';
 import { success } from './result';
-
-const KNOWLEDGE_DIR = 'assistant-knowledge';
 
 function extToType(filename: string): 'file' | 'text' | 'code' {
   const ext = path.extname(filename).toLowerCase().replace('.', '');
@@ -19,6 +18,10 @@ function extToType(filename: string): 'file' | 'text' | 'code' {
   if (codeExts.has(ext)) return 'code';
   if (textExts.has(ext)) return 'text';
   return 'file';
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export class AssistantController {
@@ -101,33 +104,90 @@ export class AssistantController {
     }
 
     try {
-      const file = await request.file();
-      if (!file) {
-        return reply.status(400).send({ code: 400, message: '未收到文件', data: null });
+      let requestedKind: string | undefined;
+      let requestedTitle: string | undefined;
+      let rawRelativePaths: string | undefined;
+      let uploadSize = 0;
+      const uploadedFiles: Array<{ filename: string; content: Buffer }> = [];
+      for await (const part of request.parts()) {
+        if (part.type === 'field') {
+          const value = String(part.value);
+          if (part.fieldname === 'kind') requestedKind = value;
+          else if (part.fieldname === 'title') requestedTitle = value;
+          else if (part.fieldname === 'relative_paths') rawRelativePaths = value;
+          else throw new Error(`未知上传字段：${part.fieldname}`);
+          continue;
+        }
+        const chunks: Buffer[] = [];
+        for await (const chunk of part.file) {
+          const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+          uploadSize += buffer.length;
+          if (uploadSize > appConfig.knowledge.uploadMaxBytes) {
+            throw new Error(`知识源大小超过限制（${appConfig.knowledge.uploadMaxBytes}字节）`);
+          }
+          chunks.push(buffer);
+        }
+        if (part.file.truncated) throw new Error(`文件大小超过限制：${part.filename}`);
+        uploadedFiles.push({ filename: part.filename, content: Buffer.concat(chunks) });
       }
-      const buffer = await file.toBuffer();
-      const dir = path.join(fileStorage.getStorageRoot(), KNOWLEDGE_DIR, String(assistantId));
-      const safeName = path.basename(file.filename).replace(/[^\w.\-\u4e00-\u9fa5]/g, '_');
-      const filePath = path.join(dir, `${Date.now()}-${safeName}`);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(filePath, Buffer.from(buffer));
-      const source = knowledgeService.addSource(assistantId, {
-        filePath,
-        title: file.filename,
-        type: extToType(file.filename),
-        size: buffer.length,
+      if (uploadedFiles.length === 0) throw new Error('未收到文件');
+
+      const inferredKind =
+        uploadedFiles.length === 1 && path.extname(uploadedFiles[0].filename).toLowerCase() === '.zip' ? 'archive' : 'file';
+      const kind = requestedKind ?? inferredKind;
+      if (kind !== 'file' && kind !== 'directory' && kind !== 'archive') {
+        throw new Error(`不支持的知识源类型：${kind}`);
+      }
+      if (kind === 'file' && uploadedFiles.length !== 1) {
+        throw new Error('普通文件知识源每次只能上传一个文件');
+      }
+
+      let relativePaths = uploadedFiles.map((file) => file.filename);
+      if (rawRelativePaths !== undefined) {
+        const parsed: unknown = JSON.parse(rawRelativePaths);
+        if (!Array.isArray(parsed) || parsed.length !== uploadedFiles.length || parsed.some((item) => typeof item !== 'string')) {
+          throw new Error('文件相对路径清单无效');
+        }
+        relativePaths = parsed as string[];
+      } else if (kind === 'directory') {
+        throw new Error('文件夹上传缺少相对路径清单');
+      }
+
+      const files: KnowledgeUploadFile[] = uploadedFiles.map((file, index) => ({
+        relativePath: relativePaths[index],
+        content: file.content,
+      }));
+      const packageKind = kind as KnowledgePackageKind;
+      const prepared = await knowledgePackageService.prepare(fileStorage.getStorageRoot(), assistantId, {
+        kind: packageKind,
+        title: requestedTitle ?? uploadedFiles[0].filename,
+        files,
       });
+      let source;
+      try {
+        source = knowledgeService.addSource(assistantId, {
+          filePath: prepared.storagePath,
+          title: prepared.title,
+          type: prepared.kind === 'file' ? extToType(prepared.title) : prepared.kind,
+          size: prepared.size,
+          entries: prepared.entries,
+        });
+      } catch (error) {
+        knowledgePackageService.remove(prepared.storagePath);
+        throw error;
+      }
       void knowledgeService.ingest(assistantId, source.id).catch((err) => {
         logger.error(`[knowledge] ingest failed for source ${source.id}: ${String(err)}`);
       });
       return reply.status(201).send(success(source));
     } catch (err) {
-      return reply.status(400).send({ code: 400, message: String(err), data: null });
+      return reply.status(400).send({ code: 400, message: errorMessage(err), data: null });
     }
   }
 
   deleteSource(request: FastifyRequest<{ Params: { assistantId: string; sourceId: string } }>, reply: FastifyReply) {
     try {
+      assistantService.getOwned(request.userId!, Number(request.params.assistantId));
       knowledgeService.deleteSource(Number(request.params.assistantId), Number(request.params.sourceId));
       return reply.send(success(null));
     } catch (err) {

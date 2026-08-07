@@ -20,7 +20,7 @@ export function WorkAssistantLayout() {
       return { title: '新建助手', subtitle: '填写基本信息，创建后进入训练页' }
     }
     if (/^\/assistant\/[^/]+$/.test(location.pathname)) {
-      return { title: '助手详情', subtitle: '查看与训练你的 AI 助手' }
+      return { title: '助手详情', subtitle: '查看知识、训练与分享状态' }
     }
     return { title: '助手中心', subtitle: '把知识沉淀成可并发接待的 AI 分身' }
   }, [location.pathname])
@@ -39,7 +39,7 @@ export function WorkAssistantLayout() {
   return (
     <Layout className="wa-layout">
       {user ? (
-        <ProductRail product="wa" onSwitch={handleProductSwitch}>
+        <ProductRail product="wa" className="product-rail--wa" onSwitch={handleProductSwitch}>
           <Tooltip title="助手中心" placement="right">
             <Button
               type="text"
@@ -76,15 +76,17 @@ export function WorkAssistantLayout() {
             {pageMeta.subtitle}
           </Typography.Text>
         </div>
-        <Space size="middle">
+        <Space size="middle" className="wa-header__actions">
           {user ? (
             <>
               {isLocalOffline ? (
-                <Tag className="wa-header__offline-tag" bordered={false}>
+                <Tag className="wa-header__offline-tag" variant="filled">
                   本地
                 </Tag>
               ) : null}
-              <Typography.Text type="secondary">{user.name}</Typography.Text>
+              <Typography.Text type="secondary" className="wa-header__user-name">
+                {user.name}
+              </Typography.Text>
             </>
           ) : null}
           <Button size="small" type="text" onClick={handleLogout}>

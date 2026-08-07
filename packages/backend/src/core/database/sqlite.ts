@@ -427,6 +427,7 @@ export class SQLiteDatabase {
         error TEXT,
         version INTEGER DEFAULT 1,
         chunk_count INTEGER DEFAULT 0,
+        entry_manifest TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
       );
@@ -533,6 +534,7 @@ export class SQLiteDatabase {
     this.migrateUsersForAuth();
     this.migrateAddChunkEmbedding();
     this.migrateAddAssistantQuickQuestions();
+    this.migrateAddKnowledgeSourceManifest();
 
     this.db.prepare('INSERT OR IGNORE INTO users (id, name) VALUES (?, ?)').run(1, 'Default User');
   }
@@ -569,6 +571,21 @@ export class SQLiteDatabase {
       }
     } catch (e) {
       logger.warn(`migrateAddChunkEmbedding failed: ${e instanceof Error ? e.message : e}`);
+    }
+  }
+
+  private migrateAddKnowledgeSourceManifest(): void {
+    const dbRef = this.db;
+    if (!dbRef) return;
+
+    try {
+      const columns = dbRef.pragma('table_info(knowledge_sources)');
+      if (!this.hasTableColumn(columns, 'entry_manifest')) {
+        dbRef.exec('ALTER TABLE knowledge_sources ADD COLUMN entry_manifest TEXT');
+        logger.info('Migrated knowledge_sources table: added entry_manifest column');
+      }
+    } catch (e) {
+      logger.warn(`migrateAddKnowledgeSourceManifest failed: ${e instanceof Error ? e.message : e}`);
     }
   }
 

@@ -5,6 +5,7 @@ import multipart from '@fastify/multipart';
 import { errorHandler } from './middleware/error-handler';
 import { requestLogger } from './middleware/request-logger';
 import routes from './routes';
+import { appConfig } from './core/config';
 
 export async function buildApp() {
   const isBundle = process.env.NODE_ENV === 'production';
@@ -29,7 +30,12 @@ export async function buildApp() {
   });
 
   await app.register(sensible);
-  await app.register(multipart);
+  await app.register(multipart, {
+    limits: {
+      fileSize: appConfig.knowledge.uploadMaxBytes,
+      files: appConfig.knowledge.uploadMaxFiles,
+    },
+  });
 
   app.addHook('onRequest', requestLogger);
   app.setErrorHandler(errorHandler);

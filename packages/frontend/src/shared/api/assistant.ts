@@ -36,6 +36,29 @@ export function uploadSource(assistantId: number, file: File) {
   return post<KnowledgeSource, FormData>(`/api/assistants/${assistantId}/sources`, form)
 }
 
+export function uploadDirectorySource(assistantId: number, files: File[]) {
+  if (files.length === 0) throw new Error('文件夹不能为空')
+  const paths = files.map((file) => file.webkitRelativePath.replace(/\\/g, '/'))
+  if (paths.some((relativePath) => !relativePath || relativePath.startsWith('/'))) {
+    throw new Error('文件夹内文件缺少有效的相对路径')
+  }
+  const roots = new Set(paths.map((relativePath) => relativePath.split('/')[0]))
+  if (roots.size !== 1) throw new Error('每次只能上传一个根文件夹')
+  const title = [...roots][0]
+  const relativePaths = paths.map((relativePath) => {
+    const pathWithoutRoot = relativePath.split('/').slice(1).join('/')
+    if (!pathWithoutRoot) throw new Error(`文件相对路径无效：${relativePath}`)
+    return pathWithoutRoot
+  })
+
+  const form = new FormData()
+  form.append('kind', 'directory')
+  form.append('title', title)
+  form.append('relative_paths', JSON.stringify(relativePaths))
+  files.forEach((file) => form.append('files', file, file.name))
+  return post<KnowledgeSource, FormData>(`/api/assistants/${assistantId}/sources`, form)
+}
+
 export function deleteSource(assistantId: number, sourceId: number) {
   return del<null>(`/api/assistants/${assistantId}/sources/${sourceId}`)
 }
@@ -193,7 +216,12 @@ export interface ExportAssistantPackage {
   version: number
   assistant: Partial<Assistant> & { name: string }
   faqs: AssistantFaq[]
-  knowledge: Array<{ title: string; type: string; content: string }>
+  knowledge: Array<{
+    title: string
+    type?: string
+    content?: string
+    entries?: Array<{ path: string; content: string }>
+  }>
 }
 
 export function exportAssistant(assistantId: number) {

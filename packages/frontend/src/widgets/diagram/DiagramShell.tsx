@@ -35,6 +35,7 @@ import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
 import { ProductRail } from '../product-rail/ProductRail'
 import type { ProductId } from '../product-rail/ProductRail'
+import { useTheme } from '../../app/theme'
 
 type SidebarMode = 'history' | 'settings'
 
@@ -423,6 +424,8 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     }
   }
 
+  const { resolvedTheme } = useTheme()
+
   const handleProductSwitch = useCallback(
     (next: ProductId) => {
       if (next === 'wa') {
@@ -435,13 +438,13 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   return (
     <ConfigProvider
       theme={{
-        algorithm: antdTheme.darkAlgorithm,
+        algorithm: resolvedTheme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
           colorPrimary: '#34d399',
-          colorBgBase: '#070b13',
-          colorBgContainer: 'rgba(18, 25, 38, 0.96)',
-          colorBorder: 'rgba(148, 163, 184, 0.2)',
-          colorTextBase: '#f1f5f9',
+          colorBgBase: resolvedTheme === 'dark' ? '#070b13' : '#f8fafc',
+          colorBgContainer: resolvedTheme === 'dark' ? 'rgba(18, 25, 38, 0.96)' : 'rgba(255, 255, 255, 0.96)',
+          colorBorder: resolvedTheme === 'dark' ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.28)',
+          colorTextBase: resolvedTheme === 'dark' ? '#f1f5f9' : '#0f172a',
           borderRadius: 8,
         },
       }}

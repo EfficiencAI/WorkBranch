@@ -38,12 +38,14 @@ export function AuthPage() {
     <div className="auth-page">
       <Card className="auth-card">
         <div className="auth-brand">
-          <Typography.Title level={4} style={{ margin: '10px 0 2px' }}>
+          <span className="auth-logo">WA</span>
+          <Typography.Title level={4} className="auth-brand__title">
             WorkAssistant
           </Typography.Title>
           <Typography.Text type="secondary">企业内部 AI 助手中心</Typography.Text>
         </div>
         <Tabs
+          className="auth-tabs"
           activeKey={mode}
           onChange={(key) => setMode(key as AuthMode)}
           items={[
@@ -64,20 +66,17 @@ export function AuthPage() {
             <Input.Password placeholder="至少 6 位" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} />
           </Form.Item>
           {error ? <Typography.Text type="danger">{error}</Typography.Text> : null}
-          <Button type="primary" htmlType="submit" block loading={loading} style={{ marginTop: 14 }}>
+          <Button className="auth-submit" type="primary" htmlType="submit" block loading={loading}>
             {mode === 'login' ? '登录' : '注册并登录'}
           </Button>
         </Form>
-        <Divider plain style={{ fontSize: 11, color: '#64748b', margin: '18px 0 12px' }}>
+        <Divider className="auth-divider" plain>
           或
         </Divider>
         <Button block type="dashed" onClick={handleLocalOffline}>
           本地离线使用（无需账号）
         </Button>
-        <Typography.Text
-          type="secondary"
-          style={{ display: 'block', textAlign: 'center', marginTop: 8, fontSize: 11 }}
-        >
+        <Typography.Text type="secondary" className="auth-local-note">
           数据保存在本地，登录后可与账号数据分开管理
         </Typography.Text>
       </Card>
