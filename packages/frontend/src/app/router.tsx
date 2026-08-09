@@ -7,7 +7,6 @@ import {
   AssistantWizardPage,
   AuthPage,
   DiagramPage,
-  SettingsPage,
   VisitorChatPage,
   WorkAssistantHomePage,
 } from '../pages'
@@ -28,7 +27,7 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: <AppLayout />,
-        children: [{ index: true, element: <SettingsPage /> }],
+        children: [{ index: true, element: <DiagramPage /> }],
       },
       {
         path: 'assistant',

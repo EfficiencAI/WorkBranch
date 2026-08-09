@@ -572,7 +572,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
 
               {activeSidebar === 'settings' ? (
                 <div className="diagram-shell__settings">
-                  <SettingsPage embedded />
+                  <SettingsPage />
                 </div>
               ) : null}
             </div>

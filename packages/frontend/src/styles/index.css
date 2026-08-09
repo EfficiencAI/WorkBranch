@@ -2663,11 +2663,6 @@ button {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
-/* 独立设置页：左侧给悬浮菜单留出空间（展开到 102px 也不压内容） */
-.settings-page:not(.settings-page--embedded) {
-  padding-left: 92px;
-}
-
 .settings-page--embedded {
   padding-top: 4px;
   flex: 1;
@@ -2684,15 +2679,9 @@ button {
   color: var(--app-text-soft) !important;
 }
 
-.settings-page--embedded .settings-card,
 .settings-page--embedded .ant-alert {
   background: var(--app-panel-bg-soft);
   border-color: var(--app-border);
-}
-
-.settings-page--embedded .ant-card-head,
-.settings-page--embedded .ant-card-body {
-  background: transparent;
 }
 
 .settings-page--embedded .settings-tree-node {
@@ -2737,14 +2726,6 @@ button {
 
 .loading-state {
   min-height: 240px;
-}
-
-.settings-card {
-  border-radius: calc(16px * var(--app-ui-scale));
-}
-
-.settings-search-bar {
-  width: 100%;
 }
 
 .settings-tree-node,
@@ -3827,10 +3808,6 @@ button {
   .settings-leaf-inline-editor .ant-btn {
     min-height: 36px;
     min-width: 56px;
-  }
-
-  .settings-card {
-    border-radius: 12px;
   }
 }
 

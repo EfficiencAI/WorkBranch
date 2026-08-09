@@ -1,14 +1,12 @@
-import { Alert, App as AntdApp, Button, Card, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Tooltip, Typography } from 'antd'
-import { ApiOutlined, ApartmentOutlined, ControlOutlined, DesktopOutlined, HistoryOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined, SettingOutlined } from '@ant-design/icons'
+import { Alert, App as AntdApp, Button, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
+import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import type { NumericSettingMetadata, SettingMetadataNode, SettingValue } from '../../entities'
 import { getErrorMessage } from '../../shared/api'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { EmptyState, LoadingState, StatusTag } from '../../shared/ui'
-import { ProductRail } from '../../widgets'
 import { useTheme } from '../../app/theme'
 import { useSettings } from '../../app/settings'
 
@@ -408,13 +406,8 @@ function parseEditorValue(kind: EditorKind, value: string | number | boolean | n
   }
 }
 
-type SettingsPageProps = {
-  embedded?: boolean
-}
-
-export function SettingsPage({ embedded = false }: SettingsPageProps) {
+export function SettingsPage() {
   const { message } = AntdApp.useApp()
-  const navigate = useNavigate()
   const { settings, settingsMetadata, loading, error, patchSettings, reloadSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
   const [draftRoot, setDraftRoot] = useState<SettingValue | null>(null)
@@ -1099,10 +1092,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     )
   }
 
-  if (embedded) {
-    const hasEmbeddedUiEntry = embeddedEntries.some(([rootKey]) => rootKey === 'ui')
+  const hasEmbeddedUiEntry = embeddedEntries.some(([rootKey]) => rootKey === 'ui')
 
-    return (
+  return (
       <div className="settings-page settings-page--embedded">
         <header className="settings-sidebar__header">
           <div className="settings-sidebar__heading-copy">
@@ -1174,87 +1166,5 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             : null}
         </div>
       </div>
-    )
-  }
-
-  return (
-    <>
-      <ProductRail
-        product="wb"
-        onSwitch={(next) => {
-          if (next === 'wa') navigate('/assistant')
-        }}
-      >
-        <Tooltip title="对话图" placement="right">
-          <Button type="text" className="diagram-shell__rail-button" aria-label="对话图" icon={<ApartmentOutlined />} onClick={() => navigate('/chat')} />
-        </Tooltip>
-        <Tooltip title="会话历史" placement="right">
-          <Button type="text" className="diagram-shell__rail-button" aria-label="会话历史" icon={<HistoryOutlined />} onClick={() => navigate('/chat')} />
-        </Tooltip>
-        <Tooltip title="设置" placement="right">
-          <Button type="text" className="diagram-shell__rail-button diagram-shell__rail-button--active" aria-label="设置" icon={<SettingOutlined />} onClick={() => navigate('/settings')} />
-        </Tooltip>
-      </ProductRail>
-      <Space orientation="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
-      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
-        <Flex align="center" gap={12}>
-          <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>
-            设置
-          </Typography.Title>
-          <Button icon={<ReloadOutlined />} onClick={() => void reloadSettings()} loading={loading} title="刷新设置" />
-        </Flex>
-        <StatusTag label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'} tone={loading || saving ? 'processing' : error ? 'error' : 'success'} />
-      </Flex>
-
-      {loading ? <LoadingState tip="正在读取后端设置..." /> : null}
-
-      {error ? <Alert type="error" title="设置读取失败" description={error} showIcon /> : null}
-      {saveError ? <Alert type="error" title="设置保存失败" description={saveError} showIcon /> : null}
-
-      {!loading && !error ? (
-        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
-          <div className="settings-search-bar">
-            <Input.Search value={searchQuery} allowClear placeholder="按字段名或完整路径搜索设置，例如 ui.theme_mode" onChange={(event) => setSearchQuery(event.target.value)} />
-          </div>
-
-          {showEmptySearch ? (
-            <Card className="settings-card">
-              <EmptyState title="未找到匹配的设置项" description="可尝试搜索字段名或完整路径，例如 ui.theme_mode" action={<Button onClick={() => setSearchQuery('')}>清空搜索</Button>} />
-            </Card>
-          ) : null}
-
-          {showThemeCard ? (
-            <Card title="界面" className="settings-card" key="ui-preferences">
-              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
-                <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
-                  <div className="settings-tree-leaf__meta">
-                    <Typography.Text strong>主题模式</Typography.Text>
-                    <Typography.Paragraph type="secondary" className="settings-tree-leaf__path">
-                      ui.theme_mode
-                    </Typography.Paragraph>
-                  </div>
-                  <Radio.Group value={themeMode} onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')} optionType="button" buttonStyle="solid">
-                    <Radio.Button value="dark">深色</Radio.Button>
-                    <Radio.Button value="light">浅色</Radio.Button>
-                    <Radio.Button value="system">跟随系统</Radio.Button>
-                  </Radio.Group>
-                </Flex>
-
-                <div className="settings-tree-leaf__value" style={{ marginTop: 0 }}>
-                  <Typography.Text type="secondary">主题模式不参与下方设置树的编辑/保存流程。</Typography.Text>
-                </div>
-              </Space>
-            </Card>
-          ) : null}
-
-          {filteredEntries.map(([rootKey, rootValue]) => (
-            <Card title={rootKey} className="settings-card" key={rootKey}>
-              {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
-            </Card>
-          ))}
-        </Space>
-      ) : null}
-    </Space>
-    </>
   )
 }

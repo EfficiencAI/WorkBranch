@@ -1,4 +1,3 @@
-export { SettingsPage } from './settings/SettingsPage'
 export { DiagramPage } from './diagram/DiagramPage'
 export { AuthPage } from './workassistant/AuthPage'
 export { WorkAssistantHomePage } from './workassistant/WorkAssistantHomePage'
