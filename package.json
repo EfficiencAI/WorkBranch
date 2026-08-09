@@ -21,7 +21,7 @@
     "build:backend": "pnpm --filter @workbranch/backend run build",
     "start:backend": "pnpm --filter @workbranch/backend run start",
     "build:electron": "pnpm --filter @workbranch/electron run build",
-    "build:android": "pnpm --filter @workbranch/android run build",
+    "build:android": "pnpm run build:frontend && cap sync android && node packages/backend/build-android.js && set PROCESSOR_ARCHITECTURE=AMD64&& android\\gradlew.bat -p android assembleDebug",
     "dev:electron": "pnpm --filter @workbranch/electron run dev"
   },
   "devDependencies": {

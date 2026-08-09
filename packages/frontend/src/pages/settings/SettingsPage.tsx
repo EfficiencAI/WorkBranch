@@ -782,7 +782,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const { min, max, step } = sliderMetadata
       const handleValueChange = onValueChange ?? ((nextValue: number | null) => updateEditingValue(nextValue))
       return (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
           <Flex align="center" justify="space-between" gap={12}>
             <Typography.Text type="secondary">当前值</Typography.Text>
             <Typography.Text strong>{currentValue === null ? '-' : formatSliderValue(currentValue)}</Typography.Text>
@@ -817,7 +817,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const items = Array.isArray(editing.value) ? editing.value : []
 
       return (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }} className="settings-array-editor">
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }} className="settings-array-editor">
           {items.length === 0 ? (
             <Typography.Text type="secondary">当前数组为空，可新增一项开始编辑。</Typography.Text>
           ) : (
@@ -938,7 +938,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <Typography.Title level={5} className="settings-tree-node__title">
             {presentation.label}
           </Typography.Title>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
             {Object.entries(value).map(([childKey, childValue]) => renderNode(rootKey, [...path, childKey], childValue, depth + 1))}
           </Space>
         </div>
@@ -996,9 +996,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </div>
           ) : typeof value === 'string' ? (
             <>
-              <Space.Compact block className="settings-leaf-inline-editor">
-                <Input value={value} disabled />
-              </Space.Compact>
+              {isSecretField(fullPath) ? (
+                <Typography.Text type="secondary">{value ? '已设置' : '未设置'}</Typography.Text>
+              ) : (
+                <Space.Compact block className="settings-leaf-inline-editor">
+                  <Input value={value} disabled />
+                </Space.Compact>
+              )}
               <div className="settings-leaf-footer-actions">
                 <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
                   编辑
@@ -1027,7 +1031,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </>
           ) : Array.isArray(value) ? (
             <>
-              <Space direction="vertical" size="small" style={{ width: '100%' }} className="settings-array-readonly">
+              <Space orientation="vertical" size="small" style={{ width: '100%' }} className="settings-array-readonly">
                 {value.map((item, index) => (
                   <div key={index} className="settings-array-readonly-item">
                     <Typography.Text type="secondary" className="settings-array-item__index">
@@ -1191,7 +1195,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <Button type="text" className="diagram-shell__rail-button diagram-shell__rail-button--active" aria-label="设置" icon={<SettingOutlined />} onClick={() => navigate('/settings')} />
         </Tooltip>
       </ProductRail>
-      <Space direction="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
+      <Space orientation="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
       <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
         <Flex align="center" gap={12}>
           <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>
@@ -1208,7 +1212,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       {saveError ? <Alert type="error" title="设置保存失败" description={saveError} showIcon /> : null}
 
       {!loading && !error ? (
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={16} style={{ width: '100%' }}>
           <div className="settings-search-bar">
             <Input.Search value={searchQuery} allowClear placeholder="按字段名或完整路径搜索设置，例如 ui.theme_mode" onChange={(event) => setSearchQuery(event.target.value)} />
           </div>
@@ -1221,7 +1225,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
 
           {showThemeCard ? (
             <Card title="界面" className="settings-card" key="ui-preferences">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
                   <div className="settings-tree-leaf__meta">
                     <Typography.Text strong>主题模式</Typography.Text>

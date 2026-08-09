@@ -97,7 +97,8 @@ export class ConversationController {
       reply.raw.write(`data: ${JSON.stringify(eventData)}\n\n`);
 
       const hasDoneSegment = msg.content_blocks.some((block) => block.type === SegmentType.DONE);
-      if (hasDoneSegment) {
+      const hasErrorSegment = msg.content_blocks.some((block) => block.type === SegmentType.ERROR);
+      if (hasDoneSegment || hasErrorSegment) {
         doneReceived = true;
       }
     }, { lastSeq });
@@ -139,15 +140,17 @@ export class ConversationController {
         logger.error({ err: cancelErr, conversationId }, 'Cancel on disconnect failed');
       }
     };
-    reply.raw.on('close', onConnectionClosed);
+    request.raw.on('close', onConnectionClosed);
 
     let cleanedUp = false;
+    let resolveStreamFinished: (() => void) | null = null;
     const cleanup = () => {
       if (!cleanedUp) {
         cleanedUp = true;
         clearInterval(checkInterval);
         unsubscribe();
-        reply.raw.removeListener('close', onConnectionClosed);
+        request.raw.removeListener('close', onConnectionClosed);
+        resolveStreamFinished?.();
       }
     };
 
@@ -170,6 +173,10 @@ export class ConversationController {
         reply.raw.write(': heartbeat\n\n');
       }
     }, 1000);
+
+    return new Promise<void>((resolve) => {
+      resolveStreamFinished = resolve;
+    });
   }
 
   async endConversation(

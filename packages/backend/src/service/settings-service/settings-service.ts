@@ -173,6 +173,40 @@ function mergeMissingDefaults(defaults: Record<string, unknown>, current: Record
   return [merged, changed];
 }
 
+const NUMERIC_LIMITS: Record<string, { min: number; max: number }> = {
+  'llm.temperature': { min: 0, max: 2 },
+  'llm.max_tokens': { min: 1, max: 1000000 },
+  'agent.memory_window_size': { min: 1, max: 100 },
+  'context.max_tokens': { min: 1000, max: 1000000 },
+  'context.warning_threshold': { min: 0, max: 1 },
+  'mq.max_size': { min: 1, max: 1000000 },
+  'logging.max_file_size_mb': { min: 1, max: 1024 },
+};
+
+function assertValidSettingValue(path: string, value: unknown): void {
+  const limits = NUMERIC_LIMITS[path];
+  if (!limits) {
+    return;
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error(`Setting ${path} must be a number between ${limits.min} and ${limits.max}`);
+  }
+  if (value < limits.min || value > limits.max) {
+    throw new Error(`Setting ${path} must be between ${limits.min} and ${limits.max}, got ${value}`);
+  }
+}
+
+function assertValidSettings(data: Record<string, unknown>, prefix = ''): void {
+  for (const [key, value] of Object.entries(data)) {
+    const path = prefix ? prefix + '.' + key : key;
+    if (isSettingsObject(value)) {
+      assertValidSettings(value, path);
+    } else {
+      assertValidSettingValue(path, value);
+    }
+  }
+}
+
 export class SettingsService {
   private data!: Record<string, unknown>;
 
@@ -215,13 +249,16 @@ export class SettingsService {
   }
 
   updateSetting(key: string, value: unknown): boolean {
+    assertValidSettingValue(key, value);
     this.data[key] = value;
     this.persist();
     return true;
   }
 
   updateSettings(updates: Record<string, unknown>): boolean {
-    this.data = mergeSettingsUpdates(this.data, updates);
+    const merged = mergeSettingsUpdates(this.data, updates);
+    assertValidSettings(merged);
+    this.data = merged;
     this.persist();
     return true;
   }

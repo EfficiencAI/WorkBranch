@@ -1,5 +1,7 @@
 import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
+import { messageQueue } from './mq';
+import { createContentBlock, createMessage, SegmentType } from './canonical';
 import { agentService } from '../agent-service/agent';
 import type { AgentId } from '../agent-service/adapters';
 import { workspaceService } from '../agent-service/service/workspace-service';
@@ -255,6 +257,7 @@ export class SessionService {
       logger.error({ err: cancelErr, conversationId }, 'Failed to cancel active agent process');
     }
 
+    await this.finalizeInFlightMessages(conversationId, '运行已取消');
     conversationBuffer.clear(conversationId);
     return true;
   }
@@ -266,6 +269,8 @@ export class SessionService {
       if (!persisted) return;
     }
 
+    await this.finalizeInFlightMessages(conversationId, error);
+
     if (convInfo) {
       convInfo.state = ConversationState.FAILED;
       convInfo.error = error;
@@ -274,6 +279,32 @@ export class SessionService {
         error: error,
         ended_at: new Date().toISOString(),
       });
+    }
+  }
+
+  private async finalizeInFlightMessages(conversationId: string, error: string): Promise<void> {
+    const drafts = conversationBuffer.getDraftsByConversation(conversationId);
+    const convInfo = this.conversations.get(conversationId);
+    for (const draft of drafts) {
+      const baseMeta = { message_id: draft.id };
+      await messageQueue.publish(createMessage(
+        'assistant',
+        draft.id,
+        conversationId,
+        String(draft.session_id),
+        convInfo?.workspace_id ?? draft.conversation_id,
+        [createContentBlock(SegmentType.ERROR, error, baseMeta)],
+        error
+      ));
+      await messageQueue.publish(createMessage(
+        'assistant',
+        draft.id,
+        conversationId,
+        String(draft.session_id),
+        convInfo?.workspace_id ?? draft.conversation_id,
+        [createContentBlock(SegmentType.DONE, '', baseMeta)],
+        ''
+      ));
     }
   }
 

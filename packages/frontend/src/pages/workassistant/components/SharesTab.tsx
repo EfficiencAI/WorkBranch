@@ -96,7 +96,7 @@ export function SharesTab({ assistantId }: SharesTabProps) {
   }
 
   return (
-    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={14} style={{ width: '100%' }}>
       <Card size="small" title="创建分享入口">
         <Space wrap size={10}>
           <Select
@@ -142,7 +142,7 @@ export function SharesTab({ assistantId }: SharesTabProps) {
         renderItem={(share) => (
           <Card size="small" style={{ marginBottom: 10 }}>
             <Space align="start" size={16} style={{ width: '100%', justifyContent: 'space-between' }}>
-              <Space direction="vertical" size={6} style={{ flex: 1, minWidth: 0 }}>
+              <Space orientation="vertical" size={6} style={{ flex: 1, minWidth: 0 }}>
                 <Space size={6}>
                   <LinkOutlined />
                   <Typography.Text copyable code>{`${baseUrl}/${share.token}`}</Typography.Text>

@@ -93,7 +93,7 @@ export function OnboardingWizard() {
       closable={false}
       centered
       width={520}
-      maskClosable={false}
+      mask={{ closable: false }}
       styles={{ body: { padding: '32px 24px 16px' } }}
     >
       <div style={{ textAlign: 'center', marginBottom: 28 }}>

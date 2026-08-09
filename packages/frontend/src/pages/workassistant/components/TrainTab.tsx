@@ -293,7 +293,7 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
   const placeholder = trainMode === 'ai' ? 'AI 在主导检查，可点击上方快捷操作…' : '向助手提问，或输入要沉淀的内容…'
 
   return (
-    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={14} style={{ width: '100%' }}>
       <Segmented
         block
         value={trainMode}
@@ -358,7 +358,7 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
         ) : (
           faqs.map((faq) => (
             <div key={faq.id} className="train-align-row">
-              <Space direction="vertical" size={2} style={{ flex: 1, minWidth: 0 }}>
+              <Space orientation="vertical" size={2} style={{ flex: 1, minWidth: 0 }}>
                 <Space size={6}>
                   <Tag color={faq.kind === 'faq' ? 'cyan' : 'green'}>{faq.kind === 'faq' ? '固定话术' : '知识条目'}</Tag>
                   <Tag color="success">已生效</Tag>
@@ -386,7 +386,7 @@ export function TrainTab({ assistantId, quickQuestions = [] }: TrainTabProps) {
         okText="保存并生效"
         cancelText="取消"
       >
-        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Space orientation="vertical" size={12} style={{ width: '100%' }}>
           <div>
             <Typography.Text type="secondary">问题</Typography.Text>
             <Input

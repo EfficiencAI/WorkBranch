@@ -1,4 +1,4 @@
-import { Button, Checkbox, ConfigProvider, Drawer, Modal, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
+import { App as AntdApp, Button, Checkbox, ConfigProvider, Drawer, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
 import { ApartmentOutlined, FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -47,6 +47,7 @@ type DiagramShellProps = {
 }
 
 export function DiagramShell({ onSendError, onRequestError, view, initialLoading }: DiagramShellProps) {
+  const { modal } = AntdApp.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
@@ -115,10 +116,10 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
 
   function confirmTraeRun(): Promise<boolean> {
     return new Promise((resolve) => {
-      Modal.confirm({
+      modal.confirm({
         title: '确认运行 Trae CLI？',
         content: (
-          <Space direction="vertical" size={8}>
+          <Space orientation="vertical" size={8}>
             <Typography.Text>Trae CLI 可能修改工作区文件。</Typography.Text>
             <Typography.Text type="secondary">
               working dir: {workspaceDetail?.dir ?? conversationDetail?.workspaceId ?? '当前会话工作区'}
@@ -217,10 +218,10 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       const hasChildren = conversationNodes.some((node) => node.parentConversationId === conversationId)
       let cascadeDelete = false
 
-      Modal.confirm({
+      modal.confirm({
         title: '确认删除该节点？',
         content: (
-          <Space direction="vertical" size={12}>
+          <Space orientation="vertical" size={12}>
             <Typography.Text>
               {hasChildren
                 ? '删除后无法恢复。未勾选级联删除时，该节点的子对话会保留，并在当前结构下作为根节点显示。'
@@ -281,18 +282,18 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       : true
 
   const handleSendMessage = useCallback(
-    async (message: string, enableContext: boolean) => {
+    async (message: string, enableContext: boolean): Promise<boolean> => {
       try {
         if (selectedAgentId === 'builtin') {
           const llm = settings?.llm
           if (!llm || typeof llm !== 'object' || Array.isArray(llm)) {
             showOnboarding()
-            return
+            return false
           }
           const llmConfig = llm as Record<string, unknown>
           if (!llmConfig.api_key || !llmConfig.base_url || !llmConfig.model) {
             showOnboarding()
-            return
+            return false
           }
         }
 
@@ -300,12 +301,12 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
 
         if (!targetConversationId) {
           if (sessionDetail?.conversations?.length) {
-            return
+            return false
           }
 
           const result = await ensureConversationForCurrentSession()
           if (!result) {
-            return
+            return false
           }
 
           targetConversationId = result.conversationId
@@ -319,7 +320,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         if (singleMessagePerNode && targetMessageCount >= 1) {
           const childResult = await ensureConversationForCurrentSession({ parentConversationId: targetConversationId })
           if (!childResult) {
-            return
+            return false
           }
 
           await enterSessionContext(childResult.detail)
@@ -332,11 +333,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         if (selectedAgentId === 'trae') {
           writeConfirmed = await confirmTraeRun()
           if (!writeConfirmed) {
-            return
+            return false
           }
         }
 
-        await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
+        const sendPromise = useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
           agentId: selectedAgentId,
           writeConfirmed,
         }, {
@@ -346,8 +347,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
             }
           },
         })
+        void sendPromise.catch(onRequestError)
+        return true
       } catch (caughtError) {
         onRequestError(caughtError)
+        return false
       }
     },
     [
@@ -525,7 +529,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           <Drawer
             open={activeSidebar !== null}
             placement="left"
-            width={responsive.isMobile ? '100%' : 392}
+            size={responsive.isMobile ? '100%' : 392}
             rootStyle={{ zIndex: 30 }}
             onClose={collapseNav}
             title={

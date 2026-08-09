@@ -88,7 +88,7 @@ export function RulesTab({ assistantId, assistant, onAssistantSaved }: RulesTabP
   }
 
   return (
-    <Space direction="vertical" size={14} style={{ width: '100%' }}>
+    <Space orientation="vertical" size={14} style={{ width: '100%' }}>
       <Card size="small" title="语气与规则">
         <Form layout="vertical">
           <Form.Item label="系统规则（语气 / 边界 / 固定口径）">

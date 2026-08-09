@@ -13,7 +13,6 @@ import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
 import { MessageRenderer } from '../../components/messages'
-import { useLongPress } from './useLongPress'
 import type { AgentId } from '../../shared/api'
 
 type ConversationCanvasProps = {
@@ -31,7 +30,7 @@ type ConversationCanvasProps = {
   selectedAgentId: AgentId
   canCreateConversationOnSend: boolean
   initialLoading?: boolean
-  onSendMessage: (message: string, enableContext: boolean) => Promise<void>
+  onSendMessage: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
@@ -175,12 +174,12 @@ function renderMessageList(
 
       {!messagesError && conversationMessages.length ? (
         <div className={messagesClassName} onWheelCapture={stopWheelEvent}>
-          <Space direction="vertical" size={8} style={{ width: '100%' }}>
+          <Space orientation="vertical" size={8} style={{ width: '100%' }}>
             {conversationMessages.map((message) => (
-              <Space direction="vertical" size={8} key={message.id} style={{ width: '100%' }}>
+              <Space orientation="vertical" size={8} key={message.id} style={{ width: '100%' }}>
                 {message.userContent ? (
                   <Card size="small" className="conversation-node__message-card conversation-node__message-card--user">
-                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                         <Typography.Text strong>用户</Typography.Text>
                         {showTime ? <Typography.Text type="secondary">{message.createdAt ?? ''}</Typography.Text> : null}
@@ -193,7 +192,7 @@ function renderMessageList(
                 ) : null}
                 {message.assistantContent || message.status === 'streaming' ? (
                   <Card size="small" className="conversation-node__message-card conversation-node__message-card--assistant">
-                    <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                    <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                       <Space style={{ width: '100%', justifyContent: 'space-between' }} wrap>
                         <Typography.Text strong>助手</Typography.Text>
                         {showTime ? <Typography.Text type="secondary">{message.updatedAt ?? message.createdAt ?? ''}</Typography.Text> : null}
@@ -271,9 +270,9 @@ export function FocusNodePage({
 }) {
   return (
     <div className="conversation-node__focused-body nodrag nopan" onClick={interactive ? stopEvent : undefined} onDoubleClick={interactive ? stopEvent : undefined}>
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={10} style={{ width: '100%' }}>
         <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
-          <Space direction="vertical" size={2}>
+          <Space orientation="vertical" size={2}>
             <Typography.Text strong>{summarizeConversation(conversation)}</Typography.Text>
             <Typography.Text type="secondary">{conversation.conversationId}</Typography.Text>
           </Space>
@@ -308,84 +307,14 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
     onSearchResultSelect,
   } = data
 
-  const draggingNodeId = useTreeStore((state) => state.draggingNodeId)
-  const setDraggingNodeId = useTreeStore((state) => state.setDraggingNodeId)
-  const clearDraggingNodeId = useTreeStore((state) => state.clearDraggingNodeId)
   const focusedConversationId = useTreeStore((state) => state.focusedConversationId)
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
-  const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
-  const reactFlow = useReactFlow()
-
-  const isDragging = draggingNodeId === conversation.conversationId
-  const dragStartPosRef = useRef<{ x: number; y: number; nodeX: number; nodeY: number } | null>(null)
-
-  const handleLongPress = useCallback(
-    (event: React.TouchEvent | React.MouseEvent) => {
-      setDraggingNodeId(conversation.conversationId)
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
-      }
-      
-      const clientX = 'touches' in event ? event.touches[0]?.clientX ?? 0 : event.clientX
-      const clientY = 'touches' in event ? event.touches[0]?.clientY ?? 0 : event.clientY
-      
-      const node = reactFlow.getNode(conversation.conversationId)
-      if (node) {
-        dragStartPosRef.current = {
-          x: clientX,
-          y: clientY,
-          nodeX: node.position.x,
-          nodeY: node.position.y,
-        }
-      }
-    },
-    [conversation.conversationId, setDraggingNodeId, reactFlow]
-  )
-
-  const longPressHandlers = useLongPress(handleLongPress, {
-    threshold: 500,
-    moveThreshold: 10,
-  })
-
-  useEffect(() => {
-    if (!isDragging) {
-      dragStartPosRef.current = null
-      return
-    }
-
-    const handlePointerMove = (event: PointerEvent) => {
-      if (!dragStartPosRef.current) return
-
-      const { x: startX, y: startY, nodeX, nodeY } = dragStartPosRef.current
-      const deltaX = (event.clientX - startX) / reactFlow.getZoom()
-      const deltaY = (event.clientY - startY) / reactFlow.getZoom()
-
-      const newX = nodeX + deltaX
-      const newY = nodeY + deltaY
-
-      updateConversationNodePosition(conversation.conversationId, { x: newX, y: newY })
-    }
-
-    const handlePointerUp = () => {
-      clearDraggingNodeId()
-    }
-
-    window.addEventListener('pointermove', handlePointerMove)
-    window.addEventListener('pointerup', handlePointerUp)
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove)
-      window.removeEventListener('pointerup', handlePointerUp)
-    }
-  }, [isDragging, conversation.conversationId, reactFlow, updateConversationNodePosition, clearDraggingNodeId])
-
   const nodeClassName = [
     'conversation-node',
     selected ? 'conversation-node--selected' : null,
     searchMatched ? 'conversation-node--search-match' : null,
     searchSelected ? 'conversation-node--search-selected' : null,
-    isDragging ? 'conversation-node--dragging' : null,
   ].filter(Boolean).join(' ')
 
   return (
@@ -409,7 +338,6 @@ function FlowConversationNode({ data }: NodeProps<Node<FlowNodeData>>) {
       <Card
         size="small"
         className="conversation-node__card conversation-node__card--overview"
-        {...longPressHandlers}
       >
         <div className="conversation-node__body-frame">
           <div className="conversation-node__page-shell">
@@ -457,7 +385,7 @@ function FocusOverlay({
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   selectedAgentId: AgentId
-  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void
@@ -615,7 +543,7 @@ interface FocusViewProps {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   selectedAgentId: AgentId
-  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void
@@ -987,7 +915,7 @@ function FocusView({
                         <StatusTag label={getConversationStateLabel(node.state)} tone={getConversationStateTone(node.state)} />
                         <Tooltip
                           title={
-                            <Space direction="vertical" size={4} style={{ width: '100%' }}>
+                            <Space orientation="vertical" size={4} style={{ width: '100%' }}>
                               <div className="flow-section__tooltip-row"><span>标题</span><strong>{summarizeConversation(node)}</strong></div>
                               <div className="flow-section__tooltip-row"><span>对话 ID</span><strong>{node.conversationId}</strong></div>
                               <div className="flow-section__tooltip-row"><span>消息数</span><strong>{nodeMessages.length} 条</strong></div>
@@ -996,7 +924,7 @@ function FocusView({
                             </Space>
                           }
                           placement="bottomRight"
-                          overlayStyle={{ maxWidth: 320 }}
+                          styles={{ root: { maxWidth: 320 } }}
                           color="rgba(17, 24, 39, 0.98)"
                         >
                           <Button
@@ -1547,8 +1475,11 @@ function FlowViewport({
   onNavPathTailChange,
 }: ConversationCanvasProps) {
   const reactFlow = useReactFlow<Node<FlowNodeData>, Edge>()
+  const responsive = useResponsive()
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const setLockedSendConversationId = useTreeStore((state) => state.setLockedSendConversationId)
+  const updateConversationNodePosition = useChatWorkbenchStore((state) => state.updateConversationNodePosition)
+  const persistConversationPositions = useChatWorkbenchStore((state) => state.persistConversationPositions)
   const storeFocusedConversationId = useTreeStore(selectFocusedConversationId)
   const conversationMessagesCache = useChatWorkbenchStore((state) => state.conversationMessagesCache)
   const viewportRef = useRef<HTMLDivElement | null>(null)
@@ -1706,6 +1637,18 @@ function FlowViewport({
     setFocusViewedId(nodeId)
   }, [])
 
+  const handleNodeDragStop = useCallback(
+    (_event: unknown, node: Node<FlowNodeData>) => {
+      const position = { x: node.position.x, y: node.position.y }
+      updateConversationNodePosition(node.id, position)
+      const sessionId = sessionDetail?.id
+      if (sessionId) {
+        void persistConversationPositions(sessionId, [{ conversationId: node.id, position }])
+      }
+    },
+    [persistConversationPositions, sessionDetail?.id, updateConversationNodePosition],
+  )
+
   useEffect(() => {
     const wasFocused = previousFocusedIdRef.current
     const isNowFocused = focusedConversationId
@@ -1753,7 +1696,7 @@ function FlowViewport({
           faded ? 'conversation-flow-node--dimmed' : null,
           normalizedSearchQuery && !searchMatched ? 'conversation-flow-node--search-muted' : null,
         ].filter(Boolean).join(' '),
-        draggable: false,
+        draggable: !responsive.isMobile,
       }
     })
   }, [
@@ -1865,36 +1808,74 @@ function FlowViewport({
 
   const { setContextMenu } = useContextMenu()
 
-  const handleContextMenu = useCallback(
-    (event: React.MouseEvent) => {
-      event.preventDefault()
-
-      // 聚焦态下不显示预览态的右键菜单
+  const openContextMenuAt = useCallback(
+    (clientX: number, clientY: number, target: HTMLElement) => {
+      // Focus mode hides the preview context menu
       if (focusedConversationId) return
 
-      const target = event.target as HTMLElement
       const nodeElement = target.closest('[data-conversation-id]')
-
       if (nodeElement) {
         const conversationId = nodeElement.getAttribute('data-conversation-id')
         if (!conversationId) {
           return
         }
-
         setContextMenu({
           type: 'node',
           conversationId,
-          position: { x: event.clientX, y: event.clientY },
+          position: { x: clientX, y: clientY },
         })
       } else {
         setContextMenu({
           type: 'canvas',
-          position: { x: event.clientX, y: event.clientY },
+          position: { x: clientX, y: clientY },
         })
       }
     },
     [setContextMenu, focusedConversationId],
   )
+
+  const handleContextMenu = useCallback(
+    (event: React.MouseEvent) => {
+      event.preventDefault()
+      console.log('[mobile-stub] contextmenu', event.clientX, event.clientY)
+      openContextMenuAt(event.clientX, event.clientY, event.target as HTMLElement)
+    },
+    [openContextMenuAt],
+  )
+
+  // TEMP probe for real-device long-press: open the same context menu and log events.
+  const longPressTimerRef = useRef<number | null>(null)
+  const longPressStartRef = useRef<{ x: number; y: number; target: HTMLElement } | null>(null)
+
+  const clearLongPress = useCallback(() => {
+    if (longPressTimerRef.current !== null) {
+      window.clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    longPressStartRef.current = null
+  }, [])
+
+  const handleTouchStart = useCallback((event: React.TouchEvent) => {
+    const touch = event.touches[0]
+    console.log('[mobile-stub] touchstart', touch?.clientX, touch?.clientY)
+    clearLongPress()
+    longPressStartRef.current = { x: touch?.clientX ?? 0, y: touch?.clientY ?? 0, target: event.target as HTMLElement }
+    longPressTimerRef.current = window.setTimeout(() => {
+      const start = longPressStartRef.current
+      if (!start) return
+      console.log('[mobile-stub] longpress fired', start.x, start.y)
+      openContextMenuAt(start.x, start.y, start.target)
+    }, 500)
+  }, [clearLongPress, openContextMenuAt])
+
+  const handleTouchMove = useCallback(() => {
+    clearLongPress()
+  }, [clearLongPress])
+
+  const handleTouchEnd = useCallback(() => {
+    console.log('[mobile-stub] touchend')
+    clearLongPress()
+  }, [clearLongPress])
 
 
 
@@ -1904,10 +1885,17 @@ function FlowViewport({
   ].filter(Boolean).join(' ')
 
   return (
-    <div className={viewportClassName} onContextMenu={handleContextMenu} ref={viewportRef}>
+    <div
+      className={viewportClassName}
+      onContextMenu={handleContextMenu}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      ref={viewportRef}
+    >
       {initialLoading ? (
         <div className="conversation-canvas__loading-overlay">
-          <Spin size="large" tip="正在加载..." />
+          <Spin size="large" description="正在加载..." />
         </div>
       ) : null}
       <FocusOverlay
@@ -2083,6 +2071,7 @@ function FlowViewport({
         onPaneClick={() => {
           setContextMenu(null)
         }}
+        onNodeDragStop={handleNodeDragStop}
         onDoubleClick={() => {
           if (!focusedConversation) {
             reactFlow.fitView({ duration: 400, padding: 0.2 })

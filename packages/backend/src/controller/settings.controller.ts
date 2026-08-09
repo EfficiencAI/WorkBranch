@@ -40,8 +40,12 @@ export class SettingsController {
     reply: FastifyReply
   ) {
     const { key, value } = request.body;
-    settingsService.updateSetting(key, value);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSetting(key, value);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async updateSetting(
@@ -50,14 +54,22 @@ export class SettingsController {
   ) {
     const { key } = request.params;
     const { value } = request.body;
-    settingsService.updateSetting(key, value);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSetting(key, value);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async updateSettings(request: FastifyRequest<{ Body: Record<string, unknown> }>, reply: FastifyReply) {
     const updates = request.body;
-    settingsService.updateSettings(updates);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSettings(updates);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async reloadSettings(_request: FastifyRequest, reply: FastifyReply) {

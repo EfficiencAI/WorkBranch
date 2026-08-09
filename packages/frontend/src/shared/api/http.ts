@@ -60,29 +60,34 @@ export async function request<TData = unknown, TBody = unknown>(
         requestHeaders.set('Content-Type', 'application/json')
       }
       requestBody = JSON.stringify(body)
-      // CapacitorHttp 文档要求 data 为可序列化对象，原生层负责序列化；
+      // CapacitorHttp 要求 data 为可序列化对象，原生层负责序列化；
       // 传 stringify 后的 string 会导致请求异常，因此用原始对象
       capacitorData = body
     }
+  } else if (method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE') {
+    // CapacitorHttp native adds application/x-www-form-urlencoded to bodyless write requests.
+    // Fastify rejects it with 415; send an empty JSON object instead.
+    if (!requestHeaders.has('Content-Type')) {
+      requestHeaders.set('Content-Type', 'application/json')
+    }
+    requestBody = '{}'
+    capacitorData = {}
   }
 
   let response: Response
   const fullUrl = getApiUrl(url)
 
-  // 仅当 @capacitor/core 可加载且导出 CapacitorHttp 时使用原生请求；
-  // 加载失败（纯 web/dev 环境）才回退 fetch
   let capacitorHttp: typeof import('@capacitor/core').CapacitorHttp | null = null
   try {
     const { CapacitorHttp } = await import('@capacitor/core')
     capacitorHttp = CapacitorHttp ?? null
   } catch {
-    // @capacitor/core 不可用，使用 fetch
+    // @capacitor/core 不可用时，使用 fetch
   }
 
-  if (capacitorHttp) {
-    // 原生请求失败直接抛出真实错误，不再回退 fetch：
-    // Android WebView origin 为 https://localhost，回退 fetch 访问 http://127.0.0.1:3000
-    // 会被混合内容策略阻断，抛出误导性的 "Failed to fetch" 掩盖真实根因
+  if (capacitorHttp && !(body instanceof FormData)) {
+    // FormData is not supported by the native CapacitorHttp layer on Android;
+    // use the WebView fetch path so multipart uploads are serialized correctly.
     const nativeResponse = await capacitorHttp.request({
       url: fullUrl,
       method: method as any,

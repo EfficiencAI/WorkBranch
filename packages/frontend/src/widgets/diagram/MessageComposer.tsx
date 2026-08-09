@@ -12,7 +12,7 @@ type MessageComposerProps = {
   sending: boolean
   selectedAgentId: AgentId
   allowCreateOnSend?: boolean
-  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
 }
@@ -52,8 +52,10 @@ export function MessageComposer({
       return
     }
 
-    setMessage('')
-    await onSend(nextMessage, enableContext)
+    const sent = await onSend(nextMessage, enableContext)
+    if (sent) {
+      setMessage('')
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -188,7 +190,7 @@ export function MessageComposer({
 
   return (
     <div className={responsive.isMobile ? 'message-composer message-composer--mobile' : 'message-composer'}>
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={10} style={{ width: '100%' }}>
         <Input.TextArea
           rows={responsive.composerConfig.textareaRows}
           value={message}
@@ -199,7 +201,7 @@ export function MessageComposer({
 
         <div className="message-composer__bottom-row">
           {responsive.isMobile ? (
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={8} style={{ width: '100%' }}>
               <Space className="message-composer__target" align="center" size={8}>
                 <Typography.Text strong>当前目标对话</Typography.Text>
                 {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}

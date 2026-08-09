@@ -635,6 +635,16 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
         activeStreamAbortController = null
       }
       clearLastSavedSeq(conversationId)
+      set(state => {
+        const current = state.conversationMessagesCache[conversationId] || []
+        const last = current[current.length - 1]
+        if (last && last.status === 'streaming') {
+          const updated = [...current]
+          updated[updated.length - 1] = { ...last, status: 'error', assistantContent: last.assistantContent || '连接中断' }
+          return updateConversationMessagesCache(state, conversationId, updated)
+        }
+        return state
+      })
       set(state => { const newSet = new Set(state.streamingConversationIds); newSet.delete(conversationId); return { ...state, streaming: newSet.size > 0, streamingConversationIds: newSet } })
     }
   },
