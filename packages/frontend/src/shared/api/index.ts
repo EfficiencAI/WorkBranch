@@ -2,6 +2,8 @@ export { ApiError, getErrorMessage, isApiError } from './error'
 export { getApiUrl, getApiBaseUrl } from './config'
 export { connectSse } from './sse'
 export { del, get, patch, post, put, request } from './http'
+export { testLlmConnection } from './settings'
+export type { LlmConnectionTestInput, LlmConnectionTestResult } from './settings'
 export {
   cancelConversation,
   cascadeDeleteConversation,

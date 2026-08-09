@@ -11,4 +11,5 @@ export default async function settingsRoutes(app: FastifyInstance) {
   app.put('/', controller.updateSingleSetting.bind(controller));
   app.patch('/', controller.updateSettings.bind(controller));
   app.post('/reload', controller.reloadSettings.bind(controller));
+  app.post('/llm/test', controller.testLlmConnection.bind(controller));
 }

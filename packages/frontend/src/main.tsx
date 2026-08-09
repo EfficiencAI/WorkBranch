@@ -8,6 +8,7 @@ import { waitForBackendReady } from './shared/api/config'
 import './styles/index.css'
 import './styles/wb-light.css'
 import './styles/workassistant.css'
+import './styles/onboarding.css'
 
 const { clientId, restored } = readClientId()
 

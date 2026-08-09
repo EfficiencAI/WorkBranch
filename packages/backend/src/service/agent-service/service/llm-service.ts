@@ -241,6 +241,42 @@ class LLMServiceImpl {
     return this.chat(messages, systemPrompt);
   }
 
+  /** 用传入的凭据发起一次最小请求，验证 LLM 服务连通性；不写入设置 */
+  async testConnection(
+    options: LlmOptions & { apiKey?: string }
+  ): Promise<{ ok: true; latencyMs: number; model: string | undefined }> {
+    const apiKey = options.apiKey ?? (settingsService.get('llm:api_key') as string);
+    const baseUrl = options.baseUrl ?? (settingsService.get('llm:base_url') as string);
+    const model = options.model ?? (settingsService.get('llm:model') as string);
+
+    if (!apiKey || !baseUrl || !model) {
+      throw new Error('请完整填写 API Key、Base URL 和模型名称');
+    }
+
+    const llm = new ChatOpenAI({
+      openAIApiKey: apiKey,
+      configuration: { basePath: baseUrl },
+      modelName: model,
+      maxTokens: 8,
+      timeout: 15000,
+      maxRetries: 0,
+    });
+
+    const startTime = Date.now();
+    const response = await llm.invoke([new HumanMessage('ping')]);
+    const latencyMs = Date.now() - startTime;
+    const responseMetadata = (response as { response_metadata?: Record<string, unknown> }).response_metadata;
+    const resolvedModel = typeof responseMetadata?.model === 'string' ? responseMetadata.model : model;
+
+    logger.info({
+      event: 'llm.test_connection.completed',
+      latency_ms: latencyMs,
+      model: resolvedModel,
+    });
+
+    return { ok: true, latencyMs, model: resolvedModel };
+  }
+
   async structuredOutput<T>(
     messages: Message[],
     schema: Record<string, unknown>,

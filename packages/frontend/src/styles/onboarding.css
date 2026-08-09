@@ -1,0 +1,309 @@
+/* ========== 首次配置弹窗（WA 风格） ========== */
+.wa-onboarding .ant-modal-container {
+  padding: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 18px;
+  background: var(--app-panel-bg-strong);
+  box-shadow: var(--app-shadow-lg);
+}
+
+.wa-onboarding .ant-modal-mask {
+  background: var(--app-scrim-bg);
+  backdrop-filter: blur(3px);
+}
+
+.wa-onboarding .ant-modal-body {
+  padding: 28px 30px 22px;
+}
+
+.wa-onboarding__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.wa-onboarding__brand {
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 auto;
+  border-radius: 13px;
+  background: var(--wa-brand-bg);
+  color: var(--wa-brand-text);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  box-shadow: 0 8px 20px color-mix(in srgb, var(--wa-accent) 28%, transparent);
+}
+
+.wa-onboarding__copy {
+  min-width: 0;
+}
+
+.wa-onboarding__eyebrow {
+  display: block;
+  margin: 0 0 3px;
+  color: var(--wa-accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.wa-onboarding__title.ant-typography {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 750;
+  line-height: 1.35;
+}
+
+.wa-onboarding__sub.ant-typography {
+  display: block;
+  margin: 5px 0 0;
+  color: var(--app-text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+/* ---------- 步骤条 ---------- */
+.wa-onboarding__steps {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin: 0 0 24px;
+  padding: 14px 12px 12px;
+  border: 1px solid var(--app-border);
+  border-radius: 14px;
+  background: var(--app-panel-bg-soft);
+}
+
+.wa-onboarding__step {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  padding: 0 4px;
+  text-align: center;
+}
+
+.wa-onboarding__step + .wa-onboarding__step::before {
+  content: "";
+  position: absolute;
+  top: 15px;
+  right: calc(50% + 21px);
+  left: calc(-50% + 21px);
+  height: 1.5px;
+  background: var(--app-border-strong);
+}
+
+.wa-onboarding__step-chip {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 31px;
+  height: 31px;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 10px;
+  color: var(--app-text-muted);
+  background: var(--app-card-bg);
+  transition:
+    border-color 0.16s ease,
+    background 0.16s ease,
+    color 0.16s ease,
+    box-shadow 0.16s ease;
+}
+
+.wa-onboarding__step-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--app-text-muted);
+  white-space: nowrap;
+}
+
+.wa-onboarding__step--done .wa-onboarding__step-chip {
+  color: var(--wa-accent);
+  border-color: var(--wa-accent-line);
+  background: var(--wa-accent-soft);
+}
+
+.wa-onboarding__step--active .wa-onboarding__step-chip {
+  color: var(--wa-brand-text);
+  border-color: var(--wa-accent);
+  background: var(--wa-accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--wa-accent) 34%, transparent);
+}
+
+.wa-onboarding__step--active .wa-onboarding__step-label {
+  color: var(--app-text);
+}
+
+.wa-onboarding__step--done + .wa-onboarding__step::before {
+  background: var(--wa-accent-line);
+}
+
+/* ---------- 表单 ---------- */
+.wa-onboarding__field .ant-form-item-label {
+  padding-bottom: 7px;
+}
+
+.wa-onboarding__field .ant-form-item-label > label {
+  color: var(--app-text);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.wa-onboarding__field .ant-input-affix-wrapper {
+  height: 44px;
+  padding-inline: 12px;
+  border-color: var(--app-border-strong);
+  border-radius: 10px;
+  color: var(--app-text);
+  background: var(--app-input-bg);
+  box-shadow: none;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.wa-onboarding__field .ant-input-affix-wrapper:hover {
+  border-color: var(--wa-accent-line);
+}
+
+.wa-onboarding__field .ant-input-affix-wrapper-focused {
+  border-color: var(--wa-accent);
+  box-shadow: 0 0 0 3px var(--wa-accent-soft);
+}
+
+.wa-onboarding__field .ant-input {
+  background: transparent;
+  color: var(--app-text);
+  font-size: 13px;
+}
+
+.wa-onboarding__field .ant-input::placeholder {
+  color: var(--app-text-muted);
+  opacity: 0.72;
+}
+
+.wa-onboarding__field .ant-input-prefix {
+  margin-inline-end: 9px;
+  color: var(--app-text-muted);
+}
+
+.wa-onboarding__field .ant-form-item-explain {
+  margin-top: 8px;
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.wa-onboarding__field .ant-form-item-explain-error {
+  color: var(--wa-status-danger-text);
+}
+
+/* ---------- 提示与测试结果 ---------- */
+.wa-onboarding__hint {
+  margin: 2px 0 20px;
+  padding: 11px 13px;
+  border: 1px dashed var(--wa-accent-line);
+  border-radius: 11px;
+  background: var(--wa-accent-soft);
+  color: var(--app-text-muted);
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+.wa-onboarding__test {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 13px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.wa-onboarding__test .anticon {
+  margin-top: 2px;
+}
+
+.wa-onboarding__test--success {
+  color: var(--wa-status-live-text);
+  background: var(--wa-status-live-bg);
+}
+
+.wa-onboarding__test--error {
+  color: var(--wa-status-danger-text);
+  background: var(--wa-status-danger-bg);
+}
+
+/* ---------- 操作区 ---------- */
+.wa-onboarding__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.wa-onboarding__footer-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wa-onboarding .ant-btn {
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.wa-onboarding .ant-btn-default {
+  border-color: var(--app-border-strong);
+  color: var(--app-text-soft);
+  background: transparent;
+  box-shadow: none;
+}
+
+.wa-onboarding .ant-btn-default:not(:disabled):hover {
+  border-color: var(--wa-accent-line);
+  color: var(--wa-accent);
+  background: var(--wa-accent-soft);
+}
+
+.wa-onboarding .ant-btn-primary {
+  border-color: var(--wa-accent);
+  background: var(--wa-accent);
+  color: var(--wa-brand-text);
+  box-shadow: none;
+}
+
+.wa-onboarding .ant-btn-primary:not(:disabled):hover {
+  border-color: var(--wa-accent-hover);
+  background: var(--wa-accent-hover);
+  color: var(--wa-brand-text);
+}
+
+.wa-onboarding .ant-btn[disabled] {
+  color: var(--app-text-muted);
+  background: var(--app-panel-muted);
+  border-color: var(--app-border);
+}
+
+@media screen and (max-width: 767px) {
+  .wa-onboarding .ant-modal-body {
+    padding: 24px 20px 18px;
+  }
+
+  .wa-onboarding__steps {
+    padding: 12px 8px 10px;
+  }
+
+  .wa-onboarding__footer {
+    flex-wrap: wrap;
+  }
+}
