@@ -28,7 +28,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     max_size: 1000,
   },
   agent: {
-    default_agent: 'trae',
+    default_agent: 'builtin',
     memory_mode: 'accumulate',
     memory_window_size: 3,
   },
@@ -222,10 +222,20 @@ export class SettingsService {
     if (changed) {
       this.persist();
     }
+    this.migrateDefaultAgent();
   }
 
   private persist(): void {
     fileStorage.writeSettings(this.data);
+  }
+
+  private migrateDefaultAgent(): void {
+    const agent = this.data.agent;
+    if (agent && typeof agent === 'object' && !Array.isArray(agent)
+      && (agent as Record<string, unknown>).default_agent === 'trae') {
+      (agent as Record<string, unknown>).default_agent = 'builtin';
+      this.persist();
+    }
   }
 
   get(key: string): unknown {
