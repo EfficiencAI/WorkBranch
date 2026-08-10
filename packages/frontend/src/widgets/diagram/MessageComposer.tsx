@@ -1,12 +1,18 @@
 import { Button, Checkbox, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd'
 import { LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
 import { selectChatWorkbenchWorkspaceDetail, useChatWorkbenchStore } from '../../features/chat-workbench'
 import { uploadWorkspaceFiles } from '../../shared/api/workspace'
 import { useResponsive } from '../../shared/lib'
 import type { AgentId } from '../../shared/api'
+
+function isAndroidPlatform(): boolean {
+  if (typeof window === 'undefined') return false
+  const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+  return (capacitor?.getPlatform?.() ?? capacitor?.platform) === 'android'
+}
 
 type MessageComposerProps = {
   selectedConversationId: string | null
@@ -17,6 +23,15 @@ type MessageComposerProps = {
   onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
+}
+
+// 输入草稿缓存：键盘收起/切换节点导致组件卸载时保留未发送内容（含中文输入法组字）
+const composerDraftCache = new Map<string, string>()
+
+function saveComposerDraft(conversationId: string | null, value: string) {
+  if (conversationId) {
+    composerDraftCache.set(conversationId, value)
+  }
 }
 
 export function MessageComposer({
@@ -31,7 +46,7 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const { settings } = useSettings()
   const responsive = useResponsive()
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<string>(() => (selectedConversationId ? composerDraftCache.get(selectedConversationId) ?? '' : ''))
   const [collapsed, setCollapsed] = useState(false)
   const includeParentContextByDefault =
     settings?.context && typeof settings.context === 'object' && 'include_parent_context_by_default' in settings.context
@@ -55,6 +70,11 @@ export function MessageComposer({
     }
   }, [selectedConversationId])
 
+  const updateMessage = useCallback((value: string) => {
+    setMessage(value)
+    saveComposerDraft(selectedConversationId, value)
+  }, [selectedConversationId])
+
   async function handleSend() {
     const nextMessage = message.trim()
     if (!nextMessage || sending || (!selectedConversationId && !allowCreateOnSend)) {
@@ -67,6 +87,7 @@ export function MessageComposer({
     const sent = await onSend(messageWithAttachments, enableContext)
     if (sent) {
       setMessage('')
+      saveComposerDraft(selectedConversationId, '')
       setAttachments([])
       setAttachError(null)
     }
@@ -111,10 +132,14 @@ export function MessageComposer({
       style={{ minWidth: 112 }}
       suffixIcon={<SwapOutlined />}
       labelRender={() => (selectedAgentId === 'builtin' ? '内置 Agent' : 'Trae CLI')}
-      options={[
-        { value: 'builtin', label: 'Default' },
-        { value: 'trae', label: 'Trae CLI' },
-      ]}
+      options={
+        isAndroidPlatform()
+          ? [{ value: 'builtin', label: 'Default' }]
+          : [
+              { value: 'builtin', label: 'Default' },
+              { value: 'trae', label: 'Trae CLI' },
+            ]
+      }
     />
   )
 
@@ -137,7 +162,9 @@ export function MessageComposer({
         <Input.TextArea
           rows={2}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => updateMessage(event.target.value)}
+          onCompositionEnd={(event) => { const v = event.currentTarget.value; updateMessage(v); }}
+          onBlur={(event) => { const v = event.currentTarget.value; if (v) { updateMessage(v); } }}
           onKeyDown={handleKeyDown}
           placeholder={selectedConversationId || allowCreateOnSend ? '继续询问当前节点...' : ''}
           autoSize={{ minRows: 2, maxRows: 5 }}
@@ -216,7 +243,9 @@ export function MessageComposer({
         <Input.TextArea
           rows={responsive.composerConfig.textareaRows}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => updateMessage(event.target.value)}
+          onCompositionEnd={(event) => { const v = event.currentTarget.value; updateMessage(v); }}
+          onBlur={(event) => { const v = event.currentTarget.value; if (v) { updateMessage(v); } }}
           onKeyDown={handleKeyDown}
           placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
         />

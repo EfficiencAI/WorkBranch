@@ -222,9 +222,13 @@ export class TraeCliAgentAdapter implements AgentAdapter {
       }
       if (trajectory.success !== true) {
         const failureMessage = extractTraeFailureMessage(trajectory);
+        const friendlyFailure =
+          failureMessage && failureMessage.includes('Unterminated string')
+            ? '模型输出超过 max_tokens 上限被截断，请在 设置 → 模型 → 最大输出长度 中调大后重试'
+            : failureMessage;
         throw new Error(
-          failureMessage
-            ? `Trae CLI reported failure: ${failureMessage}`
+          friendlyFailure
+            ? `Trae CLI reported failure: ${friendlyFailure}`
             : 'Trae CLI reported failure without error details'
         );
       }

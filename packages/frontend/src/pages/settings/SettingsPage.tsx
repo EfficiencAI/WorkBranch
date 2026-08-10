@@ -1,10 +1,11 @@
 import { Alert, App as AntdApp, Button, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
-import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons'
+import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { NumericSettingMetadata, SettingMetadataNode, SettingValue } from '../../entities'
 import { getErrorMessage } from '../../shared/api'
+import { testLlmConnection } from '../../shared/api/settings'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { EmptyState, LoadingState, StatusTag } from '../../shared/ui'
 import { useTheme } from '../../app/theme'
@@ -376,7 +377,7 @@ function buildInitialEditorValue(kind: EditorKind, value: SettingValue): string 
 
 function parseEditorValue(kind: EditorKind, value: string | number | boolean | null | ArrayEditorValue, originalValue: SettingValue, metadata?: NumericSettingMetadata) {
   if (kind === 'secret') {
-    return value === '' ? originalValue : String(value)
+    return value === '' ? originalValue : String(value).replace(/^["']+|["']+$/g, '')
   }
 
   if (kind === 'string') {
@@ -417,9 +418,35 @@ export function SettingsPage() {
   const [activeCategory, setActiveCategory] = useState<SettingCategoryKey>('ui')
   const [pendingArrayFocusIndex, setPendingArrayFocusIndex] = useState<number | null>(null)
   const [activeArrayItemIndex, setActiveArrayItemIndex] = useState<number | null>(null)
+  const [testingLlm, setTestingLlm] = useState(false)
+  const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; latencyMs?: number; message?: string } | null>(null)
   const arrayItemRefs = useRef<Array<InputRef | null>>([])
 
   const { themeMode, setThemeMode } = useTheme()
+
+  const handleTestLlmConnection = useCallback(async () => {
+    const llm = settings?.llm
+    if (!llm || typeof llm !== 'object' || Array.isArray(llm)) return
+    const record = llm as Record<string, unknown>
+    if (!record.api_key || !record.base_url || !record.model) {
+      setLlmTestResult({ ok: false, message: '请先填写完整的 LLM 配置（API Key / Base URL / 模型）' })
+      return
+    }
+    setTestingLlm(true)
+    setLlmTestResult(null)
+    try {
+      const result = await testLlmConnection({
+        api_key: String(record.api_key),
+        base_url: String(record.base_url),
+        model: String(record.model),
+      })
+      setLlmTestResult({ ok: true, latencyMs: result.latencyMs })
+    } catch (err) {
+      setLlmTestResult({ ok: false, message: getErrorMessage(err, '连接失败') })
+    } finally {
+      setTestingLlm(false)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (pendingArrayFocusIndex === null) {
@@ -1158,6 +1185,17 @@ export function SettingsPage() {
                     <span>{rootKey}</span>
                   </header>
                   <div className="settings-sidebar__section-body">
+                    {rootKey === 'llm' ? (
+                      <div className="settings-sidebar__llm-test">
+                        <Button size="small" icon={<ApiOutlined />} loading={testingLlm} onClick={() => void handleTestLlmConnection()}>测试连接</Button>
+                        {llmTestResult ? (
+                          <span className={`settings-sidebar__llm-test-result settings-sidebar__llm-test-result--${llmTestResult.ok ? 'success' : 'error'}`}>
+                            {llmTestResult.ok ? <CheckCircleFilled /> : <CloseCircleFilled />}
+                            {llmTestResult.ok ? `连接成功 · 延迟 ${llmTestResult.latencyMs} ms` : llmTestResult.message}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {rootKey === 'ui' && showEmbeddedTheme ? renderThemePreference() : null}
                     {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
                   </div>

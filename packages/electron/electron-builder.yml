@@ -11,4 +11,4 @@ win:
   target:
     - portable
 portable:
-  artifactName: WorkBranch-${version}-portable.${ext}
+  artifactName: WorkBranch-0.1.260811.1-portable.${ext}

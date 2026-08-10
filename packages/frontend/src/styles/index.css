@@ -4412,6 +4412,30 @@ button {
   border-top: 1px solid var(--app-border);
 }
 
+.settings-sidebar__llm-test {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.settings-sidebar__llm-test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.settings-sidebar__llm-test-result--success {
+  color: #16a34a;
+}
+
+.settings-sidebar__llm-test-result--error {
+  color: #dc2626;
+}
+
+
 .settings-page--embedded .settings-tree-leaf {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

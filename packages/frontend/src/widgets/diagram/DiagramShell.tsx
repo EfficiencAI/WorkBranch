@@ -46,8 +46,15 @@ type DiagramShellProps = {
   initialLoading?: boolean
 }
 
+
+function isAndroidPlatform(): boolean {
+  if (typeof window === 'undefined') return false
+  const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+  return (capacitor?.getPlatform?.() ?? capacitor?.platform) === 'android'
+}
+
 export function DiagramShell({ onSendError, onRequestError, view, initialLoading }: DiagramShellProps) {
-  const { modal } = AntdApp.useApp()
+  const { message, modal } = AntdApp.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
@@ -83,11 +90,61 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
-  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('trae')
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('builtin')
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const isFocused = focusedConversationId !== null
+
+  // 安卓返回键：优先关闭侧栏/设置页，其次退出聚焦回概览，最后二次确认退出
+  useEffect(() => {
+    let lastBackAt = 0
+    const BACK_EXIT_WINDOW_MS = 2000
+    let cancelled = false
+    let listener: { remove: () => void } | null = null
+
+    void import('@capacitor/app').then(async ({ App }) => {
+      if (cancelled) return
+      const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+      const platform = capacitor?.getPlatform?.() ?? capacitor?.platform
+      if (platform !== 'android') return
+      listener = await App.addListener('backButton', () => {
+        // 1. 关闭打开的侧栏/抽屉
+        if (activeSidebar !== null) {
+          setActiveSidebar(null)
+          if (isSettingsRoute) {
+            navigate('/chat')
+          }
+          return
+        }
+        // 2. 设置路由退回聊天
+        if (isSettingsRoute) {
+          navigate('/chat')
+          return
+        }
+        // 3. 聚焦态退回概览
+        if (focusedConversationId !== null) {
+          useTreeStore.getState().setFocusedConversationId(null)
+          return
+        }
+        // 4. 概览态：二次返回确认退出
+        const now = Date.now()
+        if (now - lastBackAt < BACK_EXIT_WINDOW_MS) {
+          void App.exitApp()
+        } else {
+          lastBackAt = now
+          void message.info('再按一次返回退出程序')
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+      listener?.remove()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebar, isSettingsRoute, focusedConversationId, navigate, message, setActiveSidebar])
+
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const navClassName = [
     'diagram-shell__nav',
@@ -111,7 +168,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       return
     }
     const defaultAgent = (agentSettings as Record<string, unknown>).default_agent
-    setSelectedAgentId(defaultAgent === 'trae' ? 'trae' : 'builtin')
+    setSelectedAgentId(defaultAgent === 'trae' && !isAndroidPlatform() ? 'trae' : 'builtin')
   }, [settings])
 
   function confirmTraeRun(): Promise<boolean> {
@@ -182,8 +239,9 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     async (sessionId: SessionId) => {
       const detail = await selectSession(sessionId)
       await runSessionContext(detail)
+      setActiveSidebar(null)
     },
-    [runSessionContext, selectSession],
+    [runSessionContext, selectSession, setActiveSidebar],
   )
 
   const handleCreateSession = useCallback(async () => {
@@ -300,10 +358,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         let targetConversationId = sendTargetConversationId
 
         if (!targetConversationId) {
-          if (sessionDetail?.conversations?.length) {
-            return false
-          }
-
           const result = await ensureConversationForCurrentSession()
           if (!result) {
             return false

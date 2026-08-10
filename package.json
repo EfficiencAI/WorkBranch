@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@capacitor/android": "^8.3.0",
-    "@red-mobile/nodejs-mobile-cordova": "^3.4.2"
+    "@red-mobile/nodejs-mobile-cordova": "^3.4.2",
+    "@capacitor/app": "^8.1.1"
   }
 }

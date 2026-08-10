@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.2",
+    "@capacitor/app": "^8.1.1",
     "@workbranch/shared": "workspace:*",
     "@xyflow/react": "^12.10.1",
     "antd": "^6.3.4",

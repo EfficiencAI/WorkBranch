@@ -19,7 +19,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     embedding_model: 'text-embedding-3-small',
     embedding_base_url: '',
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 131072,
   },
   workspace: {
     base_dir: 'workspaces',
@@ -131,7 +131,9 @@ function mergeSettingsUpdates(
 
   for (const [key, updateValue] of Object.entries(updates)) {
     const currentValue = current[key];
-    merged[key] = isSettingsObject(currentValue) && isSettingsObject(updateValue)
+    merged[key] = key === 'api_key' && typeof updateValue === 'string'
+      ? updateValue.replace(/^["']+|["']+$/g, '')
+      : isSettingsObject(currentValue) && isSettingsObject(updateValue)
       ? mergeSettingsUpdates(currentValue, updateValue)
       : updateValue;
   }

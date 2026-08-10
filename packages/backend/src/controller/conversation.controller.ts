@@ -65,6 +65,8 @@ export class ConversationController {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     const streamState = messageQueue.getStreamState(conversationId);

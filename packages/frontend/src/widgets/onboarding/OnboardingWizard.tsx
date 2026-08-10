@@ -104,6 +104,9 @@ export function OnboardingWizard() {
     try {
       setSubmitting(true)
       const values = form.getFieldsValue()
+      if (typeof values.api_key === 'string') {
+        values.api_key = values.api_key.replace(/^["']+|["']+$/g, '')
+      }
       await patchSettings({ llm: values })
       message.success('配置已保存')
       completeOnboarding()

@@ -1,5 +1,9 @@
 package com.workbranch.app;
 
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.os.Build;
 import android.app.Service;
 import android.content.Intent;
 import android.content.res.AssetManager;
@@ -14,6 +18,8 @@ import java.net.URL;
 
 public class NodeService extends Service {
     private static final String TAG = "NodeService";
+    private static final String CHANNEL_ID = "workbranch_node_service";
+    private static final int NOTIFICATION_ID = 3000;
 
     private static final String PROJECT_ROOT = "www/nodejs-project";
     private static final String BUILTIN_MODULES = "nodejs-mobile-cordova-assets/builtin_modules";
@@ -56,6 +62,7 @@ public class NodeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        startForegroundNotification();
         Log.d(TAG, "=== NodeService.onCreate START ===");
 
         try {
@@ -196,6 +203,31 @@ public class NodeService extends Service {
             }
         }).start();
         Log.d(TAG, "=== NodeService.startNodeJS: thread started ===");
+    }
+
+    private void startForegroundNotification() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                NotificationChannel channel = new NotificationChannel(
+                        CHANNEL_ID,
+                        "WorkBranch ????",
+                        NotificationManager.IMPORTANCE_MIN);
+                NotificationManager manager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+                if (manager != null) {
+                    manager.createNotificationChannel(channel);
+                }
+            }
+            Notification notification = new Notification.Builder(this, CHANNEL_ID)
+                    .setContentTitle("WorkBranch")
+                    .setContentText("?????????")
+                    .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                    .setOngoing(true)
+                    .build();
+            startForeground(NOTIFICATION_ID, notification);
+            Log.d(TAG, "NodeService: foreground notification shown");
+        } catch (Exception e) {
+            Log.e(TAG, "NodeService: failed to start foreground", e);
+        }
     }
 
     @Override

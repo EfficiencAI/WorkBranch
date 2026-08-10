@@ -85,6 +85,8 @@ export class VisitorController {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      'Access-Control-Allow-Credentials': 'true',
     });
     const write = (obj: unknown) => reply.raw.write(`data: ${JSON.stringify(obj)}\n\n`);
 
