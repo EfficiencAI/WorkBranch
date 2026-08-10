@@ -19,7 +19,9 @@
     "build:frontend": "pnpm --filter @workbranch/frontend run build",
     "build:backend": "pnpm --filter @workbranch/backend run build",
     "start:backend": "pnpm --filter @workbranch/backend run start",
-    "build:android": "pnpm run build:frontend && cap sync android && node packages/backend/build-android.js && set PROCESSOR_ARCHITECTURE=AMD64&& android\\gradlew.bat -p android assembleDebug"
+    "build:android": "pnpm run build:frontend && cap sync android && node packages/backend/build-android.js && set PROCESSOR_ARCHITECTURE=AMD64&& android\\gradlew.bat -p android assembleDebug",
+    "build:electron": "pnpm run build:frontend && pnpm run build:backend && pnpm --filter @workbranch/electron run build",
+    "dev:electron": "pnpm --filter @workbranch/electron run dev"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.0",

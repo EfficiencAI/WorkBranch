@@ -130,3 +130,5 @@ test-results/
 # 临时截图（根目录）
 /screen*.png
 /final*.png
+packages/electron/release/
+packages/electron/resources/

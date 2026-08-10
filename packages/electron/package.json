@@ -1,0 +1,16 @@
+{
+  "name": "@workbranch/electron",
+  "version": "1.0.0",
+  "private": true,
+  "description": "WorkBranch Windows desktop shell",
+  "main": "main.js",
+  "scripts": {
+    "build": "node scripts/prepare.mjs && node scripts/build-win.mjs",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^37.0.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1"
+  }
+}

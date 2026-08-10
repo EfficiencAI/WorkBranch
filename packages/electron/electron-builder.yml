@@ -1,0 +1,14 @@
+appId: com.workbranch.app
+productName: WorkBranch
+directories:
+  output: release
+files:
+  - main.js
+  - package.json
+  - resources/**
+asar: false
+win:
+  target:
+    - portable
+portable:
+  artifactName: WorkBranch-${version}-portable.${ext}
