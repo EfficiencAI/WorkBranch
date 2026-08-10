@@ -1,5 +1,5 @@
 import { get, post, put, del } from './http'
-import { getApiUrl } from './config'
+import { AUTH_TOKEN_KEY, getApiUrl } from './config'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 import type { CanonicalMessage } from '@workbranch/shared'
 
@@ -215,6 +215,9 @@ export async function streamConversationMessage(
     headers: {
       'Content-Type': 'application/json',
       'X-Client-Id': getClientId(),
+      ...(typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)
+        ? { Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}` }
+        : {}),
     },
     body: JSON.stringify(body),
     signal: handlers.signal,
