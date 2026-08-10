@@ -31,7 +31,11 @@ export function MessageComposer({
   const responsive = useResponsive()
   const [message, setMessage] = useState('')
   const [collapsed, setCollapsed] = useState(false)
-  const [enableContext, setEnableContext] = useState(false)
+  const includeParentContextByDefault =
+    settings?.context && typeof settings.context === 'object' && 'include_parent_context_by_default' in settings.context
+      ? settings.context.include_parent_context_by_default === true
+      : true
+  const [enableContext, setEnableContext] = useState(includeParentContextByDefault)
   const [thinkMode, setThinkMode] = useState(false)
   const [netMode, setNetMode] = useState(false)
   const hasSendTarget = selectedConversationId !== null

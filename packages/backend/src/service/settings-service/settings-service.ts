@@ -52,7 +52,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   context: {
     max_tokens: 32000,
     warning_threshold: 0.5,
-    include_parent_context_by_default: false,
+    include_parent_context_by_default: true,
   },
   logging: {
     enabled: true,
@@ -224,10 +224,20 @@ export class SettingsService {
       this.persist();
     }
     this.migrateDefaultAgent();
+    this.migrateContextDefault();
   }
 
   private persist(): void {
     fileStorage.writeSettings(this.data);
+  }
+
+  private migrateContextDefault(): void {
+    const context = this.data.context;
+    if (context && typeof context === 'object' && !Array.isArray(context)
+      && (context as Record<string, unknown>).include_parent_context_by_default === false) {
+      (context as Record<string, unknown>).include_parent_context_by_default = true;
+      this.persist();
+    }
   }
 
   private migrateDefaultAgent(): void {

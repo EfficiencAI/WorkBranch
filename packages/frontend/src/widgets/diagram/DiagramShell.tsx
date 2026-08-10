@@ -337,6 +337,10 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           }
         }
 
+        useTreeStore.getState().setFocusedConversationId(targetConversationId)
+        setNavPathTailId(targetConversationId)
+        await useChatWorkbenchStore.getState().syncConversationContext(targetConversationId)
+
         const sendPromise = useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
           agentId: selectedAgentId,
           writeConfirmed,
