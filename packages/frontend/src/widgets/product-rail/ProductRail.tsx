@@ -71,7 +71,7 @@ export function ProductRail({ product, onSwitch, className = '', children }: Pro
   return (
     <nav ref={railRef} className={navClassName} aria-label="产品切换" aria-expanded={open}>
       <div className="product-switch">
-        <Tooltip title={responsive.isMobile ? null : `${meta.name}（当前产品）`} placement="right">
+        <Tooltip title={responsive.isMobile ? null : `${meta.name}（当前产品）`} placement="bottom">
           <Button
             type="text"
             className="diagram-shell__brand is-current"
@@ -81,7 +81,7 @@ export function ProductRail({ product, onSwitch, className = '', children }: Pro
             {meta.label}
           </Button>
         </Tooltip>
-        <Tooltip title={responsive.isMobile ? null : `切换到 ${otherMeta.name}`} placement="right">
+        <Tooltip title={responsive.isMobile ? null : `切换到 ${otherMeta.name}`} placement="bottom">
           <Button
             type="text"
             className="diagram-shell__brand is-alt"
