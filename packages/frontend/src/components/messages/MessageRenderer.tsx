@@ -1,4 +1,5 @@
 import React from 'react';
+import ReactMarkdown from 'react-markdown';
 import { SegmentType, type ContentBlock } from '@workbranch/shared';
 import type { MergedSegment } from './types';
 import { MergedSegmentType } from './types';
@@ -98,7 +99,7 @@ export const MessageRenderer: React.FC<MessageRendererProps> = ({ content, messa
         <div className="agent-response">
           {responseSegments.map((segment, index) => (
             <div className="agent-response__text" key={`${segment.type}-${index}`}>
-              {segment.content}
+              <ReactMarkdown>{segment.content}</ReactMarkdown>
             </div>
           ))}
         </div>
