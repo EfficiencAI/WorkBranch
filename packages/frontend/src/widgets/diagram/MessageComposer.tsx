@@ -1,5 +1,5 @@
 import { Button, Checkbox, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd'
-import { GlobalOutlined, LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
+import { LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
 import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
@@ -14,7 +14,7 @@ type MessageComposerProps = {
   sending: boolean
   selectedAgentId: AgentId
   allowCreateOnSend?: boolean
-  onSend: (message: string, enableContext: boolean, webEnabled: boolean) => Promise<boolean>
+  onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
 }
@@ -38,7 +38,6 @@ export function MessageComposer({
       ? settings.context.include_parent_context_by_default === true
       : true
   const [enableContext, setEnableContext] = useState(includeParentContextByDefault)
-  const [webEnabled, setWebEnabled] = useState(false)
   const [attachments, setAttachments] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
@@ -65,7 +64,7 @@ export function MessageComposer({
     const messageWithAttachments = attachments.length > 0
       ? `${nextMessage}\n\n（已上传附件：${attachments.join('、')}，可在工作区查看）`
       : nextMessage
-    const sent = await onSend(messageWithAttachments, enableContext, webEnabled)
+    const sent = await onSend(messageWithAttachments, enableContext)
     if (sent) {
       setMessage('')
       setAttachments([])
@@ -182,16 +181,6 @@ export function MessageComposer({
           <div className="message-composer__toolbar-right">
             <Space size={5} align="center" wrap={false}>
               {agentSelect}
-              <Tooltip title="联网权限（控制 Agent 是否可以使用联网搜索工具）">
-                <Button
-                  type="text"
-                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${webEnabled ? 'message-composer__tool-btn--active' : ''}`}
-                  aria-label="联网权限"
-                  aria-pressed={webEnabled}
-                  icon={<GlobalOutlined />}
-                  onClick={() => setWebEnabled(!webEnabled)}
-                />
-              </Tooltip>
             {sending ? (
               <Tooltip title="停止生成">
                 <Button

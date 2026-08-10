@@ -41,7 +41,6 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
       'str_replace_based_edit_tool',
       'sequentialthinking',
       'task_done',
-      'web_search',
     ],
     show_workflow: true,
     trajectory_retention: 'all',
@@ -256,8 +255,8 @@ export class SettingsService {
     if (!traeCli || typeof traeCli !== 'object' || Array.isArray(traeCli)) return;
     const cfg = traeCli as Record<string, unknown>;
     let changed = false;
-    if (Array.isArray(cfg.tools) && !cfg.tools.includes('web_search')) {
-      cfg.tools = [...cfg.tools, 'web_search'];
+    if (Array.isArray(cfg.tools) && cfg.tools.includes('web_search')) {
+      cfg.tools = cfg.tools.filter((tool: string) => tool !== 'web_search');
       changed = true;
     }
     if (cfg.max_steps === 200) {

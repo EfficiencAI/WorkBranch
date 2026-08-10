@@ -417,7 +417,6 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
           enable_context: enableContext,
           agent_id: options.agentId ?? 'builtin',
           write_confirmed: options.writeConfirmed === true,
-          web_enabled: options.webEnabled === true,
           last_seq: lastSeq,
         },
         {

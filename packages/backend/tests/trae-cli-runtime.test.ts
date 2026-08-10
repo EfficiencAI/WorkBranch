@@ -21,7 +21,7 @@ function createSettings(): TraeCliRuntimeSettings {
     executable: 'trae-cli',
     provider: 'openai',
     maxSteps: 200,
-    tools: ['bash', 'str_replace_based_edit_tool', 'sequentialthinking', 'task_done', 'web_search'],
+    tools: ['bash', 'str_replace_based_edit_tool', 'sequentialthinking', 'task_done'],
     showWorkflow: true,
     apiKey: 'secret-key',
     baseUrl: 'https://example.test/v1',
