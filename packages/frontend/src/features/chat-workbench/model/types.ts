@@ -27,6 +27,7 @@ export type SendMessageHandlers = {
 export type SendMessageOptions = {
   agentId?: AgentId
   writeConfirmed?: boolean
+  webEnabled?: boolean
 }
 
 export type ChatWorkbenchActions = {

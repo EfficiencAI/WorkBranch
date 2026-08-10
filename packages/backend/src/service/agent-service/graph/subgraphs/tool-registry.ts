@@ -108,12 +108,16 @@ const DEFAULT_PERMISSIONS: Record<string, string[]> = {
   ],
 };
 
-export function getAllowedTools(agentType: string): string[] {
-  return DEFAULT_PERMISSIONS[agentType] || DEFAULT_PERMISSIONS['director_agent'];
+export function getAllowedTools(agentType: string, webSearchEnabled: boolean = true): string[] {
+  const allowed = DEFAULT_PERMISSIONS[agentType] || DEFAULT_PERMISSIONS['director_agent'];
+  if (!webSearchEnabled) {
+    return allowed.filter((tool) => tool !== 'explore_internet');
+  }
+  return allowed;
 }
 
-export function isToolAllowed(toolName: string, agentType: string): boolean {
-  return getAllowedTools(agentType).includes(toolName);
+export function isToolAllowed(toolName: string, agentType: string, webSearchEnabled: boolean = true): boolean {
+  return getAllowedTools(agentType, webSearchEnabled).includes(toolName);
 }
 
 export function filterToolsByAgentType(agentType: string): Array<Record<string, unknown>> {

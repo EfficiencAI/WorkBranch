@@ -196,6 +196,16 @@ export type StreamConversationMessageBody = {
   agent_id?: AgentId
   write_confirmed?: boolean
   last_seq?: number
+  web_enabled?: boolean
+}
+
+export type WorkspaceUploadedFile = { original_filename: string; saved_as: string; path: string; size: number }
+export async function uploadWorkspaceFiles(workspaceId: string, files: File[]): Promise<WorkspaceUploadedFile[]> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append('file', file)
+  }
+  return post<WorkspaceUploadedFile[]>(`/api/workspaces/${workspaceId}/files`, form)
 }
 
 export async function cancelConversation(conversationId: string) {

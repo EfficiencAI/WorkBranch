@@ -30,7 +30,7 @@ type ConversationCanvasProps = {
   selectedAgentId: AgentId
   canCreateConversationOnSend: boolean
   initialLoading?: boolean
-  onSendMessage: (message: string, enableContext: boolean) => Promise<boolean>
+  onSendMessage: (message: string, enableContext: boolean, webEnabled: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStopMessage: () => Promise<void>
   onCreateConversation: (parentConversationId: string | null) => Promise<void>
@@ -385,7 +385,7 @@ function FocusOverlay({
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   selectedAgentId: AgentId
-  onSend: (message: string, enableContext: boolean) => Promise<boolean>
+  onSend: (message: string, enableContext: boolean, webEnabled: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void
@@ -543,7 +543,7 @@ interface FocusViewProps {
   selectedConversationId: string | null
   selectedConversationLabel: string | null
   selectedAgentId: AgentId
-  onSend: (message: string, enableContext: boolean) => Promise<boolean>
+  onSend: (message: string, enableContext: boolean, webEnabled: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop: () => Promise<void>
   onNavigateToNode: (nodeId: string) => void

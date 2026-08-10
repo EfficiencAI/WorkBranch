@@ -1,8 +1,10 @@
-import { Button, Checkbox, Input, Select, Space, Switch, Tooltip, Typography } from 'antd'
-import { BulbOutlined, GlobalOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
-import { useEffect, useState } from 'react'
+import { Button, Checkbox, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd'
+import { GlobalOutlined, LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
+import { useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
+import { selectChatWorkbenchWorkspaceDetail, useChatWorkbenchStore } from '../../features/chat-workbench'
+import { uploadWorkspaceFiles } from '../../shared/api/workspace'
 import { useResponsive } from '../../shared/lib'
 import type { AgentId } from '../../shared/api'
 
@@ -12,7 +14,7 @@ type MessageComposerProps = {
   sending: boolean
   selectedAgentId: AgentId
   allowCreateOnSend?: boolean
-  onSend: (message: string, enableContext: boolean) => Promise<boolean>
+  onSend: (message: string, enableContext: boolean, webEnabled: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
 }
@@ -36,8 +38,12 @@ export function MessageComposer({
       ? settings.context.include_parent_context_by_default === true
       : true
   const [enableContext, setEnableContext] = useState(includeParentContextByDefault)
-  const [thinkMode, setThinkMode] = useState(false)
-  const [netMode, setNetMode] = useState(false)
+  const [webEnabled, setWebEnabled] = useState(false)
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const workspaceId = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)?.id ?? null
   const hasSendTarget = selectedConversationId !== null
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
@@ -56,9 +62,30 @@ export function MessageComposer({
       return
     }
 
-    const sent = await onSend(nextMessage, enableContext)
+    const messageWithAttachments = attachments.length > 0
+      ? `${nextMessage}\n\n（已上传附件：${attachments.join('、')}，可在工作区查看）`
+      : nextMessage
+    const sent = await onSend(messageWithAttachments, enableContext, webEnabled)
     if (sent) {
       setMessage('')
+      setAttachments([])
+      setAttachError(null)
+    }
+  }
+
+  async function handleAttachFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length || !workspaceId) return
+    setUploading(true)
+    setAttachError(null)
+    try {
+      const saved = await uploadWorkspaceFiles(workspaceId, files)
+      setAttachments((prev) => [...prev, ...saved.map((f) => f.original_filename)])
+    } catch (err) {
+      setAttachError(String((err as Error)?.message ?? err))
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -117,17 +144,29 @@ export function MessageComposer({
           autoSize={{ minRows: 2, maxRows: 5 }}
         />
 
+        {attachments.length > 0 || uploading || attachError ? (
+          <div className="message-composer__attachments" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+            {attachments.map((name) => (
+              <Tag key={name} closable onClose={() => setAttachments((prev) => prev.filter((n) => n !== name))}>{name}</Tag>
+            ))}
+            {uploading ? <Tag icon={<LoadingOutlined spin />}>上传中…</Tag> : null}
+            {attachError ? <Tag color="error">上传失败：{attachError}</Tag> : null}
+          </div>
+        ) : null}
         <div className="message-composer__focused-toolbar">
           <div className="message-composer__toolbar-left">
             <Space size={6} align="center" wrap={false}>
-              <Tooltip title="添加附件">
+              <Tooltip title={workspaceId ? "添加附件" : "暂无工作区，无法上传附件"}>
                 <Button
                   type="text"
                   className="message-composer__tool-btn message-composer__tool-btn--icon"
                   aria-label="添加附件"
                   icon={<PaperClipOutlined />}
+                  disabled={!workspaceId || uploading}
+                  onClick={() => fileInputRef.current?.click()}
                 />
               </Tooltip>
+              <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void handleAttachFiles(e)} />
 
               <label className="message-composer__context-toggle">
                 <Switch aria-label="携带路径上下文" size="small" checked={enableContext} onChange={setEnableContext} />
@@ -143,24 +182,14 @@ export function MessageComposer({
           <div className="message-composer__toolbar-right">
             <Space size={5} align="center" wrap={false}>
               {agentSelect}
-              <Tooltip title="深度思考">
+              <Tooltip title="联网权限（控制 Agent 是否可以使用联网搜索工具）">
                 <Button
                   type="text"
-                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${thinkMode ? 'message-composer__tool-btn--active' : ''}`}
-                  aria-label="深度思考"
-                  aria-pressed={thinkMode}
-                  icon={<BulbOutlined />}
-                  onClick={() => setThinkMode(!thinkMode)}
-                />
-              </Tooltip>
-              <Tooltip title="联网搜索">
-                <Button
-                  type="text"
-                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${netMode ? 'message-composer__tool-btn--active' : ''}`}
-                  aria-label="联网搜索"
-                  aria-pressed={netMode}
+                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${webEnabled ? 'message-composer__tool-btn--active' : ''}`}
+                  aria-label="联网权限"
+                  aria-pressed={webEnabled}
                   icon={<GlobalOutlined />}
-                  onClick={() => setNetMode(!netMode)}
+                  onClick={() => setWebEnabled(!webEnabled)}
                 />
               </Tooltip>
             {sending ? (

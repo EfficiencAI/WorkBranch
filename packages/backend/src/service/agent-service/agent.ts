@@ -129,6 +129,7 @@ export class AgentService {
     handoffMetadata?: Record<string, unknown>,
     agentId?: AgentId,
     writeConfirmed: boolean = false,
+    webSearchEnabled: boolean = true,
   ): Promise<void> {
     this.initialize();
 
@@ -210,6 +211,7 @@ export class AgentService {
         currentConversationMessages: currentConversationMessages || [],
         signal: abortController.signal,
         cancelCheck: () => this.cancelCheck(conversationId),
+        webSearchEnabled,
         publish: sendMessage,
       });
 
@@ -269,6 +271,7 @@ export class AgentService {
     currentConversationMessages?: Array<Record<string, unknown>>,
     agentId?: AgentId,
     writeConfirmed: boolean = false,
+    webSearchEnabled: boolean = true,
   ): Promise<void> {
     if (!this.conversations.has(conversationId)) {
       await this.registerConversation(conversationId, workspaceId, sessionId);
@@ -283,6 +286,7 @@ export class AgentService {
       undefined,
       agentId,
       writeConfirmed,
+      webSearchEnabled,
     );
   }
 

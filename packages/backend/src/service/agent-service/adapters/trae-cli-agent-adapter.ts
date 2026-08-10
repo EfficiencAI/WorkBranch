@@ -116,7 +116,9 @@ export class TraeCliAgentAdapter implements AgentAdapter {
   async run(context: AgentAdapterContext): Promise<AgentOutcome> {
     const runtime = getRuntimeSettings();
     const prompt = buildTraePrompt(context);
-    const { configFile, trajectoryDir } = writeTraeConfig(context.workspaceDir, runtime);
+    const effectiveTools = runtime.tools.filter((tool) => tool !== 'web_search' || context.webSearchEnabled !== false);
+    const runRuntime = { ...runtime, tools: effectiveTools };
+    const { configFile, trajectoryDir } = writeTraeConfig(context.workspaceDir, runRuntime);
     const trajectoryFile = path.join(trajectoryDir, `${context.messageId}.json`);
 
     const child = spawn(runtime.executable, [

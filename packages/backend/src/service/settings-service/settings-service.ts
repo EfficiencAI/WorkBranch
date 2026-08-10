@@ -41,6 +41,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
       'str_replace_based_edit_tool',
       'sequentialthinking',
       'task_done',
+      'web_search',
     ],
     show_workflow: true,
     trajectory_retention: 'all',

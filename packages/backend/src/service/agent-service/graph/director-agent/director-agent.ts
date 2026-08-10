@@ -791,7 +791,7 @@ export function createDecideNode(messageContext?: MessageContext) {
       }
     }
 
-    const allowedTools = getAllowedTools(currentAgentType);
+    const allowedTools = getAllowedTools(currentAgentType, state.web_search_enabled !== false);
     const toolSchemaPrompt = toolRegistry.generateToolPrompt(allowedTools);
 
     const historyLines = toolHistory.slice(-5).map((item, idx) => {
@@ -887,7 +887,7 @@ export function createDecideNode(messageContext?: MessageContext) {
       const toolArgs = (decisionData.tool_args || {}) as Record<string, unknown>;
       const taskDescription = (decisionData.task_description || userMessage) as string;
 
-      if (!toolName || !isToolAllowed(toolName, currentAgentType)) {
+      if (!toolName || !isToolAllowed(toolName, currentAgentType, state.web_search_enabled !== false)) {
         const retryCount = (state.invalid_tool_retry_count || 0) + 1;
         if (retryCount <= 3) {
           logger.warn({

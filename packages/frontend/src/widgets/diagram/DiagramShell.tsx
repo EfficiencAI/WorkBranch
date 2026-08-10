@@ -282,7 +282,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       : true
 
   const handleSendMessage = useCallback(
-    async (message: string, enableContext: boolean): Promise<boolean> => {
+    async (message: string, enableContext: boolean, webEnabled: boolean): Promise<boolean> => {
       try {
         if (selectedAgentId === 'builtin') {
           const llm = settings?.llm
@@ -344,6 +344,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         const sendPromise = useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
           agentId: selectedAgentId,
           writeConfirmed,
+          webEnabled,
         }, {
           onStreamError(event) {
             if (event.content) {

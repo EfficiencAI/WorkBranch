@@ -49,12 +49,12 @@ export class ConversationController {
   async sendMessage(
     request: FastifyRequest<{
       Params: { conversationId: string };
-      Body: { message: string; enable_context?: boolean; agent_id?: 'builtin' | 'trae'; write_confirmed?: boolean; last_seq?: number };
+      Body: { message: string; enable_context?: boolean; agent_id?: 'builtin' | 'trae'; write_confirmed?: boolean; last_seq?: number; web_enabled?: boolean };
     }>,
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const { message, enable_context, agent_id, write_confirmed, last_seq } = request.body;
+    const { message, enable_context, agent_id, write_confirmed, last_seq, web_enabled } = request.body;
 
     const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
@@ -105,7 +105,7 @@ export class ConversationController {
 
     let result;
     try {
-      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id, write_confirmed === true);
+      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id, write_confirmed === true, web_enabled === true);
     } catch (err) {
       const errorMessage = String(err);
       unsubscribe();

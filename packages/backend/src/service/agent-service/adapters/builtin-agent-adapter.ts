@@ -19,6 +19,9 @@ export class BuiltinAgentAdapter implements AgentAdapter {
       },
       context.parentChainMessages,
       context.currentConversationMessages,
+      undefined,
+      false,
+      context.webSearchEnabled,
     );
   }
 }

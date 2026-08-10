@@ -97,6 +97,7 @@ export interface AgentState {
   current_conversation_messages?: Record<string, unknown>[];
   execution_mode?: 'DIRECT' | 'PLAN';
   mode_reason?: string;
+  web_search_enabled?: boolean;
   suggested_tools?: string[];
   suggested_subagent?: string;
   in_plan_mode?: boolean;
@@ -156,6 +157,7 @@ export function createInitialState(
     current_conversation_messages: currentConversationMessages || [],
     execution_mode: undefined,
     mode_reason: undefined,
+    web_search_enabled: true,
     suggested_tools: [],
     in_plan_mode: false,
     pending_tools: [],
