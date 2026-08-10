@@ -145,6 +145,7 @@ export class TraeCliAgentAdapter implements AgentAdapter {
         [`${runtime.provider.toUpperCase()}_API_KEY`]: runtime.apiKey,
         [`${runtime.provider.toUpperCase()}_BASE_URL`]: runtime.baseUrl,
         PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '',
       },
     });
 
