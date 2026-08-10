@@ -97,7 +97,7 @@ export function buildTraeConfig(settings: TraeCliRuntimeSettings): Record<string
         top_p: 1,
         top_k: 0,
         max_retries: 3,
-        parallel_tool_calls: true,
+        parallel_tool_calls: false,
       },
     },
   };

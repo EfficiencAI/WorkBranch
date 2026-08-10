@@ -40,7 +40,7 @@ describe('SettingsService partial updates', () => {
     expect(service.get('llm:max_tokens')).toBe(4096);
     expect(service.get('ui:theme_mode')).toBe('system');
     expect(service.get('agent:default_agent')).toBe('builtin');
-    expect(service.get('trae_cli:max_steps')).toBe(200);
+    expect(service.get('trae_cli:max_steps')).toBe(30);
     expect(storage.data).toEqual(service.getAll());
   });
 
@@ -56,5 +56,20 @@ describe('SettingsService partial updates', () => {
     expect(service.get('logging:enabled')).toBe(true);
     expect(service.get('ui:scale')).toBe(1.2);
     expect(service.get('ui:theme_mode')).toBe('system');
+  });
+
+  it('migrates legacy trae_cli settings into web_search-ready defaults', () => {
+    storage.data = {
+      trae_cli: {
+        tools: ['bash', 'str_replace_based_edit_tool', 'sequentialthinking', 'task_done'],
+        max_steps: 200,
+        system_prompt: '',
+      },
+    } as unknown as Record<string, unknown>;
+    const service = new SettingsService();
+
+    expect(service.get('trae_cli:tools')).toContain('web_search');
+    expect(service.get('trae_cli:max_steps')).toBe(30);
+    expect(String(service.get('trae_cli:system_prompt')).length).toBeGreaterThan(0);
   });
 });

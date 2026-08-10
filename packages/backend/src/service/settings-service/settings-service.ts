@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   trae_cli: {
     executable: 'trae-cli',
     provider: 'openai',
-    max_steps: 200,
+    max_steps: 30,
     tools: [
       'bash',
       'str_replace_based_edit_tool',
@@ -45,7 +45,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     ],
     show_workflow: true,
     trajectory_retention: 'all',
-    system_prompt: '',
+    system_prompt: '如果联网搜索或工具调用失败，直接告知用户结果，不要反复重试同一操作。',
   },
   conversation: {
     single_message_per_node: true,
@@ -160,7 +160,7 @@ function mergeMissingDefaults(defaults: Record<string, unknown>, current: Record
     }
 
     const currentValue = merged[key];
-    if (typeof defaultValue === 'object' && defaultValue !== null) {
+    if (typeof defaultValue === 'object' && defaultValue !== null && !Array.isArray(defaultValue)) {
       const [nextValue, nestedChanged] = mergeMissingDefaults(
         defaultValue as Record<string, unknown>,
         currentValue as Record<string, unknown>
@@ -226,6 +226,7 @@ export class SettingsService {
     }
     this.migrateDefaultAgent();
     this.migrateContextDefault();
+    this.migrateTraeCliDefaults();
   }
 
   private persist(): void {
@@ -248,6 +249,26 @@ export class SettingsService {
       (agent as Record<string, unknown>).default_agent = 'builtin';
       this.persist();
     }
+  }
+
+  private migrateTraeCliDefaults(): void {
+    const traeCli = this.data.trae_cli;
+    if (!traeCli || typeof traeCli !== 'object' || Array.isArray(traeCli)) return;
+    const cfg = traeCli as Record<string, unknown>;
+    let changed = false;
+    if (Array.isArray(cfg.tools) && !cfg.tools.includes('web_search')) {
+      cfg.tools = [...cfg.tools, 'web_search'];
+      changed = true;
+    }
+    if (cfg.max_steps === 200) {
+      cfg.max_steps = 30;
+      changed = true;
+    }
+    if (typeof cfg.system_prompt !== 'string' || cfg.system_prompt.length === 0) {
+      cfg.system_prompt = '如果联网搜索或工具调用失败，直接告知用户结果，不要反复重试同一操作。';
+      changed = true;
+    }
+    if (changed) this.persist();
   }
 
   get(key: string): unknown {
