@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { SettingsController } from '../controller';
+import { requireAuth } from '../middleware/auth';
 
 const controller = new SettingsController();
 
 export default async function settingsRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireAuth);
   app.get('/', controller.getAllSettings.bind(controller));
   app.get('/metadata', controller.getMetadata.bind(controller));
   app.get('/:key', controller.getSetting.bind(controller));

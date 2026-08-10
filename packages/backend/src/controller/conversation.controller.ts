@@ -13,7 +13,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -25,7 +25,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -38,7 +38,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -56,7 +56,7 @@ export class ConversationController {
     const { conversationId } = request.params;
     const { message, enable_context, agent_id, write_confirmed, last_seq } = request.body;
 
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -184,7 +184,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -197,7 +197,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -210,7 +210,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -223,7 +223,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }

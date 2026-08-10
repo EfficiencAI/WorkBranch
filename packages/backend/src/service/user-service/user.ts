@@ -5,9 +5,9 @@ export class UserService {
     return userDAO.getOrCreateDefaultUser();
   }
 
-  updateUserName(newName: string): User {
+  updateUserName(userId: number, newName: string): User {
     const user = this.getCurrentUser();
-    userDAO.updateUserName(user.id, newName);
+    userDAO.updateUserName(userId, newName);
     return userDAO.getUserById(user.id)!;
   }
 }

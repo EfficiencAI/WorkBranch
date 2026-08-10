@@ -1,31 +1,22 @@
 import { useState } from 'react'
-import { App, Button, Card, Divider, Form, Input, Tabs, Typography } from 'antd'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { App, Button, Card, Divider, Form, Input, Modal, Tabs, Typography } from 'antd'
+import { useNavigate } from 'react-router-dom'
 import { selectAuthError, selectAuthLoading, useAuthStore } from '../../features/auth'
 
 type AuthMode = 'login' | 'register'
 
 export function AuthPage() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { message } = App.useApp()
   const [mode, setMode] = useState<AuthMode>('login')
+  const [onlineUnsupportedVisible, setOnlineUnsupportedVisible] = useState(false)
   const loading = useAuthStore(selectAuthLoading)
   const error = useAuthStore(selectAuthError)
-  const login = useAuthStore((state) => state.login)
-  const register = useAuthStore((state) => state.register)
   const loginLocal = useAuthStore((state) => state.loginLocal)
 
-  const from = (location.state as { from?: string } | null)?.from
-
-  const handleFinish = async (values: { username: string; password: string; display_name?: string }) => {
-    const ok = mode === 'login'
-      ? await login(values.username, values.password)
-      : await register(values.username, values.password, values.display_name)
-    if (ok) {
-      message.success(mode === 'login' ? '欢迎回来' : '注册成功，已自动登录')
-      navigate(from && from.startsWith('/assistant') ? from : '/assistant')
-    }
+  const handleFinish = async () => {
+    // 线上服务暂不支持：保留表单校验，提交时提示改用离线模式
+    setOnlineUnsupportedVisible(true)
   }
 
   const handleLocalOffline = () => {
@@ -80,6 +71,16 @@ export function AuthPage() {
           数据保存在本地，登录后可与账号数据分开管理
         </Typography.Text>
       </Card>
+      <Modal
+        open={onlineUnsupportedVisible}
+        title="提示"
+        onOk={() => setOnlineUnsupportedVisible(false)}
+        onCancel={() => setOnlineUnsupportedVisible(false)}
+        okText="知道了"
+        cancelButtonProps={{ style: { display: 'none' } }}
+      >
+        线上服务暂不支持，请使用离线模式
+      </Modal>
     </div>
   )
 }

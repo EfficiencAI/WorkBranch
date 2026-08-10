@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { ConversationController } from '../controller';
+import { requireAuth } from '../middleware/auth';
 
 const controller = new ConversationController();
 
 export default async function conversationRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireAuth);
   app.get('/:conversationId', controller.getConversation.bind(controller));
   app.get('/:conversationId/messages', controller.getConversationMessages.bind(controller));
   app.get('/:conversationId/context-info', controller.getConversationContextInfo.bind(controller));

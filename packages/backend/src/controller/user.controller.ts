@@ -3,25 +3,24 @@ import { userService, sessionService } from '../service';
 import { success } from './result';
 
 export class UserController {
-  async getUserProfile(_request: FastifyRequest, reply: FastifyReply) {
-    const user = userService.getCurrentUser();
+  async getUserProfile(request: FastifyRequest, reply: FastifyReply) {
     return reply.send(success({
-      id: user.id,
-      name: user.name,
+      id: request.userId,
+      name: request.userName ?? null,
     }));
   }
 
   async updateUserName(request: FastifyRequest<{ Body: { name: string } }>, reply: FastifyReply) {
     const { name } = request.body;
-    const user = userService.updateUserName(name);
+    const user = userService.updateUserName(request.userId!, name);
     return reply.send(success({
       id: user.id,
       name: user.name,
     }));
   }
 
-  async listSessions(_request: FastifyRequest, reply: FastifyReply) {
-    const sessions = sessionService.listSessions();
+  async listSessions(request: FastifyRequest, reply: FastifyReply) {
+    const sessions = sessionService.listSessions(request.userId!);
     return reply.send(success(sessions.map((s) => ({
       id: s.id,
       title: s.title,
@@ -32,7 +31,7 @@ export class UserController {
 
   async getSession(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
     const { sessionId } = request.params;
-    const session = sessionService.getSession(Number(sessionId));
+    const session = sessionService.getSession(request.userId!, Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
     }
@@ -47,7 +46,7 @@ export class UserController {
 
   async createSession(request: FastifyRequest<{ Body: { title: string } }>, reply: FastifyReply) {
     const { title } = request.body;
-    const session = sessionService.createSession(title);
+    const session = sessionService.createSession(request.userId!, title);
     return reply.status(201).send(success({
       id: session.id,
       title: session.title,
@@ -58,7 +57,7 @@ export class UserController {
 
   async deleteSession(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
     const { sessionId } = request.params;
-    sessionService.deleteSession(Number(sessionId));
+    sessionService.deleteSession(request.userId!, Number(sessionId));
     return reply.send(success(null));
   }
 }

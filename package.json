@@ -7,11 +7,10 @@
   "scripts": {
     "dev": "pnpm --filter @workbranch/backend --filter @workbranch/frontend run dev",
     "build": "pnpm --filter @workbranch/backend --filter @workbranch/frontend run build",
-    "test": "pnpm --filter @workbranch/tests run test:all",
-    "test:backend": "pnpm --filter @workbranch/tests run test:backend",
-    "test:frontend": "pnpm --filter @workbranch/tests run test:frontend",
-    "test:e2e": "pnpm --filter @workbranch/tests run test:e2e",
-    "test:coverage": "pnpm --filter @workbranch/tests run test:backend:coverage && pnpm --filter @workbranch/tests run test:frontend:coverage",
+    "test": "pnpm --filter @workbranch/backend test && pnpm --filter @workbranch/frontend test",
+    "test:backend": "pnpm --filter @workbranch/backend test",
+    "test:frontend": "pnpm --filter @workbranch/frontend test",
+    "test:coverage": "pnpm --filter @workbranch/backend test:coverage",
     "lint": "eslint packages/**/src/**/*.{ts,tsx}",
     "format": "prettier --write \"packages/**/src/**/*.{ts,tsx}\"",
     "clean": "pnpm -r --if-present run clean",
@@ -20,9 +19,7 @@
     "build:frontend": "pnpm --filter @workbranch/frontend run build",
     "build:backend": "pnpm --filter @workbranch/backend run build",
     "start:backend": "pnpm --filter @workbranch/backend run start",
-    "build:electron": "pnpm --filter @workbranch/electron run build",
-    "build:android": "pnpm run build:frontend && cap sync android && node packages/backend/build-android.js && set PROCESSOR_ARCHITECTURE=AMD64&& android\\gradlew.bat -p android assembleDebug",
-    "dev:electron": "pnpm --filter @workbranch/electron run dev"
+    "build:android": "pnpm run build:frontend && cap sync android && node packages/backend/build-android.js && set PROCESSOR_ARCHITECTURE=AMD64&& android\\gradlew.bat -p android assembleDebug"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.3.0",

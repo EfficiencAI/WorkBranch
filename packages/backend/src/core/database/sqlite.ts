@@ -509,6 +509,16 @@ export class SQLiteDatabase {
         FOREIGN KEY(assistant_id) REFERENCES assistants(id) ON DELETE CASCADE
       );
 
+      CREATE TABLE IF NOT EXISTS logs (
+        id INTEGER PRIMARY KEY,
+        level TEXT NOT NULL,
+        event TEXT NOT NULL,
+        msg TEXT,
+        extra_json TEXT,
+        client_ts TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_session_id ON messages(session_id);
       CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
       CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
@@ -524,6 +534,7 @@ export class SQLiteDatabase {
       CREATE INDEX IF NOT EXISTS idx_usage_assistant ON usage_records(assistant_id);
       CREATE INDEX IF NOT EXISTS idx_assistant_faqs_assistant ON assistant_faqs(assistant_id);
       CREATE INDEX IF NOT EXISTS idx_training_messages_assistant ON assistant_training_messages(assistant_id);
+      CREATE INDEX IF NOT EXISTS idx_logs_created_at ON logs(created_at);
     `;
 
     this.db.exec(createTables);

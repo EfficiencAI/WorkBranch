@@ -8,7 +8,7 @@ export class SessionController {
     reply: FastifyReply
   ) {
     const title = request.query.title || request.body?.title || '新会话';
-    const session = sessionService.createSession(title);
+    const session = sessionService.createSession(request.userId!, title);
     return reply.status(201).send(success({
       id: session.id,
       title: session.title,
@@ -17,8 +17,8 @@ export class SessionController {
     }));
   }
 
-  async listSessions(_request: FastifyRequest, reply: FastifyReply) {
-    const sessions = sessionService.listSessions();
+  async listSessions(request: FastifyRequest, reply: FastifyReply) {
+    const sessions = sessionService.listSessions(request.userId!);
     return reply.send(success(sessions.map((s) => ({
       id: s.id,
       title: s.title,
@@ -29,7 +29,7 @@ export class SessionController {
 
   async getSession(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
     const { sessionId } = request.params;
-    const session = sessionService.getSession(Number(sessionId));
+    const session = sessionService.getSession(request.userId!, Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
     }
@@ -44,11 +44,11 @@ export class SessionController {
 
   async listSessionConversations(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
     const { sessionId } = request.params;
-    const session = sessionService.getSession(Number(sessionId));
+    const session = sessionService.getSession(request.userId!, Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
     }
-    const conversations = await sessionService.listConversationSummaries(Number(sessionId));
+    const conversations = await sessionService.listConversationSummaries(request.userId!, Number(sessionId));
     return reply.send(success(conversations));
   }
 
@@ -61,13 +61,13 @@ export class SessionController {
   ) {
     const { sessionId } = request.params;
     const { positions } = request.body;
-    const session = sessionService.getSession(Number(sessionId));
+    const session = sessionService.getSession(request.userId!, Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
     }
 
     try {
-      await sessionService.updateConversationPositions(Number(sessionId), positions);
+      await sessionService.updateConversationPositions(request.userId!, Number(sessionId), positions);
       return reply.send(success({ updated: positions.length }));
     } catch (err) {
       return reply.status(400).send({ code: 400, message: String(err), data: null });
@@ -76,7 +76,7 @@ export class SessionController {
 
   async deleteSession(request: FastifyRequest<{ Params: { sessionId: string } }>, reply: FastifyReply) {
     const { sessionId } = request.params;
-    sessionService.deleteSession(Number(sessionId));
+    sessionService.deleteSession(request.userId!, Number(sessionId));
     return reply.send(success(null));
   }
 
@@ -89,13 +89,14 @@ export class SessionController {
   ) {
     const { sessionId } = request.params;
     const { parent_conversation_id } = request.body || {};
-    const session = sessionService.getSession(Number(sessionId));
+    const session = sessionService.getSession(request.userId!, Number(sessionId));
     if (!session) {
       return reply.status(404).send({ code: 404, message: 'Session not found', data: null });
     }
 
     try {
       const result = await sessionService.createConversation(
+        request.userId!,
         Number(sessionId),
         parent_conversation_id
       );
