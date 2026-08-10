@@ -4,7 +4,7 @@ import 'antd/dist/reset.css'
 import App from './App'
 import { readClientId } from './shared/logging/clientId'
 import { frontendLogger } from './shared/logging/logger'
-import { waitForBackendReady } from './shared/api/config'
+import { AUTH_TOKEN_KEY, LOCAL_OFFLINE_TOKEN, waitForBackendReady } from './shared/api/config'
 import './styles/index.css'
 import './styles/wb-light.css'
 import './styles/workassistant.css'
@@ -21,7 +21,14 @@ if (restored) {
   })
 }
 
+function ensureOfflineToken() {
+  if (typeof localStorage !== 'undefined' && !localStorage.getItem(AUTH_TOKEN_KEY)) {
+    localStorage.setItem(AUTH_TOKEN_KEY, LOCAL_OFFLINE_TOKEN)
+  }
+}
+
 async function bootstrap() {
+  ensureOfflineToken()
   await waitForBackendReady()
 
   createRoot(document.getElementById('root')!).render(

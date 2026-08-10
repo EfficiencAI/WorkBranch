@@ -123,10 +123,15 @@ async function build() {
   disableCordovaWebPluginBridge();
   console.log('Building backend with esbuild...');
 
-  if (fs.existsSync(distDir)) {
-    fs.rmSync(distDir, { recursive: true, force: true });
+  for (const f of ['server.bundle.js', 'server.bundle.js.map']) {
+    const p = path.join(distDir, f);
+    if (fs.existsSync(p)) {
+      fs.rmSync(p);
+    }
   }
-  fs.mkdirSync(distDir, { recursive: true });
+  if (!fs.existsSync(distDir)) {
+    fs.mkdirSync(distDir, { recursive: true });
+  }
 
   await esbuild.build({
     entryPoints: [path.join(srcDir, 'server.ts')],

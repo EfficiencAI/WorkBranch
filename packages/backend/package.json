@@ -8,7 +8,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/server.js",
-    "clean": "rimraf dist",
+    "clean": "rimraf dist tsconfig.build.tsbuildinfo tsconfig.tsbuildinfo",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
