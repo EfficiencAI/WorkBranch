@@ -85,6 +85,8 @@ function getRuntimeSettings(): TraeCliRuntimeSettings {
   }
 
   const maxSteps = requireNumber('trae_cli:max_steps');
+  const systemPromptRaw = settingsService.get('trae_cli:system_prompt');
+  const systemPrompt = typeof systemPromptRaw === 'string' ? systemPromptRaw : '';
   if (!Number.isInteger(maxSteps) || maxSteps < 1) {
     throw new Error('Trae CLI max_steps must be a positive integer');
   }
@@ -100,6 +102,7 @@ function getRuntimeSettings(): TraeCliRuntimeSettings {
     model: requireString('llm:model'),
     temperature: requireNumber('llm:temperature'),
     maxTokens: requireNumber('llm:max_tokens'),
+    systemPrompt,
   };
 }
 

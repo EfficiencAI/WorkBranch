@@ -44,6 +44,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     ],
     show_workflow: true,
     trajectory_retention: 'all',
+    system_prompt: '',
   },
   conversation: {
     single_message_per_node: true,

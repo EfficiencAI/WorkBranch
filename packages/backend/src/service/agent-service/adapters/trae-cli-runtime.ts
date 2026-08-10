@@ -13,6 +13,7 @@ export interface TraeCliRuntimeSettings {
   model: string;
   temperature: number;
   maxTokens: number;
+  systemPrompt: string;
 }
 
 interface TraeToolCall {
@@ -75,6 +76,7 @@ export function buildTraeConfig(settings: TraeCliRuntimeSettings): Record<string
         model: 'workbranch_model',
         max_steps: settings.maxSteps,
         tools: settings.tools,
+        ...(settings.systemPrompt ? { extra_system_prompt: settings.systemPrompt } : {}),
       },
     },
     allow_mcp_servers: [],

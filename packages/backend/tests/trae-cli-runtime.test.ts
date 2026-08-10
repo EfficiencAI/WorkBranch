@@ -28,6 +28,7 @@ function createSettings(): TraeCliRuntimeSettings {
     model: 'test-model',
     temperature: 0.7,
     maxTokens: 4096,
+    systemPrompt: '',
   };
 }
 
@@ -38,6 +39,17 @@ afterEach(() => {
 });
 
 describe('Trae CLI runtime', () => {
+  it('injects extra_system_prompt into the trae_agent config when set', () => {
+    const settings = createSettings();
+    settings.systemPrompt = 'Always answer directly for simple questions.';
+    const config = buildTraeConfig(settings);
+    expect(config.agents?.trae_agent?.extra_system_prompt).toBe(settings.systemPrompt);
+
+    const emptySettings = createSettings();
+    const emptyConfig = buildTraeConfig(emptySettings);
+    expect((emptyConfig.agents?.trae_agent as Record<string, unknown> | undefined)?.extra_system_prompt).toBeUndefined();
+  });
+
   it('writes a complete config without persisting the API key', () => {
     const settings = createSettings();
     const config = buildTraeConfig(settings);
