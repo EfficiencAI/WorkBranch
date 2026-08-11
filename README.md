@@ -211,3 +211,9 @@ pnpm clean          # 清理构建产物
 | `/api/workspaces` | * | 工作区管理 |
 | `/health` | GET | 健康检查 |
 | `/api/system/shutdown` | POST | 优雅关闭（Android） |
+
+## License
+
+WorkBranch 采用 [GNU Affero General Public License v3.0](LICENSE)（SPDX: AGPL-3.0-only）开源。
+
+Copyright (c) 2026 罗正

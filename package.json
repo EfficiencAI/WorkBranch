@@ -1,6 +1,7 @@
 {
   "name": "workbranch",
   "version": "1.0.0",
+  "license": "AGPL-3.0-only",
   "private": true,
   "packageManager": "pnpm@11.18.0",
   "description": "WorkBranch - AI-powered workspace application",
