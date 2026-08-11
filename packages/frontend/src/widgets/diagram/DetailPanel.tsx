@@ -41,9 +41,9 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
   return (
     <section className="detail-panel" aria-label="图内节点聚焦详情">
       <Card className="detail-panel__card" bordered={false}>
-        <Space direction="vertical" size="large" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="large" style={{ width: '100%' }}>
           <Space style={{ width: '100%', justifyContent: 'space-between' }} align="start" wrap>
-            <Space direction="vertical" size={6}>
+            <Space orientation="vertical" size={6}>
               <Typography.Text strong>节点聚焦查看</Typography.Text>
               <Typography.Title level={3} className="detail-panel__title">
                 {selectedNode.id}
@@ -64,7 +64,7 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
 
           <div className="detail-panel__grid">
             <Card size="small" className="detail-panel__section">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Typography.Text strong>节点信息</Typography.Text>
                 <Descriptions column={1} size="small" bordered>
                   <Descriptions.Item label="节点 ID">{selectedNode.id}</Descriptions.Item>
@@ -76,7 +76,7 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
             </Card>
 
             <Card size="small" className="detail-panel__section">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Typography.Text strong>对话信息</Typography.Text>
                 <Descriptions column={1} size="small" bordered>
                   <Descriptions.Item label="conversation_id">{conversationDetail.conversationId}</Descriptions.Item>
@@ -89,7 +89,7 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
             </Card>
 
             <Card size="small" className="detail-panel__section">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Typography.Text strong>所属会话</Typography.Text>
                 <Descriptions column={1} size="small" bordered>
                   <Descriptions.Item label="session_id">{sessionDetail.id}</Descriptions.Item>
@@ -99,7 +99,7 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
             </Card>
 
             <Card size="small" className="detail-panel__section">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+              <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
                 <Typography.Text strong>workspace 信息</Typography.Text>
                 <Descriptions column={1} size="small" bordered>
                   <Descriptions.Item label="路径">{workspaceDetail?.dir ?? '未解析'}</Descriptions.Item>
@@ -110,11 +110,11 @@ export function DetailPanel({ nodeId, nodes, conversationDetail, sessionDetail, 
           </div>
 
           <Card size="small" className="detail-panel__section">
-            <Space direction="vertical" size="small" style={{ width: '100%' }}>
+            <Space orientation="vertical" size="small" style={{ width: '100%' }}>
               <Typography.Text strong>系统状态</Typography.Text>
               {systemStatus.map((item) => (
                 <Card key={item.label} size="small">
-                  <Space direction="vertical" size={8} style={{ width: '100%' }}>
+                  <Space orientation="vertical" size={8} style={{ width: '100%' }}>
                     <Space style={{ width: '100%', justifyContent: 'space-between' }}>
                       <Typography.Text strong>{item.label}</Typography.Text>
                       <StatusTag

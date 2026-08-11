@@ -85,6 +85,8 @@ function getRuntimeSettings(): TraeCliRuntimeSettings {
   }
 
   const maxSteps = requireNumber('trae_cli:max_steps');
+  const systemPromptRaw = settingsService.get('trae_cli:system_prompt');
+  const systemPrompt = typeof systemPromptRaw === 'string' ? systemPromptRaw : '';
   if (!Number.isInteger(maxSteps) || maxSteps < 1) {
     throw new Error('Trae CLI max_steps must be a positive integer');
   }
@@ -100,6 +102,7 @@ function getRuntimeSettings(): TraeCliRuntimeSettings {
     model: requireString('llm:model'),
     temperature: requireNumber('llm:temperature'),
     maxTokens: requireNumber('llm:max_tokens'),
+    systemPrompt,
   };
 }
 
@@ -113,7 +116,9 @@ export class TraeCliAgentAdapter implements AgentAdapter {
   async run(context: AgentAdapterContext): Promise<AgentOutcome> {
     const runtime = getRuntimeSettings();
     const prompt = buildTraePrompt(context);
-    const { configFile, trajectoryDir } = writeTraeConfig(context.workspaceDir, runtime);
+    const effectiveTools = runtime.tools.filter((tool) => tool !== 'web_search' || context.webSearchEnabled !== false);
+    const runRuntime = { ...runtime, tools: effectiveTools };
+    const { configFile, trajectoryDir } = writeTraeConfig(context.workspaceDir, runRuntime);
     const trajectoryFile = path.join(trajectoryDir, `${context.messageId}.json`);
 
     const child = spawn(runtime.executable, [
@@ -141,8 +146,8 @@ export class TraeCliAgentAdapter implements AgentAdapter {
         ...process.env,
         [`${runtime.provider.toUpperCase()}_API_KEY`]: runtime.apiKey,
         [`${runtime.provider.toUpperCase()}_BASE_URL`]: runtime.baseUrl,
-        PYTHONUTF8: '1',
         PYTHONIOENCODING: 'utf-8',
+        PYTHONUTF8: '',
       },
     });
 
@@ -217,9 +222,13 @@ export class TraeCliAgentAdapter implements AgentAdapter {
       }
       if (trajectory.success !== true) {
         const failureMessage = extractTraeFailureMessage(trajectory);
+        const friendlyFailure =
+          failureMessage && failureMessage.includes('Unterminated string')
+            ? '模型输出超过 max_tokens 上限被截断，请在 设置 → 模型 → 最大输出长度 中调大后重试'
+            : failureMessage;
         throw new Error(
-          failureMessage
-            ? `Trae CLI reported failure: ${failureMessage}`
+          friendlyFailure
+            ? `Trae CLI reported failure: ${friendlyFailure}`
             : 'Trae CLI reported failure without error details'
         );
       }

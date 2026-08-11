@@ -1,10 +1,18 @@
-import { Button, Checkbox, Input, Select, Space, Switch, Tooltip, Typography } from 'antd'
-import { BulbOutlined, GlobalOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
-import { useEffect, useState } from 'react'
+import { Button, Checkbox, Input, Select, Space, Switch, Tag, Tooltip, Typography } from 'antd'
+import { LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
 import { useSettings } from '../../app/settings'
+import { selectChatWorkbenchWorkspaceDetail, useChatWorkbenchStore } from '../../features/chat-workbench'
+import { uploadWorkspaceFiles } from '../../shared/api/workspace'
 import { useResponsive } from '../../shared/lib'
 import type { AgentId } from '../../shared/api'
+
+function isAndroidPlatform(): boolean {
+  if (typeof window === 'undefined') return false
+  const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+  return (capacitor?.getPlatform?.() ?? capacitor?.platform) === 'android'
+}
 
 type MessageComposerProps = {
   selectedConversationId: string | null
@@ -12,9 +20,18 @@ type MessageComposerProps = {
   sending: boolean
   selectedAgentId: AgentId
   allowCreateOnSend?: boolean
-  onSend: (message: string, enableContext: boolean) => Promise<void>
+  onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
+}
+
+// 输入草稿缓存：键盘收起/切换节点导致组件卸载时保留未发送内容（含中文输入法组字）
+const composerDraftCache = new Map<string, string>()
+
+function saveComposerDraft(conversationId: string | null, value: string) {
+  if (conversationId) {
+    composerDraftCache.set(conversationId, value)
+  }
 }
 
 export function MessageComposer({
@@ -29,11 +46,18 @@ export function MessageComposer({
 }: MessageComposerProps) {
   const { settings } = useSettings()
   const responsive = useResponsive()
-  const [message, setMessage] = useState('')
+  const [message, setMessage] = useState<string>(() => (selectedConversationId ? composerDraftCache.get(selectedConversationId) ?? '' : ''))
   const [collapsed, setCollapsed] = useState(false)
-  const [enableContext, setEnableContext] = useState(false)
-  const [thinkMode, setThinkMode] = useState(false)
-  const [netMode, setNetMode] = useState(false)
+  const includeParentContextByDefault =
+    settings?.context && typeof settings.context === 'object' && 'include_parent_context_by_default' in settings.context
+      ? settings.context.include_parent_context_by_default === true
+      : true
+  const [enableContext, setEnableContext] = useState(includeParentContextByDefault)
+  const [attachments, setAttachments] = useState<string[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [attachError, setAttachError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const workspaceId = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)?.id ?? null
   const hasSendTarget = selectedConversationId !== null
   const messageSendShortcutsReversed =
     settings?.ui && typeof settings.ui === 'object' && 'message_send_shortcuts_reversed' in settings.ui
@@ -46,14 +70,43 @@ export function MessageComposer({
     }
   }, [selectedConversationId])
 
+  const updateMessage = useCallback((value: string) => {
+    setMessage(value)
+    saveComposerDraft(selectedConversationId, value)
+  }, [selectedConversationId])
+
   async function handleSend() {
     const nextMessage = message.trim()
     if (!nextMessage || sending || (!selectedConversationId && !allowCreateOnSend)) {
       return
     }
 
-    setMessage('')
-    await onSend(nextMessage, enableContext)
+    const messageWithAttachments = attachments.length > 0
+      ? `${nextMessage}\n\n（已上传附件：${attachments.join('、')}，可在工作区查看）`
+      : nextMessage
+    const sent = await onSend(messageWithAttachments, enableContext)
+    if (sent) {
+      setMessage('')
+      saveComposerDraft(selectedConversationId, '')
+      setAttachments([])
+      setAttachError(null)
+    }
+  }
+
+  async function handleAttachFiles(event: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(event.target.files ?? [])
+    event.target.value = ''
+    if (!files.length || !workspaceId) return
+    setUploading(true)
+    setAttachError(null)
+    try {
+      const saved = await uploadWorkspaceFiles(workspaceId, files)
+      setAttachments((prev) => [...prev, ...saved.map((f) => f.original_filename)])
+    } catch (err) {
+      setAttachError(String((err as Error)?.message ?? err))
+    } finally {
+      setUploading(false)
+    }
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -79,10 +132,14 @@ export function MessageComposer({
       style={{ minWidth: 112 }}
       suffixIcon={<SwapOutlined />}
       labelRender={() => (selectedAgentId === 'builtin' ? '内置 Agent' : 'Trae CLI')}
-      options={[
-        { value: 'builtin', label: 'Default' },
-        { value: 'trae', label: 'Trae CLI' },
-      ]}
+      options={
+        isAndroidPlatform()
+          ? [{ value: 'builtin', label: 'Default' }]
+          : [
+              { value: 'builtin', label: 'Default' },
+              { value: 'trae', label: 'Trae CLI' },
+            ]
+      }
     />
   )
 
@@ -105,23 +162,37 @@ export function MessageComposer({
         <Input.TextArea
           rows={2}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => updateMessage(event.target.value)}
+          onCompositionEnd={(event) => { const v = event.currentTarget.value; updateMessage(v); }}
+          onBlur={(event) => { const v = event.currentTarget.value; if (v) { updateMessage(v); } }}
           onKeyDown={handleKeyDown}
           placeholder={selectedConversationId || allowCreateOnSend ? '继续询问当前节点...' : ''}
           autoSize={{ minRows: 2, maxRows: 5 }}
         />
 
+        {attachments.length > 0 || uploading || attachError ? (
+          <div className="message-composer__attachments" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+            {attachments.map((name) => (
+              <Tag key={name} closable onClose={() => setAttachments((prev) => prev.filter((n) => n !== name))}>{name}</Tag>
+            ))}
+            {uploading ? <Tag icon={<LoadingOutlined spin />}>上传中…</Tag> : null}
+            {attachError ? <Tag color="error">上传失败：{attachError}</Tag> : null}
+          </div>
+        ) : null}
         <div className="message-composer__focused-toolbar">
           <div className="message-composer__toolbar-left">
             <Space size={6} align="center" wrap={false}>
-              <Tooltip title="添加附件">
+              <Tooltip title={workspaceId ? "添加附件" : "暂无工作区，无法上传附件"}>
                 <Button
                   type="text"
                   className="message-composer__tool-btn message-composer__tool-btn--icon"
                   aria-label="添加附件"
                   icon={<PaperClipOutlined />}
+                  disabled={!workspaceId || uploading}
+                  onClick={() => fileInputRef.current?.click()}
                 />
               </Tooltip>
+              <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void handleAttachFiles(e)} />
 
               <label className="message-composer__context-toggle">
                 <Switch aria-label="携带路径上下文" size="small" checked={enableContext} onChange={setEnableContext} />
@@ -137,26 +208,6 @@ export function MessageComposer({
           <div className="message-composer__toolbar-right">
             <Space size={5} align="center" wrap={false}>
               {agentSelect}
-              <Tooltip title="深度思考">
-                <Button
-                  type="text"
-                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${thinkMode ? 'message-composer__tool-btn--active' : ''}`}
-                  aria-label="深度思考"
-                  aria-pressed={thinkMode}
-                  icon={<BulbOutlined />}
-                  onClick={() => setThinkMode(!thinkMode)}
-                />
-              </Tooltip>
-              <Tooltip title="联网搜索">
-                <Button
-                  type="text"
-                  className={`message-composer__tool-btn message-composer__tool-btn--icon ${netMode ? 'message-composer__tool-btn--active' : ''}`}
-                  aria-label="联网搜索"
-                  aria-pressed={netMode}
-                  icon={<GlobalOutlined />}
-                  onClick={() => setNetMode(!netMode)}
-                />
-              </Tooltip>
             {sending ? (
               <Tooltip title="停止生成">
                 <Button
@@ -188,18 +239,20 @@ export function MessageComposer({
 
   return (
     <div className={responsive.isMobile ? 'message-composer message-composer--mobile' : 'message-composer'}>
-      <Space direction="vertical" size={10} style={{ width: '100%' }}>
+      <Space orientation="vertical" size={10} style={{ width: '100%' }}>
         <Input.TextArea
           rows={responsive.composerConfig.textareaRows}
           value={message}
-          onChange={(event) => setMessage(event.target.value)}
+          onChange={(event) => updateMessage(event.target.value)}
+          onCompositionEnd={(event) => { const v = event.currentTarget.value; updateMessage(v); }}
+          onBlur={(event) => { const v = event.currentTarget.value; if (v) { updateMessage(v); } }}
           onKeyDown={handleKeyDown}
           placeholder={selectedConversationId || allowCreateOnSend ? '输入下一步指令...' : ''}
         />
 
         <div className="message-composer__bottom-row">
           {responsive.isMobile ? (
-            <Space direction="vertical" size={8} style={{ width: '100%' }}>
+            <Space orientation="vertical" size={8} style={{ width: '100%' }}>
               <Space className="message-composer__target" align="center" size={8}>
                 <Typography.Text strong>当前目标对话</Typography.Text>
                 {selectedConversationId ? <Typography.Text>{selectedConversationLabel ?? selectedConversationId}</Typography.Text> : null}

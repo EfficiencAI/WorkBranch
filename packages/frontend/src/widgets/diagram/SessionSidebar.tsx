@@ -1,5 +1,5 @@
 import { CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined, MoreOutlined, PlusOutlined, SearchOutlined, SortDescendingOutlined } from '@ant-design/icons'
-import { App as AntdApp, Avatar, Button, Dropdown, Empty, Input, Modal, Tooltip, Typography } from 'antd'
+import { App as AntdApp, Avatar, Button, Dropdown, Empty, Input, Tooltip, Typography } from 'antd'
 import { useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import type { SessionId, SessionSummary, UserProfile } from '../../entities'
 import { selectUpdateUserNamePending, useUserStore } from '../../features'
@@ -86,7 +86,7 @@ function highlightText(value: string, query: string): ReactNode {
 }
 
 export function SessionSidebar({ user, sessions, selectedSessionId, creatingSession, deletingSessionId, onCreateSession, onDeleteSession, onSelectSession }: SessionSidebarProps) {
-  const { message } = AntdApp.useApp()
+  const { message, modal } = AntdApp.useApp()
   const updateNamePending = useUserStore(selectUpdateUserNamePending)
   const updateProfileName = useUserStore((state) => state.updateProfileName)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -94,7 +94,7 @@ export function SessionSidebar({ user, sessions, selectedSessionId, creatingSess
   const [searchQuery, setSearchQuery] = useState('')
 
   function handleDeleteSession(sessionId: SessionId) {
-    Modal.confirm({
+    modal.confirm({
       title: '确认删除该会话？',
       content: '删除后无法恢复。若当前正在查看该会话，将自动切换到其他可用会话。',
       okText: '删除',

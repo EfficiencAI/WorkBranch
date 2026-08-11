@@ -17,6 +17,7 @@ export interface AgentAdapterContext {
   signal: AbortSignal;
   cancelCheck: () => void;
   publish: (content?: string, blockType?: SegmentType, metadata?: Record<string, unknown>) => Promise<void>;
+  webSearchEnabled: boolean;
 }
 
 export interface AgentAdapter {

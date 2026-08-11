@@ -2,6 +2,7 @@ package com.workbranch.app;
 
 import android.app.Application;
 import android.content.Intent;
+import android.os.Build;
 import android.util.Log;
 
 public class MainApplication extends Application {
@@ -22,8 +23,12 @@ public class MainApplication extends Application {
     private void startNodeService() {
         Log.d(TAG, "startNodeService: about to create Intent");
         Intent intent = new Intent(this, NodeService.class);
-        Log.d(TAG, "startNodeService: about to startService");
-        startService(intent);
+        Log.d(TAG, "startNodeService: about to startService (foreground on O+)");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            startForegroundService(intent);
+        } else {
+            startService(intent);
+        }
         Log.d(TAG, "startNodeService: startService returned");
     }
 }

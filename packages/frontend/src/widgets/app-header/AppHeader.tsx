@@ -22,7 +22,7 @@ export function AppHeader() {
   return (
     <Layout.Header className="app-header">
       <div className="app-header__inner">
-        <Space direction="vertical" size={0}>
+        <Space orientation="vertical" size={0}>
           <Typography.Text className="app-header__eyebrow">WorkBranch Frontend</Typography.Text>
           <Space size="middle" wrap>
             <Typography.Title level={4} className="app-header__title">

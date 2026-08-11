@@ -13,7 +13,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -25,7 +25,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -38,7 +38,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -49,14 +49,14 @@ export class ConversationController {
   async sendMessage(
     request: FastifyRequest<{
       Params: { conversationId: string };
-      Body: { message: string; enable_context?: boolean; agent_id?: 'builtin' | 'trae'; write_confirmed?: boolean; last_seq?: number };
+      Body: { message: string; enable_context?: boolean; agent_id?: 'builtin' | 'trae'; write_confirmed?: boolean; last_seq?: number; web_enabled?: boolean };
     }>,
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const { message, enable_context, agent_id, write_confirmed, last_seq } = request.body;
+    const { message, enable_context, agent_id, write_confirmed, last_seq, web_enabled } = request.body;
 
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -65,6 +65,8 @@ export class ConversationController {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
+      'Access-Control-Allow-Origin': request.headers.origin ?? '*',
+      'Access-Control-Allow-Credentials': 'true',
     });
 
     const streamState = messageQueue.getStreamState(conversationId);
@@ -97,14 +99,15 @@ export class ConversationController {
       reply.raw.write(`data: ${JSON.stringify(eventData)}\n\n`);
 
       const hasDoneSegment = msg.content_blocks.some((block) => block.type === SegmentType.DONE);
-      if (hasDoneSegment) {
+      const hasErrorSegment = msg.content_blocks.some((block) => block.type === SegmentType.ERROR);
+      if (hasDoneSegment || hasErrorSegment) {
         doneReceived = true;
       }
     }, { lastSeq });
 
     let result;
     try {
-      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id, write_confirmed === true);
+      result = await sessionService.sendMessage(conversationId, message, enable_context, agent_id, write_confirmed === true, web_enabled === true);
     } catch (err) {
       const errorMessage = String(err);
       unsubscribe();
@@ -139,15 +142,17 @@ export class ConversationController {
         logger.error({ err: cancelErr, conversationId }, 'Cancel on disconnect failed');
       }
     };
-    reply.raw.on('close', onConnectionClosed);
+    request.raw.on('close', onConnectionClosed);
 
     let cleanedUp = false;
+    let resolveStreamFinished: (() => void) | null = null;
     const cleanup = () => {
       if (!cleanedUp) {
         cleanedUp = true;
         clearInterval(checkInterval);
         unsubscribe();
-        reply.raw.removeListener('close', onConnectionClosed);
+        request.raw.removeListener('close', onConnectionClosed);
+        resolveStreamFinished?.();
       }
     };
 
@@ -170,6 +175,10 @@ export class ConversationController {
         reply.raw.write(': heartbeat\n\n');
       }
     }, 1000);
+
+    return new Promise<void>((resolve) => {
+      resolveStreamFinished = resolve;
+    });
   }
 
   async endConversation(
@@ -177,7 +186,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -190,7 +199,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -203,7 +212,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }
@@ -216,7 +225,7 @@ export class ConversationController {
     reply: FastifyReply
   ) {
     const { conversationId } = request.params;
-    const conversation = await sessionService.getConversationDetail(conversationId);
+    const conversation = sessionService.getOwnedConversation(request.userId!, conversationId);
     if (!conversation) {
       return reply.status(404).send({ code: 404, message: 'Conversation not found', data: null });
     }

@@ -1,9 +1,11 @@
 import { FastifyInstance } from 'fastify';
 import { UserController } from '../controller';
+import { requireAuth } from '../middleware/auth';
 
 const controller = new UserController();
 
 export default async function userRoutes(app: FastifyInstance) {
+  app.addHook('preHandler', requireAuth);
   app.get('/profile', controller.getUserProfile.bind(controller));
   app.put('/profile/name', controller.updateUserName.bind(controller));
   app.get('/sessions', controller.listSessions.bind(controller));

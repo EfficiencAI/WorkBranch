@@ -137,7 +137,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         console.warn('[createSession] API返回无效ID:', detail.id, '使用列表fallback:', resolvedId)
       }
 
-      set({ sessionList: nextSessions, currentSessionId: resolvedId })
+      set({ sessionList: nextSessions, currentSessionId: resolvedId, currentSessionDetail: null })
 
       // 不在此处调用 loadSessionDetail：新创建的 session 还没有对话，
       // 拿到的 conversations=[] 会导致 enterSessionContext 立即重置为空状态。

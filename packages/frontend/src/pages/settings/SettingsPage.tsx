@@ -1,10 +1,11 @@
-import { Alert, App as AntdApp, Button, Card, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
-import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined } from '@ant-design/icons'
+import { Alert, App as AntdApp, Button, Flex, Input, InputNumber, Slider, Space, Radio, Switch, Typography } from 'antd'
+import { ApiOutlined, ControlOutlined, DesktopOutlined, MessageOutlined, ReloadOutlined, RobotOutlined, SearchOutlined, CheckCircleFilled, CloseCircleFilled } from '@ant-design/icons'
 import type { InputRef } from 'antd'
 import type { ReactNode } from 'react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { NumericSettingMetadata, SettingMetadataNode, SettingValue } from '../../entities'
 import { getErrorMessage } from '../../shared/api'
+import { testLlmConnection } from '../../shared/api/settings'
 import { cloneDeepJson, getValueAtPath, isPlainObject, setValueAtPath } from '../../shared/lib'
 import { EmptyState, LoadingState, StatusTag } from '../../shared/ui'
 import { useTheme } from '../../app/theme'
@@ -376,7 +377,7 @@ function buildInitialEditorValue(kind: EditorKind, value: SettingValue): string 
 
 function parseEditorValue(kind: EditorKind, value: string | number | boolean | null | ArrayEditorValue, originalValue: SettingValue, metadata?: NumericSettingMetadata) {
   if (kind === 'secret') {
-    return value === '' ? originalValue : String(value)
+    return value === '' ? originalValue : String(value).replace(/^["']+|["']+$/g, '')
   }
 
   if (kind === 'string') {
@@ -406,11 +407,7 @@ function parseEditorValue(kind: EditorKind, value: string | number | boolean | n
   }
 }
 
-type SettingsPageProps = {
-  embedded?: boolean
-}
-
-export function SettingsPage({ embedded = false }: SettingsPageProps) {
+export function SettingsPage() {
   const { message } = AntdApp.useApp()
   const { settings, settingsMetadata, loading, error, patchSettings, reloadSettings } = useSettings()
   const [editing, setEditing] = useState<EditingState | null>(null)
@@ -421,9 +418,35 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
   const [activeCategory, setActiveCategory] = useState<SettingCategoryKey>('ui')
   const [pendingArrayFocusIndex, setPendingArrayFocusIndex] = useState<number | null>(null)
   const [activeArrayItemIndex, setActiveArrayItemIndex] = useState<number | null>(null)
+  const [testingLlm, setTestingLlm] = useState(false)
+  const [llmTestResult, setLlmTestResult] = useState<{ ok: boolean; latencyMs?: number; message?: string } | null>(null)
   const arrayItemRefs = useRef<Array<InputRef | null>>([])
 
   const { themeMode, setThemeMode } = useTheme()
+
+  const handleTestLlmConnection = useCallback(async () => {
+    const llm = settings?.llm
+    if (!llm || typeof llm !== 'object' || Array.isArray(llm)) return
+    const record = llm as Record<string, unknown>
+    if (!record.api_key || !record.base_url || !record.model) {
+      setLlmTestResult({ ok: false, message: '请先填写完整的 LLM 配置（API Key / Base URL / 模型）' })
+      return
+    }
+    setTestingLlm(true)
+    setLlmTestResult(null)
+    try {
+      const result = await testLlmConnection({
+        api_key: String(record.api_key),
+        base_url: String(record.base_url),
+        model: String(record.model),
+      })
+      setLlmTestResult({ ok: true, latencyMs: result.latencyMs })
+    } catch (err) {
+      setLlmTestResult({ ok: false, message: getErrorMessage(err, '连接失败') })
+    } finally {
+      setTestingLlm(false)
+    }
+  }, [settings])
 
   useEffect(() => {
     if (pendingArrayFocusIndex === null) {
@@ -779,7 +802,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const { min, max, step } = sliderMetadata
       const handleValueChange = onValueChange ?? ((nextValue: number | null) => updateEditingValue(nextValue))
       return (
-        <Space direction="vertical" size="small" style={{ width: '100%' }}>
+        <Space orientation="vertical" size="small" style={{ width: '100%' }}>
           <Flex align="center" justify="space-between" gap={12}>
             <Typography.Text type="secondary">当前值</Typography.Text>
             <Typography.Text strong>{currentValue === null ? '-' : formatSliderValue(currentValue)}</Typography.Text>
@@ -814,7 +837,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
       const items = Array.isArray(editing.value) ? editing.value : []
 
       return (
-        <Space direction="vertical" size="middle" style={{ width: '100%' }} className="settings-array-editor">
+        <Space orientation="vertical" size="middle" style={{ width: '100%' }} className="settings-array-editor">
           {items.length === 0 ? (
             <Typography.Text type="secondary">当前数组为空，可新增一项开始编辑。</Typography.Text>
           ) : (
@@ -935,7 +958,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
           <Typography.Title level={5} className="settings-tree-node__title">
             {presentation.label}
           </Typography.Title>
-          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+          <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
             {Object.entries(value).map(([childKey, childValue]) => renderNode(rootKey, [...path, childKey], childValue, depth + 1))}
           </Space>
         </div>
@@ -993,9 +1016,13 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </div>
           ) : typeof value === 'string' ? (
             <>
-              <Space.Compact block className="settings-leaf-inline-editor">
-                <Input value={value} disabled />
-              </Space.Compact>
+              {isSecretField(fullPath) ? (
+                <Typography.Text type="secondary">{value ? '已设置' : '未设置'}</Typography.Text>
+              ) : (
+                <Space.Compact block className="settings-leaf-inline-editor">
+                  <Input value={value} disabled />
+                </Space.Compact>
+              )}
               <div className="settings-leaf-footer-actions">
                 <Button size="small" disabled={saving || editing !== null} onClick={() => beginEditing(rootKey, path, value, depth)}>
                   编辑
@@ -1024,7 +1051,7 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             </>
           ) : Array.isArray(value) ? (
             <>
-              <Space direction="vertical" size="small" style={{ width: '100%' }} className="settings-array-readonly">
+              <Space orientation="vertical" size="small" style={{ width: '100%' }} className="settings-array-readonly">
                 {value.map((item, index) => (
                   <div key={index} className="settings-array-readonly-item">
                     <Typography.Text type="secondary" className="settings-array-item__index">
@@ -1092,10 +1119,9 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
     )
   }
 
-  if (embedded) {
-    const hasEmbeddedUiEntry = embeddedEntries.some(([rootKey]) => rootKey === 'ui')
+  const hasEmbeddedUiEntry = embeddedEntries.some(([rootKey]) => rootKey === 'ui')
 
-    return (
+  return (
       <div className="settings-page settings-page--embedded">
         <header className="settings-sidebar__header">
           <div className="settings-sidebar__heading-copy">
@@ -1159,6 +1185,17 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
                     <span>{rootKey}</span>
                   </header>
                   <div className="settings-sidebar__section-body">
+                    {rootKey === 'llm' ? (
+                      <div className="settings-sidebar__llm-test">
+                        <Button size="small" icon={<ApiOutlined />} loading={testingLlm} onClick={() => void handleTestLlmConnection()}>测试连接</Button>
+                        {llmTestResult ? (
+                          <span className={`settings-sidebar__llm-test-result settings-sidebar__llm-test-result--${llmTestResult.ok ? 'success' : 'error'}`}>
+                            {llmTestResult.ok ? <CheckCircleFilled /> : <CloseCircleFilled />}
+                            {llmTestResult.ok ? `连接成功 · 延迟 ${llmTestResult.latencyMs} ms` : llmTestResult.message}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : null}
                     {rootKey === 'ui' && showEmbeddedTheme ? renderThemePreference() : null}
                     {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
                   </div>
@@ -1167,69 +1204,5 @@ export function SettingsPage({ embedded = false }: SettingsPageProps) {
             : null}
         </div>
       </div>
-    )
-  }
-
-  return (
-    <Space direction="vertical" size={embedded ? 'middle' : 'large'} style={{ width: '100%' }} className={embedded ? 'settings-page settings-page--embedded' : 'settings-page'}>
-      <Flex justify="space-between" align="center" wrap="wrap" gap={12}>
-        <Flex align="center" gap={12}>
-          <Typography.Title level={embedded ? 3 : 2} style={{ margin: 0 }}>
-            设置
-          </Typography.Title>
-          <Button icon={<ReloadOutlined />} onClick={() => void reloadSettings()} loading={loading} title="刷新设置" />
-        </Flex>
-        <StatusTag label={loading ? '加载中' : error ? '加载失败' : saving ? '保存中' : '已同步'} tone={loading || saving ? 'processing' : error ? 'error' : 'success'} />
-      </Flex>
-
-      {loading ? <LoadingState tip="正在读取后端设置..." /> : null}
-
-      {error ? <Alert type="error" title="设置读取失败" description={error} showIcon /> : null}
-      {saveError ? <Alert type="error" title="设置保存失败" description={saveError} showIcon /> : null}
-
-      {!loading && !error ? (
-        <Space direction="vertical" size={16} style={{ width: '100%' }}>
-          <div className="settings-search-bar">
-            <Input.Search value={searchQuery} allowClear placeholder="按字段名或完整路径搜索设置，例如 ui.theme_mode" onChange={(event) => setSearchQuery(event.target.value)} />
-          </div>
-
-          {showEmptySearch ? (
-            <Card className="settings-card">
-              <EmptyState title="未找到匹配的设置项" description="可尝试搜索字段名或完整路径，例如 ui.theme_mode" action={<Button onClick={() => setSearchQuery('')}>清空搜索</Button>} />
-            </Card>
-          ) : null}
-
-          {showThemeCard ? (
-            <Card title="界面" className="settings-card" key="ui-preferences">
-              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
-                <Flex justify="space-between" align="center" wrap="wrap" gap={16}>
-                  <div className="settings-tree-leaf__meta">
-                    <Typography.Text strong>主题模式</Typography.Text>
-                    <Typography.Paragraph type="secondary" className="settings-tree-leaf__path">
-                      ui.theme_mode
-                    </Typography.Paragraph>
-                  </div>
-                  <Radio.Group value={themeMode} onChange={(event) => void handleThemeModeChange(event.target.value as 'dark' | 'light' | 'system')} optionType="button" buttonStyle="solid">
-                    <Radio.Button value="dark">深色</Radio.Button>
-                    <Radio.Button value="light">浅色</Radio.Button>
-                    <Radio.Button value="system">跟随系统</Radio.Button>
-                  </Radio.Group>
-                </Flex>
-
-                <div className="settings-tree-leaf__value" style={{ marginTop: 0 }}>
-                  <Typography.Text type="secondary">主题模式不参与下方设置树的编辑/保存流程。</Typography.Text>
-                </div>
-              </Space>
-            </Card>
-          ) : null}
-
-          {filteredEntries.map(([rootKey, rootValue]) => (
-            <Card title={rootKey} className="settings-card" key={rootKey}>
-              {isPlainObject(rootValue) ? Object.entries(rootValue).map(([childKey, childValue]) => renderNode(rootKey, [childKey], childValue, 1)) : renderNode(rootKey, [], rootValue, 1)}
-            </Card>
-          ))}
-        </Space>
-      ) : null}
-    </Space>
   )
 }

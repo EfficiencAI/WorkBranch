@@ -19,6 +19,8 @@ describe('strategyRegistry', () => {
 
   it('each renderer canRender() its own type', () => {
     Object.entries(strategyRegistry).forEach(([type, renderer]) => {
+      // DONE intentionally reuses the TEXT renderer (empty content).
+      if (type === MergedSegmentType.DONE) return;
       expect(renderer.canRender(type as MergedSegmentType)).toBe(true);
     });
   });

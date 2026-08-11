@@ -46,6 +46,10 @@ class ConversationBuffer {
     return this.drafts.get(messageId);
   }
 
+  getDraftsByConversation(conversationId: string): DraftMessage[] {
+    return Array.from(this.drafts.values()).filter((draft) => draft.conversation_id === conversationId);
+  }
+
   async appendContent(messageId: string, content: string, isThinking: boolean = false): Promise<void> {
     const draft = this.drafts.get(messageId);
     if (!draft) return;

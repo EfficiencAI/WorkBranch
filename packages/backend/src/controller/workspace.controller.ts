@@ -5,12 +5,17 @@ import { conversationDAO } from '../data';
 import { success } from './result';
 
 export class WorkspaceController {
-  async listWorkspaces(_request: FastifyRequest, reply: FastifyReply) {
+  private ownsWorkspace(userId: number, sessionId: string): boolean {
+    const session = conversationDAO.getSessionById(Number(sessionId));
+    return !!session && session.user_id === userId;
+  }
+
+  async listWorkspaces(request: FastifyRequest, reply: FastifyReply) {
     const workspaceIds = workspaceService.listAll();
     const data = workspaceIds
       .map((id) => {
         const info = workspaceService.getWorkspaceInfo(id);
-        if (!info) return null;
+        if (!info || !this.ownsWorkspace(request.userId!, info.session_id)) return null;
         return {
           ...info,
           dir: workspaceService.getWorkspaceDir(id),
@@ -28,11 +33,18 @@ export class WorkspaceController {
     const { workspaceId } = request.params;
     let info = workspaceService.getWorkspaceInfo(workspaceId);
 
+    if (info && !this.ownsWorkspace(request.userId!, info.session_id)) {
+      return reply.status(404).send({ code: 404, message: 'Workspace not found', data: null });
+    }
+
     if (!info) {
       const session = conversationDAO.getSessionById(Number(workspaceId));
       if (session && session.workspace_id) {
         workspaceService.register(session.workspace_id, String(session.id));
         info = workspaceService.getWorkspaceInfo(session.workspace_id);
+        if (info && !this.ownsWorkspace(request.userId!, info.session_id)) {
+          return reply.status(404).send({ code: 404, message: 'Workspace not found', data: null });
+        }
         if (info) {
           return reply.send(
             success({
@@ -54,6 +66,9 @@ export class WorkspaceController {
         if (session && session.workspace_id) {
           workspaceService.register(session.workspace_id, String(session.id));
           info = workspaceService.getWorkspaceInfo(session.workspace_id);
+        if (info && !this.ownsWorkspace(request.userId!, info.session_id)) {
+          return reply.status(404).send({ code: 404, message: 'Workspace not found', data: null });
+        }
           if (info) {
             return reply.send(
               success({
@@ -102,6 +117,13 @@ export class WorkspaceController {
         data: null,
       });
     }
+    if (!this.ownsWorkspace(request.userId!, info.session_id)) {
+      return reply.status(404).send({
+        code: 404,
+        message: 'Workspace not found',
+        data: null,
+      });
+    }
 
     const result = workspaceService.getFileTree(workspaceId);
     if (!result.success) {
@@ -131,6 +153,13 @@ export class WorkspaceController {
       return reply.status(404).send({
         code: 404,
         message: `Workspace not found: ${workspaceId}`,
+        data: null,
+      });
+    }
+    if (!this.ownsWorkspace(request.userId!, info.session_id)) {
+      return reply.status(404).send({
+        code: 404,
+        message: 'Workspace not found',
         data: null,
       });
     }
@@ -188,6 +217,13 @@ export class WorkspaceController {
         data: null,
       });
     }
+    if (!this.ownsWorkspace(request.userId!, info.session_id)) {
+      return reply.status(404).send({
+        code: 404,
+        message: 'Workspace not found',
+        data: null,
+      });
+    }
 
     if (!filePath) {
       return reply.status(400).send({
@@ -225,6 +261,13 @@ export class WorkspaceController {
       return reply.status(404).send({
         code: 404,
         message: `Workspace not found: ${workspaceId}`,
+        data: null,
+      });
+    }
+    if (!this.ownsWorkspace(request.userId!, info.session_id)) {
+      return reply.status(404).send({
+        code: 404,
+        message: 'Workspace not found',
         data: null,
       });
     }

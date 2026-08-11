@@ -1,4 +1,4 @@
-import { Button, Checkbox, ConfigProvider, Drawer, Modal, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
+import { App as AntdApp, Button, Checkbox, ConfigProvider, Drawer, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
 import { ApartmentOutlined, FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -33,6 +33,9 @@ import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
 import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
 import { SessionSidebar } from './SessionSidebar'
+import { ProductRail } from '../product-rail/ProductRail'
+import type { ProductId } from '../product-rail/ProductRail'
+import { useTheme } from '../../app/theme'
 
 type SidebarMode = 'history' | 'settings'
 
@@ -43,7 +46,15 @@ type DiagramShellProps = {
   initialLoading?: boolean
 }
 
+
+function isAndroidPlatform(): boolean {
+  if (typeof window === 'undefined') return false
+  const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+  return (capacitor?.getPlatform?.() ?? capacitor?.platform) === 'android'
+}
+
 export function DiagramShell({ onSendError, onRequestError, view, initialLoading }: DiagramShellProps) {
+  const { message, modal } = AntdApp.useApp()
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
@@ -79,11 +90,61 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const resetTreeUiState = useTreeStore((state) => state.resetTreeUiState)
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
-  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('trae')
+  const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('builtin')
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const isFocused = focusedConversationId !== null
+
+  // 安卓返回键：优先关闭侧栏/设置页，其次退出聚焦回概览，最后二次确认退出
+  useEffect(() => {
+    let lastBackAt = 0
+    const BACK_EXIT_WINDOW_MS = 2000
+    let cancelled = false
+    let listener: { remove: () => void } | null = null
+
+    void import('@capacitor/app').then(async ({ App }) => {
+      if (cancelled) return
+      const capacitor = (window as unknown as { Capacitor?: { getPlatform?: () => string; platform?: string } }).Capacitor
+      const platform = capacitor?.getPlatform?.() ?? capacitor?.platform
+      if (platform !== 'android') return
+      listener = await App.addListener('backButton', () => {
+        // 1. 关闭打开的侧栏/抽屉
+        if (activeSidebar !== null) {
+          setActiveSidebar(null)
+          if (isSettingsRoute) {
+            navigate('/chat')
+          }
+          return
+        }
+        // 2. 设置路由退回聊天
+        if (isSettingsRoute) {
+          navigate('/chat')
+          return
+        }
+        // 3. 聚焦态退回概览
+        if (focusedConversationId !== null) {
+          useTreeStore.getState().setFocusedConversationId(null)
+          return
+        }
+        // 4. 概览态：二次返回确认退出
+        const now = Date.now()
+        if (now - lastBackAt < BACK_EXIT_WINDOW_MS) {
+          void App.exitApp()
+        } else {
+          lastBackAt = now
+          void message.info('再按一次返回退出程序')
+        }
+      })
+    })
+
+    return () => {
+      cancelled = true
+      listener?.remove()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSidebar, isSettingsRoute, focusedConversationId, navigate, message, setActiveSidebar])
+
   const setFocusedConversationId = useTreeStore((state) => state.setFocusedConversationId)
   const navClassName = [
     'diagram-shell__nav',
@@ -107,15 +168,15 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       return
     }
     const defaultAgent = (agentSettings as Record<string, unknown>).default_agent
-    setSelectedAgentId(defaultAgent === 'trae' ? 'trae' : 'builtin')
+    setSelectedAgentId(defaultAgent === 'trae' && !isAndroidPlatform() ? 'trae' : 'builtin')
   }, [settings])
 
   function confirmTraeRun(): Promise<boolean> {
     return new Promise((resolve) => {
-      Modal.confirm({
+      modal.confirm({
         title: '确认运行 Trae CLI？',
         content: (
-          <Space direction="vertical" size={8}>
+          <Space orientation="vertical" size={8}>
             <Typography.Text>Trae CLI 可能修改工作区文件。</Typography.Text>
             <Typography.Text type="secondary">
               working dir: {workspaceDetail?.dir ?? conversationDetail?.workspaceId ?? '当前会话工作区'}
@@ -178,8 +239,9 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     async (sessionId: SessionId) => {
       const detail = await selectSession(sessionId)
       await runSessionContext(detail)
+      setActiveSidebar(null)
     },
-    [runSessionContext, selectSession],
+    [runSessionContext, selectSession, setActiveSidebar],
   )
 
   const handleCreateSession = useCallback(async () => {
@@ -214,10 +276,10 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       const hasChildren = conversationNodes.some((node) => node.parentConversationId === conversationId)
       let cascadeDelete = false
 
-      Modal.confirm({
+      modal.confirm({
         title: '确认删除该节点？',
         content: (
-          <Space direction="vertical" size={12}>
+          <Space orientation="vertical" size={12}>
             <Typography.Text>
               {hasChildren
                 ? '删除后无法恢复。未勾选级联删除时，该节点的子对话会保留，并在当前结构下作为根节点显示。'
@@ -278,31 +340,27 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
       : true
 
   const handleSendMessage = useCallback(
-    async (message: string, enableContext: boolean) => {
+    async (message: string, enableContext: boolean): Promise<boolean> => {
       try {
         if (selectedAgentId === 'builtin') {
           const llm = settings?.llm
           if (!llm || typeof llm !== 'object' || Array.isArray(llm)) {
             showOnboarding()
-            return
+            return false
           }
           const llmConfig = llm as Record<string, unknown>
           if (!llmConfig.api_key || !llmConfig.base_url || !llmConfig.model) {
             showOnboarding()
-            return
+            return false
           }
         }
 
         let targetConversationId = sendTargetConversationId
 
         if (!targetConversationId) {
-          if (sessionDetail?.conversations?.length) {
-            return
-          }
-
           const result = await ensureConversationForCurrentSession()
           if (!result) {
-            return
+            return false
           }
 
           targetConversationId = result.conversationId
@@ -316,7 +374,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         if (singleMessagePerNode && targetMessageCount >= 1) {
           const childResult = await ensureConversationForCurrentSession({ parentConversationId: targetConversationId })
           if (!childResult) {
-            return
+            return false
           }
 
           await enterSessionContext(childResult.detail)
@@ -329,11 +387,15 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
         if (selectedAgentId === 'trae') {
           writeConfirmed = await confirmTraeRun()
           if (!writeConfirmed) {
-            return
+            return false
           }
         }
 
-        await useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
+        useTreeStore.getState().setFocusedConversationId(targetConversationId)
+        setNavPathTailId(targetConversationId)
+        await useChatWorkbenchStore.getState().syncConversationContext(targetConversationId)
+
+        const sendPromise = useChatWorkbenchStore.getState().sendMessageToConversation(targetConversationId, message, enableContext, {
           agentId: selectedAgentId,
           writeConfirmed,
         }, {
@@ -343,8 +405,11 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
             }
           },
         })
+        void sendPromise.catch(onRequestError)
+        return true
       } catch (caughtError) {
         onRequestError(caughtError)
+        return false
       }
     },
     [
@@ -421,16 +486,27 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
     }
   }
 
+  const { resolvedTheme } = useTheme()
+
+  const handleProductSwitch = useCallback(
+    (next: ProductId) => {
+      if (next === 'wa') {
+        navigate('/assistant')
+      }
+    },
+    [navigate],
+  )
+
   return (
     <ConfigProvider
       theme={{
-        algorithm: antdTheme.darkAlgorithm,
+        algorithm: resolvedTheme === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
           colorPrimary: '#34d399',
-          colorBgBase: '#070b13',
-          colorBgContainer: 'rgba(18, 25, 38, 0.96)',
-          colorBorder: 'rgba(148, 163, 184, 0.2)',
-          colorTextBase: '#f1f5f9',
+          colorBgBase: resolvedTheme === 'dark' ? '#070b13' : '#f8fafc',
+          colorBgContainer: resolvedTheme === 'dark' ? 'rgba(18, 25, 38, 0.96)' : 'rgba(255, 255, 255, 0.96)',
+          colorBorder: resolvedTheme === 'dark' ? 'rgba(148, 163, 184, 0.2)' : 'rgba(148, 163, 184, 0.28)',
+          colorTextBase: resolvedTheme === 'dark' ? '#f1f5f9' : '#0f172a',
           borderRadius: 8,
         },
       }}
@@ -462,8 +538,8 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           onNavPathTailChange={setNavPathTailId}
         />
 
-        <nav className={navClassName} aria-label="图导航">
-          {isFocused ? (
+        {isFocused ? (
+          <nav className={navClassName} aria-label="图导航">
             <Tooltip title={responsive.isMobile ? null : '退出聚焦'} placement="right">
               <Button
                 type="text"
@@ -474,18 +550,9 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
                 onClick={() => setFocusedConversationId(null)}
               />
             </Tooltip>
-          ) : (
-            <>
-              <Tooltip title={responsive.isMobile ? null : '会话历史'} placement="right">
-                <Button
-                  type="text"
-                  className="diagram-shell__brand"
-                  aria-label="打开会话历史"
-                  onClick={() => openSidebar('history')}
-                >
-                  WB
-                </Button>
-              </Tooltip>
+          </nav>
+        ) : (
+            <ProductRail product="wb" onSwitch={handleProductSwitch}>
               <Tooltip title="对话图" placement="right">
                 <Button
                   type="text"
@@ -513,15 +580,14 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
                   onClick={() => openSidebar('settings')}
                 />
               </Tooltip>
-            </>
-          )}
-        </nav>
+            </ProductRail>
+        )}
 
         {!isFocused ? (
           <Drawer
             open={activeSidebar !== null}
             placement="left"
-            width={responsive.isMobile ? '100%' : 392}
+            size={responsive.isMobile ? '100%' : 392}
             rootStyle={{ zIndex: 30 }}
             onClose={collapseNav}
             title={
@@ -564,7 +630,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
 
               {activeSidebar === 'settings' ? (
                 <div className="diagram-shell__settings">
-                  <SettingsPage embedded />
+                  <SettingsPage />
                 </div>
               ) : null}
             </div>

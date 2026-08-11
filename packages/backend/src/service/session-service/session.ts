@@ -1,5 +1,7 @@
 import { conversationDAO } from '../../data';
 import { conversationBuffer } from './conversation-buffer';
+import { messageQueue } from './mq';
+import { createContentBlock, createMessage, SegmentType } from './canonical';
 import { agentService } from '../agent-service/agent';
 import type { AgentId } from '../agent-service/adapters';
 import { workspaceService } from '../agent-service/service/workspace-service';
@@ -29,8 +31,7 @@ interface ConversationInfo {
 export class SessionService {
   private conversations: Map<string, ConversationInfo> = new Map();
 
-  createSession(title: string = '新会话') {
-    const userId = 1;
+  createSession(userId: number, title: string = '新会话') {
     const workspaceId = this.generateWorkspaceId();
     const sessionId = conversationDAO.createSession(userId, title, workspaceId);
     workspaceService.register(workspaceId, String(sessionId));
@@ -55,7 +56,10 @@ export class SessionService {
     return `ws-${timestamp}-${random}`;
   }
 
-  deleteSession(sessionId: number): boolean {
+  deleteSession(userId: number, sessionId: number): boolean {
+    if (!this.getSession(userId, sessionId)) {
+      return false;
+    }
     const conversations = conversationDAO.listConversationsBySession(sessionId);
     for (const conv of conversations) {
       this.deleteConversation(conv.id);
@@ -64,20 +68,24 @@ export class SessionService {
     return true;
   }
 
-  listSessions() {
-    const user = { id: 1 };
-    return conversationDAO.listSessionsByUserId(user.id);
+  listSessions(userId: number) {
+    return conversationDAO.listSessionsByUserId(userId);
   }
 
-  getSession(sessionId: number) {
-    return conversationDAO.getSessionById(sessionId);
+  getSession(userId: number, sessionId: number) {
+    const session = conversationDAO.getSessionById(sessionId);
+    if (!session || session.user_id !== userId) {
+      return null;
+    }
+    return session;
   }
 
   async createConversation(
+    userId: number,
     sessionId: number,
     parentConversationId?: string
   ): Promise<{ conversation_id: string; session_id: number; parent_conversation_id: string | null }> {
-    const session = this.getSession(sessionId);
+    const session = this.getSession(userId, sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
@@ -132,6 +140,7 @@ export class SessionService {
     enableContext: boolean = false,
     agentId?: AgentId,
     writeConfirmed: boolean = false,
+    webSearchEnabled: boolean = true,
   ): Promise<{ message_id: string; conversation_id: string; session_id: number }> {
     let convInfo = this.conversations.get(conversationId);
     if (!convInfo) {
@@ -189,6 +198,7 @@ export class SessionService {
         currentConversationMessages,
         agentId,
         writeConfirmed,
+        webSearchEnabled,
       ).catch(async (err) => {
         const errorMsg = String(err);
         logger.error({ err: errorMsg, conversationId }, 'Agent run failed');
@@ -255,6 +265,7 @@ export class SessionService {
       logger.error({ err: cancelErr, conversationId }, 'Failed to cancel active agent process');
     }
 
+    await this.finalizeInFlightMessages(conversationId, '运行已取消');
     conversationBuffer.clear(conversationId);
     return true;
   }
@@ -266,6 +277,8 @@ export class SessionService {
       if (!persisted) return;
     }
 
+    await this.finalizeInFlightMessages(conversationId, error);
+
     if (convInfo) {
       convInfo.state = ConversationState.FAILED;
       convInfo.error = error;
@@ -274,6 +287,32 @@ export class SessionService {
         error: error,
         ended_at: new Date().toISOString(),
       });
+    }
+  }
+
+  private async finalizeInFlightMessages(conversationId: string, error: string): Promise<void> {
+    const drafts = conversationBuffer.getDraftsByConversation(conversationId);
+    const convInfo = this.conversations.get(conversationId);
+    for (const draft of drafts) {
+      const baseMeta = { message_id: draft.id };
+      await messageQueue.publish(createMessage(
+        'assistant',
+        draft.id,
+        conversationId,
+        String(draft.session_id),
+        convInfo?.workspace_id ?? draft.conversation_id,
+        [createContentBlock(SegmentType.ERROR, error, baseMeta)],
+        error
+      ));
+      await messageQueue.publish(createMessage(
+        'assistant',
+        draft.id,
+        conversationId,
+        String(draft.session_id),
+        convInfo?.workspace_id ?? draft.conversation_id,
+        [createContentBlock(SegmentType.DONE, '', baseMeta)],
+        ''
+      ));
     }
   }
 
@@ -319,11 +358,20 @@ export class SessionService {
     return conversationDAO.getConversationById(conversationId);
   }
 
+  getOwnedConversation(userId: number, conversationId: string) {
+    const persisted = conversationDAO.getConversationById(conversationId);
+    if (!persisted) return null;
+    const session = conversationDAO.getSessionById(persisted.session_id);
+    if (!session || session.user_id !== userId) return null;
+    return persisted;
+  }
+
   async updateConversationPositions(
+    userId: number,
     sessionId: number,
     positions: Array<{ conversation_id: string; x: number; y: number }>
   ): Promise<void> {
-    const session = this.getSession(sessionId);
+    const session = this.getSession(userId, sessionId);
     if (!session) {
       throw new Error(`Session ${sessionId} not found`);
     }
@@ -331,7 +379,10 @@ export class SessionService {
     conversationDAO.updateConversationPositions(sessionId, positions);
   }
 
-  async listConversationSummaries(sessionId: number): Promise<Array<Record<string, unknown>>> {
+  async listConversationSummaries(userId: number, sessionId: number): Promise<Array<Record<string, unknown>>> {
+    if (!this.getSession(userId, sessionId)) {
+      return [];
+    }
     const conversations = conversationDAO.listConversationSummariesBySession(sessionId);
     return conversations.map((conv) => ({
       conversation_id: conv.id,

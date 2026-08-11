@@ -1,5 +1,5 @@
 import { getClientId } from './clientId'
-import { getApiUrl } from '../api/config'
+import { AUTH_TOKEN_KEY, getApiUrl } from '../api/config'
 
 type FrontendLogLevel = 'INFO' | 'WARNING' | 'ERROR'
 type FrontendLogEvent =
@@ -55,6 +55,9 @@ async function emit(level: FrontendLogLevel, event: FrontendLogEvent, payload: F
       headers: {
         'Content-Type': 'application/json',
         'X-Client-Id': getClientId(),
+        ...(typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)
+          ? { Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}` }
+          : {}),
       },
       body: JSON.stringify({
         level,

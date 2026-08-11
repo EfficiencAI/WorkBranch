@@ -1,5 +1,5 @@
 import { get, post, put, del } from './http'
-import { getApiUrl } from './config'
+import { AUTH_TOKEN_KEY, getApiUrl } from './config'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionConversationSummary, SessionDetail, SessionSummary, WorkspaceDetail } from '../../entities'
 import type { CanonicalMessage } from '@workbranch/shared'
 
@@ -196,6 +196,16 @@ export type StreamConversationMessageBody = {
   agent_id?: AgentId
   write_confirmed?: boolean
   last_seq?: number
+  web_enabled?: boolean
+}
+
+export type WorkspaceUploadedFile = { original_filename: string; saved_as: string; path: string; size: number }
+export async function uploadWorkspaceFiles(workspaceId: string, files: File[]): Promise<WorkspaceUploadedFile[]> {
+  const form = new FormData()
+  for (const file of files) {
+    form.append('file', file)
+  }
+  return post<WorkspaceUploadedFile[]>(`/api/workspaces/${workspaceId}/files`, form)
 }
 
 export async function cancelConversation(conversationId: string) {
@@ -215,6 +225,9 @@ export async function streamConversationMessage(
     headers: {
       'Content-Type': 'application/json',
       'X-Client-Id': getClientId(),
+      ...(typeof localStorage !== 'undefined' && localStorage.getItem(AUTH_TOKEN_KEY)
+        ? { Authorization: `Bearer ${localStorage.getItem(AUTH_TOKEN_KEY)}` }
+        : {}),
     },
     body: JSON.stringify(body),
     signal: handlers.signal,

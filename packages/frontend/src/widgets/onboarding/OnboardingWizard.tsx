@@ -1,42 +1,73 @@
-import { Button, Form, Input, Modal, Steps, Typography, message } from 'antd'
-import { KeyOutlined, LinkOutlined, RobotOutlined } from '@ant-design/icons'
+import { Button, Form, Input, Modal, Typography, message } from 'antd'
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  KeyOutlined,
+  LinkOutlined,
+  RobotOutlined,
+} from '@ant-design/icons'
 import { useCallback, useEffect, useState } from 'react'
 import type { OnboardingStep } from '../../app/onboarding'
 import { useOnboarding } from '../../app/onboarding'
 import { useSettings } from '../../app/settings'
+import { getErrorMessage } from '../../shared/api/error'
+import { testLlmConnection } from '../../shared/api/settings'
+import '../../styles/onboarding.css'
 
 const { Title, Text } = Typography
 
-const STEP_LIST: { key: OnboardingStep; title: string; icon: React.ReactNode; placeholder: string; help: string }[] = [
+const STEP_LIST: {
+  key: OnboardingStep
+  title: string
+  icon: React.ReactNode
+  placeholder: string
+  help: string
+  inputType?: 'password' | 'url' | 'text'
+}[] = [
   {
     key: 'api_key',
     title: 'API Key',
     icon: <KeyOutlined />,
     placeholder: 'sk-...',
-    help: '输入你的 LLM 服务 API Key，用于身份验证',
+    help: '用于调用 LLM 服务的身份验证，仅保存在本机',
+    inputType: 'password',
   },
   {
     key: 'base_url',
     title: 'Base URL',
     icon: <LinkOutlined />,
     placeholder: 'https://api.openai.com/v1',
-    help: 'LLM 服务的接口地址，默认为 OpenAI 兼容格式',
+    help: '默认 OpenAI 兼容格式，自定义服务请填写对应地址',
+    inputType: 'url',
   },
   {
     key: 'model',
     title: '模型名称',
     icon: <RobotOutlined />,
     placeholder: 'gpt-4o-mini',
-    help: '指定要使用的模型名称',
+    help: '使用该服务商提供的任意可用模型名称',
   },
 ]
+
+type TestState = { ok: true; latencyMs: number } | { ok: false; message: string } | null
 
 export function OnboardingWizard() {
   const { visible, currentStep, completeOnboarding, skipOnboarding, goToStep } = useOnboarding()
   const { patchSettings, settings } = useSettings()
   const [form] = Form.useForm()
   const [submitting, setSubmitting] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [testState, setTestState] = useState<TestState>(null)
   const stepIndex = STEP_LIST.findIndex((s) => s.key === currentStep)
+  const formValues = Form.useWatch([], form)
+  const allFilled =
+    typeof formValues === 'object' &&
+    formValues !== null &&
+    ['api_key', 'base_url', 'model'].every(
+      (key) =>
+        typeof (formValues as Record<string, unknown>)[key] === 'string' &&
+        String((formValues as Record<string, unknown>)[key]).length > 0,
+    )
 
   useEffect(() => {
     if (visible && settings?.llm && typeof settings.llm === 'object' && !Array.isArray(settings.llm)) {
@@ -73,6 +104,9 @@ export function OnboardingWizard() {
     try {
       setSubmitting(true)
       const values = form.getFieldsValue()
+      if (typeof values.api_key === 'string') {
+        values.api_key = values.api_key.replace(/^["']+|["']+$/g, '')
+      }
       await patchSettings({ llm: values })
       message.success('配置已保存')
       completeOnboarding()
@@ -83,6 +117,30 @@ export function OnboardingWizard() {
     }
   }, [form, patchSettings, completeOnboarding])
 
+  const handleTestConnection = useCallback(async () => {
+    try {
+      await form.validateFields()
+    } catch {
+      message.error('请先完整填写三项配置')
+      return
+    }
+    setTesting(true)
+    setTestState(null)
+    try {
+      const values = form.getFieldsValue()
+      const result = await testLlmConnection({
+        api_key: String(values.api_key),
+        base_url: String(values.base_url),
+        model: String(values.model),
+      })
+      setTestState({ ok: true, latencyMs: result.latencyMs })
+    } catch (err) {
+      setTestState({ ok: false, message: getErrorMessage(err, '连接失败') })
+    } finally {
+      setTesting(false)
+    }
+  }, [form])
+
   const isLastStep = stepIndex === STEP_LIST.length - 1
 
   return (
@@ -92,49 +150,84 @@ export function OnboardingWizard() {
       footer={null}
       closable={false}
       centered
-      width={520}
-      maskClosable={false}
-      styles={{ body: { padding: '32px 24px 16px' } }}
+      width={500}
+      mask={{ closable: false }}
+      rootClassName="wa-onboarding"
     >
-      <div style={{ textAlign: 'center', marginBottom: 28 }}>
-        <Title level={3} style={{ margin: 0 }}>欢迎使用 WorkBranch</Title>
-        <Text type="secondary">请先完成基础配置以开始使用</Text>
+      <div className="wa-onboarding__head">
+        <div className="wa-onboarding__brand">WB</div>
+        <div className="wa-onboarding__copy">
+          <span className="wa-onboarding__eyebrow">首次配置 · 第 {stepIndex + 1} 步</span>
+          <Title level={3} className="wa-onboarding__title">欢迎使用 WorkBranch</Title>
+          <Text className="wa-onboarding__sub">连接你的 LLM 服务后，即可开始对话与工作流配置</Text>
+        </div>
       </div>
 
-      <Steps items={STEP_LIST.map((s) => ({ title: s.title, icon: s.icon }))} current={stepIndex} size="small" style={{ marginBottom: 24 }} />
+      <div className="wa-onboarding__steps">
+        {STEP_LIST.map((step, index) => (
+          <div
+            key={step.key}
+            className={[
+              'wa-onboarding__step',
+              index === stepIndex ? 'wa-onboarding__step--active' : '',
+              index < stepIndex ? 'wa-onboarding__step--done' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className="wa-onboarding__step-chip">{step.icon}</span>
+            <span className="wa-onboarding__step-label">{step.title}</span>
+          </div>
+        ))}
+      </div>
 
-      <Form form={form} layout="vertical" requiredMark="optional">
+      <Form form={form} layout="vertical" requiredMark={false}>
         {STEP_LIST.map((step) => (
           <Form.Item
             key={step.key}
             name={step.key}
             hidden={step.key !== current.key}
+            label={step.title}
+            className="wa-onboarding__field"
             rules={[
               { required: true, message: `请输入${step.title}` },
-              ...(step.key === 'base_url'
-                ? [{ type: 'url', message: '请输入有效的 URL' } as const]
-                : []),
+              ...(step.key === 'base_url' ? [{ type: 'url', message: '请输入有效的 URL' } as const] : []),
             ]}
             help={step.help}
           >
             <Input
               size="large"
+              prefix={step.icon}
               placeholder={step.placeholder}
-              type={step.key === 'api_key' ? 'password' : 'text'}
+              type={step.inputType ?? 'text'}
               onPressEnter={isLastStep ? handleFinish : handleNext}
             />
           </Form.Item>
         ))}
       </Form>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+      {testState && (
+        <div className={`wa-onboarding__test wa-onboarding__test--${testState.ok ? 'success' : 'error'}`}>
+          {testState.ok ? <CheckCircleFilled /> : <CloseCircleFilled />}
+          <span>{testState.ok ? `连接成功 · 延迟 ${testState.latencyMs} ms` : testState.message}</span>
+        </div>
+      )}
+
+      <div className="wa-onboarding__hint">配置后可在「设置 → LLM」中随时修改，无需重新安装</div>
+
+      <div className="wa-onboarding__footer">
         <Button onClick={skipOnboarding}>跳过</Button>
-        <div>
+        <div className="wa-onboarding__footer-right">
+          <Button disabled={!allFilled} loading={testing} onClick={handleTestConnection}>
+            测试连接
+          </Button>
           {stepIndex > 0 && (
-            <Button style={{ marginRight: 8 }} onClick={() => {
-              const prev = STEP_LIST[stepIndex - 1]
-              goToStep(prev.key)
-            }}>
+            <Button
+              onClick={() => {
+                const prev = STEP_LIST[stepIndex - 1]
+                goToStep(prev.key)
+              }}
+            >
               上一步
             </Button>
           )}

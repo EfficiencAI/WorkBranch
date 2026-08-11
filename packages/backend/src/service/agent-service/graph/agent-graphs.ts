@@ -106,6 +106,7 @@ const AgentStateChannels = {
   current_conversation_messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
   execution_mode: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
   mode_reason: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
+  web_search_enabled: { value: (_a: unknown, b: unknown) => b, default: () => true },
   suggested_tools: { value: (_a: unknown, b: unknown) => b, default: () => [] },
   suggested_subagent: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
   in_plan_mode: { value: (_a: unknown, b: unknown) => b, default: () => false },
@@ -250,6 +251,7 @@ function buildInitialChildState(
     parent_chain_messages: parentChainMessages || [],
     current_conversation_messages: currentConversationMessages || [],
     execution_mode: 'DIRECT',
+    web_search_enabled: true,
     pending_tools: buildDefaultTools(agentType, userMessage),
     has_tool_use: true,
     final_reply: '',
@@ -282,6 +284,7 @@ export async function runAgentGraph(
   currentConversationMessages?: Array<Record<string, unknown>>,
   forcedExecutionMode?: 'DIRECT' | 'PLAN',
   persistState: boolean = false,
+  webSearchEnabled: boolean = true,
 ): Promise<AgentOutcome> {
   logger.info({
     event: 'agent_graph.started',
@@ -317,6 +320,7 @@ export async function runAgentGraph(
     }
 
     initialState.agent_type = agentType;
+    initialState.web_search_enabled = webSearchEnabled;
 
     if (config.execution_mode) {
       initialState.execution_mode = config.execution_mode as 'DIRECT' | 'PLAN';

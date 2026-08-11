@@ -16,8 +16,10 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     api_key: '',
     base_url: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
+    embedding_model: 'text-embedding-3-small',
+    embedding_base_url: '',
     temperature: 0.7,
-    max_tokens: 4096,
+    max_tokens: 131072,
   },
   workspace: {
     base_dir: 'workspaces',
@@ -26,14 +28,14 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     max_size: 1000,
   },
   agent: {
-    default_agent: 'trae',
+    default_agent: 'builtin',
     memory_mode: 'accumulate',
     memory_window_size: 3,
   },
   trae_cli: {
     executable: 'trae-cli',
     provider: 'openai',
-    max_steps: 200,
+    max_steps: 30,
     tools: [
       'bash',
       'str_replace_based_edit_tool',
@@ -42,6 +44,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     ],
     show_workflow: true,
     trajectory_retention: 'all',
+    system_prompt: '如果联网搜索或工具调用失败，直接告知用户结果，不要反复重试同一操作。',
   },
   conversation: {
     single_message_per_node: true,
@@ -49,7 +52,7 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
   context: {
     max_tokens: 32000,
     warning_threshold: 0.5,
-    include_parent_context_by_default: false,
+    include_parent_context_by_default: true,
   },
   logging: {
     enabled: true,
@@ -128,7 +131,9 @@ function mergeSettingsUpdates(
 
   for (const [key, updateValue] of Object.entries(updates)) {
     const currentValue = current[key];
-    merged[key] = isSettingsObject(currentValue) && isSettingsObject(updateValue)
+    merged[key] = key === 'api_key' && typeof updateValue === 'string'
+      ? updateValue.replace(/^["']+|["']+$/g, '')
+      : isSettingsObject(currentValue) && isSettingsObject(updateValue)
       ? mergeSettingsUpdates(currentValue, updateValue)
       : updateValue;
   }
@@ -156,7 +161,7 @@ function mergeMissingDefaults(defaults: Record<string, unknown>, current: Record
     }
 
     const currentValue = merged[key];
-    if (typeof defaultValue === 'object' && defaultValue !== null) {
+    if (typeof defaultValue === 'object' && defaultValue !== null && !Array.isArray(defaultValue)) {
       const [nextValue, nestedChanged] = mergeMissingDefaults(
         defaultValue as Record<string, unknown>,
         currentValue as Record<string, unknown>
@@ -169,6 +174,40 @@ function mergeMissingDefaults(defaults: Record<string, unknown>, current: Record
   }
 
   return [merged, changed];
+}
+
+const NUMERIC_LIMITS: Record<string, { min: number; max: number }> = {
+  'llm.temperature': { min: 0, max: 2 },
+  'llm.max_tokens': { min: 1, max: 1000000 },
+  'agent.memory_window_size': { min: 1, max: 100 },
+  'context.max_tokens': { min: 1000, max: 1000000 },
+  'context.warning_threshold': { min: 0, max: 1 },
+  'mq.max_size': { min: 1, max: 1000000 },
+  'logging.max_file_size_mb': { min: 1, max: 1024 },
+};
+
+function assertValidSettingValue(path: string, value: unknown): void {
+  const limits = NUMERIC_LIMITS[path];
+  if (!limits) {
+    return;
+  }
+  if (typeof value !== 'number' || Number.isNaN(value)) {
+    throw new Error(`Setting ${path} must be a number between ${limits.min} and ${limits.max}`);
+  }
+  if (value < limits.min || value > limits.max) {
+    throw new Error(`Setting ${path} must be between ${limits.min} and ${limits.max}, got ${value}`);
+  }
+}
+
+function assertValidSettings(data: Record<string, unknown>, prefix = ''): void {
+  for (const [key, value] of Object.entries(data)) {
+    const path = prefix ? prefix + '.' + key : key;
+    if (isSettingsObject(value)) {
+      assertValidSettings(value, path);
+    } else {
+      assertValidSettingValue(path, value);
+    }
+  }
 }
 
 export class SettingsService {
@@ -186,10 +225,51 @@ export class SettingsService {
     if (changed) {
       this.persist();
     }
+    this.migrateDefaultAgent();
+    this.migrateContextDefault();
+    this.migrateTraeCliDefaults();
   }
 
   private persist(): void {
     fileStorage.writeSettings(this.data);
+  }
+
+  private migrateContextDefault(): void {
+    const context = this.data.context;
+    if (context && typeof context === 'object' && !Array.isArray(context)
+      && (context as Record<string, unknown>).include_parent_context_by_default === false) {
+      (context as Record<string, unknown>).include_parent_context_by_default = true;
+      this.persist();
+    }
+  }
+
+  private migrateDefaultAgent(): void {
+    const agent = this.data.agent;
+    if (agent && typeof agent === 'object' && !Array.isArray(agent)
+      && (agent as Record<string, unknown>).default_agent === 'trae') {
+      (agent as Record<string, unknown>).default_agent = 'builtin';
+      this.persist();
+    }
+  }
+
+  private migrateTraeCliDefaults(): void {
+    const traeCli = this.data.trae_cli;
+    if (!traeCli || typeof traeCli !== 'object' || Array.isArray(traeCli)) return;
+    const cfg = traeCli as Record<string, unknown>;
+    let changed = false;
+    if (Array.isArray(cfg.tools) && cfg.tools.includes('web_search')) {
+      cfg.tools = cfg.tools.filter((tool: string) => tool !== 'web_search');
+      changed = true;
+    }
+    if (cfg.max_steps === 200) {
+      cfg.max_steps = 30;
+      changed = true;
+    }
+    if (typeof cfg.system_prompt !== 'string' || cfg.system_prompt.length === 0) {
+      cfg.system_prompt = '如果联网搜索或工具调用失败，直接告知用户结果，不要反复重试同一操作。';
+      changed = true;
+    }
+    if (changed) this.persist();
   }
 
   get(key: string): unknown {
@@ -213,13 +293,16 @@ export class SettingsService {
   }
 
   updateSetting(key: string, value: unknown): boolean {
+    assertValidSettingValue(key, value);
     this.data[key] = value;
     this.persist();
     return true;
   }
 
   updateSettings(updates: Record<string, unknown>): boolean {
-    this.data = mergeSettingsUpdates(this.data, updates);
+    const merged = mergeSettingsUpdates(this.data, updates);
+    assertValidSettings(merged);
+    this.data = merged;
     this.persist();
     return true;
   }

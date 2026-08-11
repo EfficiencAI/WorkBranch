@@ -38,6 +38,10 @@ export function getApiUrl(path: string): string {
   return path
 }
 
+export const AUTH_TOKEN_KEY = 'workassistant_token'
+/** 本地离线用户使用的固定 token：loadSession 识别后直接放行，不请求后端 */
+export const LOCAL_OFFLINE_TOKEN = 'local-offline'
+
 export async function waitForBackendReady(maxRetries = 60, intervalMs = 500): Promise<boolean> {
   const currentBaseUrl = getApiBaseUrl()
   if (!currentBaseUrl) {

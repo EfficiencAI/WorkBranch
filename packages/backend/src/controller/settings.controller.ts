@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { settingsService } from '../service';
-import { success } from './result';
+import { llmService } from '../service/agent-service/service/llm-service';
+import { error, success } from './result';
 
 export class SettingsController {
   async getAllSettings(
@@ -40,8 +41,12 @@ export class SettingsController {
     reply: FastifyReply
   ) {
     const { key, value } = request.body;
-    settingsService.updateSetting(key, value);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSetting(key, value);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async updateSetting(
@@ -50,18 +55,44 @@ export class SettingsController {
   ) {
     const { key } = request.params;
     const { value } = request.body;
-    settingsService.updateSetting(key, value);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSetting(key, value);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async updateSettings(request: FastifyRequest<{ Body: Record<string, unknown> }>, reply: FastifyReply) {
     const updates = request.body;
-    settingsService.updateSettings(updates);
-    return reply.send(success(null));
+    try {
+      settingsService.updateSettings(updates);
+      return reply.send(success(null));
+    } catch (err) {
+      return reply.status(400).send({ code: 400, message: String(err), data: null });
+    }
   }
 
   async reloadSettings(_request: FastifyRequest, reply: FastifyReply) {
     settingsService.forceReload();
     return reply.send(success(null));
+  }
+
+  async testLlmConnection(
+    request: FastifyRequest<{ Body: { api_key?: string; base_url?: string; model?: string } }>,
+    reply: FastifyReply
+  ) {
+    const { api_key, base_url, model } = request.body ?? {};
+    try {
+      const result = await llmService.testConnection({
+        apiKey: api_key,
+        baseUrl: base_url,
+        model,
+      });
+      return reply.send(success(result));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return reply.status(400).send(error(message, 400));
+    }
   }
 }

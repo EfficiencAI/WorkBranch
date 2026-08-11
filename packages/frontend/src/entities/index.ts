@@ -12,3 +12,12 @@ export type {
 export type { SessionConversationSummary, SessionDetail, SessionId, SessionSummary } from './session'
 export type { UserId, UserProfile } from './user'
 export type { WorkspaceDetail } from './workspace'
+export type {
+  Assistant,
+  AssistantFaq,
+  AssistantStatus,
+  AuthSession,
+  AuthUser,
+  KnowledgeSource,
+  ShareInfo,
+} from './assistant'

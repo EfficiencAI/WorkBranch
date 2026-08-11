@@ -1141,7 +1141,8 @@ button {
   z-index: 40;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  /* 增强后产品切换行（WB|WA）比收起状态的栏宽，居中会导致当前按钮被裁掉，改用 flex-start */
+  align-items: flex-start;
   gap: 4px;
   width: 54px;
   min-height: 0;
@@ -1152,7 +1153,7 @@ button {
   backdrop-filter: blur(16px);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28);
   overflow: hidden;
-  transition: top 220ms ease, left 220ms ease, right 220ms ease;
+  transition: top 220ms ease, left 220ms ease, right 220ms ease, width 0.34s cubic-bezier(0.22, 0.8, 0.26, 1);
 }
 
 .diagram-shell__brand.ant-btn {
@@ -1161,7 +1162,6 @@ button {
   width: 42px;
   min-width: 42px;
   height: 42px;
-  margin-bottom: 4px;
   padding: 0;
   border: 0;
   border-radius: 6px;
@@ -1170,6 +1170,7 @@ button {
   font-size: 13px;
   font-weight: 800;
   box-shadow: none;
+  transition: transform 0.34s cubic-bezier(0.22, 0.8, 0.26, 1), opacity 0.25s ease;
 }
 
 .diagram-shell__brand.ant-btn:hover,
@@ -1197,6 +1198,59 @@ button {
 .diagram-shell__rail-button--active.ant-btn {
   color: var(--app-text);
   background: rgba(148, 163, 184, 0.12);
+}
+
+/* ---------- 产品切换：WB / WA 同一款式，展开露出、左滑覆盖 ---------- */
+.product-switch {
+  display: flex;
+  gap: 8px;
+}
+
+.diagram-shell__nav.is-expanded {
+  width: 102px;
+}
+
+.diagram-shell__nav.is-switching {
+  width: 54px;
+}
+
+.diagram-shell__brand.is-alt.ant-btn {
+  opacity: 0;
+  transform: translateX(-12px) scale(0.88);
+  pointer-events: none;
+}
+
+.diagram-shell__nav.is-expanded .diagram-shell__brand.is-alt.ant-btn {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.diagram-shell__nav.is-switching .diagram-shell__brand.is-alt.ant-btn {
+  opacity: 1;
+  transform: translateX(calc(-100% - 8px));
+  pointer-events: auto;
+}
+
+.diagram-shell__nav.is-switching .diagram-shell__brand.is-current.ant-btn {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.rail-menu {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  max-height: 140px;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.22, 0.8, 0.26, 1), opacity 0.22s ease;
+}
+
+.diagram-shell__nav.is-expanded .rail-menu,
+.diagram-shell__nav.is-switching .rail-menu {
+  max-height: 0;
+  opacity: 0;
 }
 
 .diagram-shell__rail-button--exit.ant-btn {
@@ -2625,15 +2679,9 @@ button {
   color: var(--app-text-soft) !important;
 }
 
-.settings-page--embedded .settings-card,
 .settings-page--embedded .ant-alert {
   background: var(--app-panel-bg-soft);
   border-color: var(--app-border);
-}
-
-.settings-page--embedded .ant-card-head,
-.settings-page--embedded .ant-card-body {
-  background: transparent;
 }
 
 .settings-page--embedded .settings-tree-node {
@@ -2678,14 +2726,6 @@ button {
 
 .loading-state {
   min-height: 240px;
-}
-
-.settings-card {
-  border-radius: calc(16px * var(--app-ui-scale));
-}
-
-.settings-search-bar {
-  width: 100%;
 }
 
 .settings-tree-node,
@@ -2902,6 +2942,14 @@ button {
     right: auto;
     width: 46px;
     padding: 4px;
+  }
+
+  .diagram-shell__nav.is-expanded {
+    width: 88px;
+  }
+
+  .diagram-shell__nav.is-switching {
+    width: 46px;
   }
 
   .diagram-shell__nav--focused {
@@ -3761,10 +3809,6 @@ button {
     min-height: 36px;
     min-width: 56px;
   }
-
-  .settings-card {
-    border-radius: 12px;
-  }
 }
 
 /* ====== Refined history and settings drawer ====== */
@@ -4368,6 +4412,30 @@ button {
   border-top: 1px solid var(--app-border);
 }
 
+.settings-sidebar__llm-test {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.settings-sidebar__llm-test-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.settings-sidebar__llm-test-result--success {
+  color: #16a34a;
+}
+
+.settings-sidebar__llm-test-result--error {
+  color: #dc2626;
+}
+
+
 .settings-page--embedded .settings-tree-leaf {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -4590,3 +4658,41 @@ button {
   .settings-page--embedded .settings-leaf-footer-actions .ant-btn { min-height: 36px; }
 }
 
+/* markdown rendering inside agent responses */
+.agent-response__text pre {
+  background: rgba(15, 23, 42, 0.06);
+  padding: 10px 12px;
+  border-radius: 8px;
+  overflow: auto;
+  margin: 8px 0;
+}
+.agent-response__text code {
+  background: rgba(15, 23, 42, 0.08);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 0.92em;
+}
+.agent-response__text pre code {
+  background: none;
+  padding: 0;
+}
+.agent-response__text table {
+  border-collapse: collapse;
+  margin: 8px 0;
+}
+.agent-response__text th,
+.agent-response__text td {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  padding: 6px 10px;
+}
+.agent-response__text blockquote {
+  border-left: 3px solid rgba(148, 163, 184, 0.5);
+  margin: 8px 0;
+  padding-left: 10px;
+  color: var(--app-text-muted);
+}
+.agent-response__text ul,
+.agent-response__text ol {
+  padding-left: 22px;
+  margin: 6px 0;
+}

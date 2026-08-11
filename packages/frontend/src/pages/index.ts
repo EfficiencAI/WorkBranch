@@ -1,2 +1,6 @@
-export { SettingsPage } from './settings/SettingsPage'
 export { DiagramPage } from './diagram/DiagramPage'
+export { AuthPage } from './workassistant/AuthPage'
+export { WorkAssistantHomePage } from './workassistant/WorkAssistantHomePage'
+export { AssistantWizardPage } from './workassistant/AssistantWizardPage'
+export { AssistantDetailPage } from './workassistant/AssistantDetailPage'
+export { VisitorChatPage } from './visitor/VisitorChatPage'
