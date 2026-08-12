@@ -3630,6 +3630,13 @@ button {
   margin: 0 auto;
 }
 
+.flow-section__copy-markdown {
+  display: flex;
+  justify-content: flex-end;
+  max-width: 720px;
+  margin: 2px auto 0;
+}
+
 /* 活跃节点：内容框为白色面板 + 淡绿色静态光晕 */
 .flow-section__messages--active {
   position: relative;

@@ -1,26 +1,13 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
-import { SegmentType, type ContentBlock } from '@workbranch/shared';
 import type { MergedSegment } from './types';
 import { MergedSegmentType } from './types';
 import { mergeSegments } from './SegmentMerger';
+import { parseContentBlocks } from './markdownText';
 
 interface MessageRendererProps {
   content: string;
   messageId: string;
-}
-
-function parseContentBlocks(rawContent: string): ContentBlock[] {
-  if (!rawContent || !rawContent.trim()) return [];
-
-  try {
-    const blocks = JSON.parse(rawContent) as ContentBlock[];
-    if (Array.isArray(blocks)) return blocks;
-  } catch {
-    return [{ type: SegmentType.TEXT_DELTA, content: rawContent }];
-  }
-
-  return [{ type: SegmentType.TEXT_DELTA, content: rawContent }];
 }
 
 function getWorkflowLabel(type: MergedSegmentType): string {

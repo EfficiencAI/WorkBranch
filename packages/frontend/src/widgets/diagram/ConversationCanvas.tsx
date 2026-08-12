@@ -1,8 +1,8 @@
 import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowProvider, useOnViewportChange, useReactFlow } from '@xyflow/react'
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
-import { Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
-import { CloseOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
+import { App as AntdApp, Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
+import { CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -12,7 +12,7 @@ import { frontendLogger } from '../../shared/logging/logger'
 import { EmptyState, StatusTag } from '../../shared/ui'
 import { ContextMenu, ContextMenuProvider, useContextMenu } from './ContextMenu'
 import { MessageComposer } from './MessageComposer'
-import { MessageRenderer } from '../../components/messages'
+import { MessageRenderer, extractMarkdownText } from '../../components/messages'
 import type { AgentId } from '../../shared/api'
 
 type ConversationCanvasProps = {
@@ -211,6 +211,38 @@ function renderMessageList(
         </div>
       ) : null}
     </>
+  )
+}
+
+function CopyAiMessageMarkdownButton({ messages }: { messages: MessageNode[] }) {
+  const { message: messageApi } = AntdApp.useApp()
+  const hasCopyable = messages.some((message) => Boolean(message.assistantContent))
+
+  const handleCopy = useCallback(async () => {
+    const markdown = messages
+      .filter((message) => message.assistantContent)
+      .map((message) => extractMarkdownText(message.assistantContent))
+      .join('\n\n')
+    try {
+      await navigator.clipboard.writeText(markdown)
+      messageApi.success('已复制')
+    } catch {
+      messageApi.error('复制失败，请重试')
+    }
+  }, [messages, messageApi])
+
+  return (
+    <div className="flow-section__copy-markdown">
+      <Button
+        size="small"
+        type="text"
+        icon={<CopyOutlined />}
+        disabled={!hasCopyable}
+        onClick={() => void handleCopy()}
+      >
+        复制Markdown原文
+      </Button>
+    </div>
   )
 }
 
@@ -947,6 +979,7 @@ function FocusView({
                         <div className="flow-section__messages-list">
                           {renderMessageList(nodeMessages, false, null, null, 'flow-section__messages-list-inner', false)}
                         </div>
+                        <CopyAiMessageMarkdownButton messages={nodeMessages} />
                       </div>
                     ) : (
                       <div className="flow-section__empty-messages">
