@@ -31,6 +31,10 @@ const DEFAULT_SETTINGS: Record<string, unknown> = {
     default_agent: 'builtin',
     memory_mode: 'accumulate',
     memory_window_size: 3,
+    closuring_enabled: false,
+    tool_parallelism: 3,
+    closure_max_rounds: 8,
+    structured_output: false,
   },
   trae_cli: {
     executable: 'trae-cli',

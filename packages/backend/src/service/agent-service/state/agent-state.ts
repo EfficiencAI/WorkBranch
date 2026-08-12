@@ -48,6 +48,27 @@ export interface ToolCall {
   args: Record<string, unknown>;
   result?: string;
 }
+export interface ToolCallSpec {
+  call_seq: number;
+  tool_name: string;
+  tool_args?: Record<string, unknown>;
+  task_description?: string;
+}
+
+export interface ToolRecord {
+  call_seq?: number;
+  tool_name?: string;
+  args?: Record<string, unknown>;
+  status?: 'success' | 'failed';
+  result?: unknown;
+  error?: string;
+  duration_ms?: number;
+  round?: number;
+  reason?: string;
+  timestamp?: string;
+  execution_mode?: string;
+  mode_reason?: string;
+}
 
 export interface IntentAnalysis {
   intent_type: string;
@@ -56,6 +77,7 @@ export interface IntentAnalysis {
   suggested_tools: string[];
   complexity: string;
   confidence: number;
+  rewritten_query?: string;
 }
 
 export interface TodoItem {
@@ -123,6 +145,17 @@ export interface AgentState {
   todo_status?: 'pending' | 'in_progress' | 'completed' | 'failed' | 'continue' | 'blocked' | 'step_done';
   next_action?: NextAction;
   invalid_tool_retry_count?: number;
+  tool_records?: ToolRecord[];
+  pending_batch?: { reason?: string; calls?: ToolCallSpec[] } | null;
+  pending_final_text?: string | null;
+  parse_error?: string | null;
+  parse_error_raw?: string | null;
+  decision_error_count?: number;
+  acting_failures?: ToolRecord[] | null;
+  closur_feedback?: string | null;
+  closure_rounds?: number;
+  output_type?: 'tool_calls' | 'text' | 'done' | null;
+  _route_target?: string | null;
 }
 
 export const MAX_DIRECT_ITERATIONS = 32;

@@ -1,8 +1,8 @@
-import { StateGraph, END } from '@langchain/langgraph';
-import type { AgentState, ToolCall } from '../state/agent-state';
+import type { AgentState } from '../state/agent-state';
 import type { MessageContext } from './director-agent/director-agent';
-import { createOrchestratorGraphV3, getLastUserMessageText } from './director-agent/director-agent';
-import { runToolExecution } from './subgraphs/tool-execution-graph';
+import { createOrchestratorGraphV3 } from './director-agent/director-agent';
+import { llmService } from '../service/llm-service';
+import { buildV4ChildLoop } from './v4';
 import { persistence } from './orchestrator-v2';
 import { logger } from '../../../core/logging';
 
@@ -78,156 +78,6 @@ const AGENT_GRAPH_CONFIG: Record<string, { execution_mode: string | null }> = {
   plan_agent: { execution_mode: 'PLAN' },
 };
 
-function buildDefaultTools(agentType: string, userMessage: string): ToolCall[] {
-  if (agentType === 'explore_agent' || agentType === 'review_agent') {
-    return [
-      { tool: 'thinking', args: { description: userMessage } },
-      { tool: 'chat', args: { description: userMessage } },
-    ];
-  }
-  return [];
-}
-
-const AgentStateChannels = {
-  messages: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
-  current_user_message_text: { value: (_a: unknown, b: unknown) => b, default: () => '' },
-  current_user_message_parts: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  workspace_id: { value: (_a: unknown, b: unknown) => b, default: () => '' },
-  plan: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  current_step: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  results: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
-  plan_failed: { value: (_a: unknown, b: unknown) => b, default: () => false },
-  explore_result: { value: (_a: unknown, b: unknown) => b, default: () => null },
-  tool_history: { value: (a: unknown[], b: unknown[]) => a.concat(b), default: () => [] },
-  replan_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  agent_type: { value: (_a: unknown, b: unknown) => b, default: () => '' },
-  is_root_graph: { value: (_a: unknown, b: unknown) => b, default: () => false },
-  parent_chain_messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  current_conversation_messages: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  execution_mode: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  mode_reason: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  web_search_enabled: { value: (_a: unknown, b: unknown) => b, default: () => true },
-  suggested_tools: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  suggested_subagent: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  in_plan_mode: { value: (_a: unknown, b: unknown) => b, default: () => false },
-  active_subagent: { value: (_a: unknown, b: unknown) => b, default: () => false },
-  pending_tools: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  has_tool_use: { value: (_a: unknown, b: unknown) => b, default: () => false },
-  final_reply: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  plan_file: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  plan_content: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  forced_execution_mode: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  last_tool_result: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  last_tool_name: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  last_tool_success: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  last_tool_error: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  iteration_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  max_iterations: { value: (_a: unknown, b: unknown) => b, default: () => 32 },
-  todos: { value: (_a: unknown, b: unknown) => b, default: () => [] },
-  current_todo_index: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  current_todo_goal: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  current_todo_done_when: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  current_todo_iteration_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  todo_max_iterations: { value: (_a: unknown, b: unknown) => b, default: () => 32 },
-  todo_status: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  next_action: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-  invalid_tool_retry_count: { value: (_a: unknown, b: unknown) => b, default: () => 0 },
-  intent_analysis: { value: (_a: unknown, b: unknown) => b, default: () => undefined },
-};
-
-function createChildAgentGraph(
-  agentType: string,
-  messageContext?: MessageContext,
-) {
-  const graph = new StateGraph({
-    channels: AgentStateChannels,
-  } as any);
-
-  async function executeChildNode(state: AgentState): Promise<Partial<AgentState>> {
-    const pendingTools = state.pending_tools || [];
-    if (!pendingTools || pendingTools.length === 0) {
-      return {
-        final_reply: state.final_reply,
-        has_tool_use: false,
-        pending_tools: [],
-      };
-    }
-
-    const toolEntry = pendingTools[0];
-    const toolName = toolEntry.tool;
-    const toolArgs = toolEntry.args || {};
-
-    const toolResult = await runToolExecution({
-      toolName,
-      toolArgs,
-      workspaceId: state.workspace_id,
-      previousCalls: state.tool_history || [],
-      taskDescription: (toolArgs.description as string) || '',
-      previousResults: (state.tool_history || [])
-        .filter((item: ToolCall) => item.result !== undefined)
-        .map((item: ToolCall) => String(item.result || '')),
-      agentType,
-      messageContext: messageContext as unknown as Record<string, unknown>,
-    });
-
-    const resultStr = toolResult.result !== null && toolResult.result !== undefined
-      ? String(toolResult.result)
-      : '';
-
-    const newHistory: ToolCall[] = [
-      ...(state.tool_history || []),
-      { tool: toolName, args: toolArgs, result: toolResult.result as string },
-    ];
-
-    if (toolName === 'thinking') {
-      let remaining = pendingTools.slice(1);
-      if (!remaining || remaining.length === 0) {
-        remaining = [{ tool: 'chat', args: { description: getLastUserMessageText(state) } }];
-      }
-      return {
-        tool_history: newHistory,
-        pending_tools: remaining,
-        has_tool_use: remaining.length > 0,
-      };
-    }
-
-    if (toolName === 'chat') {
-      return {
-        tool_history: newHistory,
-        pending_tools: [],
-        has_tool_use: false,
-        final_reply: resultStr,
-      };
-    }
-
-    const remaining = pendingTools.slice(1);
-    return {
-      tool_history: newHistory,
-      pending_tools: remaining,
-      has_tool_use: remaining.length > 0,
-      final_reply: resultStr || state.final_reply,
-    };
-  }
-
-  function routeChild(state: AgentState): 'execute' | typeof END {
-    if (state.final_reply) return END;
-    if (state.pending_tools && state.pending_tools.length > 0) return 'execute';
-    return END;
-  }
-
-  graph.addNode('execute', executeChildNode as any);
-  (graph as any).setConditionalEntryPoint(routeChild as any, {
-    execute: 'execute',
-    [END]: END,
-  });
-  (graph as any).addConditionalEdges('execute', routeChild as any, {
-    execute: 'execute',
-    [END]: END,
-  });
-
-  return graph.compile();
-}
-
 function buildInitialChildState(
   userMessage: string,
   workspaceId: string,
@@ -252,8 +102,8 @@ function buildInitialChildState(
     current_conversation_messages: currentConversationMessages || [],
     execution_mode: 'DIRECT',
     web_search_enabled: true,
-    pending_tools: buildDefaultTools(agentType, userMessage),
-    has_tool_use: true,
+    pending_tools: [],
+    has_tool_use: false,
     final_reply: '',
     iteration_count: 0,
     max_iterations: 32,
@@ -261,6 +111,17 @@ function buildInitialChildState(
     current_todo_index: 0,
     todo_max_iterations: 32,
     invalid_tool_retry_count: 0,
+    tool_records: [],
+    pending_batch: null,
+    pending_final_text: null,
+    parse_error: null,
+    parse_error_raw: null,
+    decision_error_count: 0,
+    acting_failures: null,
+    closur_feedback: null,
+    closure_rounds: 0,
+    output_type: null,
+    _route_target: null,
   };
 }
 
@@ -268,11 +129,14 @@ function createAgentGraph(
   agentType: string,
   messageContext?: MessageContext,
 ) {
-  if (agentType === 'explore_agent' || agentType === 'review_agent') {
-    return createChildAgentGraph(agentType, messageContext);
+  if (agentType === 'director_agent') {
+    return createOrchestratorGraphV3(messageContext);
   }
 
-  return createOrchestratorGraphV3(messageContext);
+  return buildV4ChildLoop({
+    llmService,
+    messageContext: messageContext as unknown as Record<string, unknown>,
+  });
 }
 
 export async function runAgentGraph(
@@ -324,11 +188,6 @@ export async function runAgentGraph(
 
     if (config.execution_mode) {
       initialState.execution_mode = config.execution_mode as 'DIRECT' | 'PLAN';
-      initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
-      if (!initialState.pending_tools || initialState.pending_tools.length === 0) {
-        initialState.pending_tools = buildDefaultTools(agentType, getLastUserMessageText(initialState));
-        initialState.has_tool_use = Boolean(initialState.pending_tools?.length);
-      }
     }
 
     if (forcedExecutionMode) {
@@ -336,7 +195,10 @@ export async function runAgentGraph(
     }
 
     const graph = createAgentGraph(agentType, messageContext);
-    const finalState = await graph.invoke(initialState as unknown as Record<string, unknown>) as AgentState;
+    const finalState = await graph.invoke(
+      initialState as unknown as Record<string, unknown>,
+      { recursionLimit: 200 },
+    ) as AgentState;
 
     if (persistState) {
       persistence.save(workspaceId, finalState as unknown as Record<string, unknown>);
