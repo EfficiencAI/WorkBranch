@@ -146,12 +146,12 @@ export function MessageComposer({
       onChange={onAgentChange}
       style={{ minWidth: 112 }}
       suffixIcon={<SwapOutlined />}
-      labelRender={() => (selectedAgentId === 'builtin' ? '内置 Agent' : 'Trae CLI')}
+      labelRender={() => (selectedAgentId === 'builtin' ? 'WB Agent' : 'Trae CLI')}
       options={
         isAndroidPlatform()
-          ? [{ value: 'builtin', label: 'Default' }]
+          ? [{ value: 'builtin', label: 'WB Agent' }]
           : [
-              { value: 'builtin', label: 'Default' },
+              { value: 'builtin', label: 'WB Agent' },
               { value: 'trae', label: 'Trae CLI' },
             ]
       }

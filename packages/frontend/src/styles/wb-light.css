@@ -186,6 +186,14 @@
   background: rgba(241, 245, 249, 0.9);
 }
 
+:root[data-theme='light'] .focus-overlay .message-composer--focused textarea {
+  background: rgba(226, 232, 240, 0.72);
+}
+
+:root[data-theme='light'] .message-composer--empty textarea.ant-input {
+  background: rgba(226, 232, 240, 0.72);
+}
+
 :root[data-theme='light'] .focus-overlay .message-composer__send-btn.ant-btn-dangerous {
   color: #b91c1c;
   background: rgba(239, 68, 68, 0.1);
@@ -194,6 +202,34 @@
 /* ---------- 画布节点 ---------- */
 :root[data-theme='light'] .conversation-node__overview-id.ant-typography {
   color: rgba(100, 116, 139, 0.85);
+}
+
+:root[data-theme='light'] .conversation-node__prompt-text.ant-typography {
+  color: #334155;
+}
+
+:root[data-theme='light'] .conversation-node__overview-header .ant-tag {
+  color: #475569;
+  border-color: rgba(148, 163, 184, 0.32);
+  background: rgba(241, 245, 249, 0.9);
+}
+
+:root[data-theme='light'] .conversation-node__overview-header .ant-tag-success {
+  color: #047857;
+  border-color: rgba(5, 150, 105, 0.24);
+  background: rgba(5, 150, 105, 0.08);
+}
+
+:root[data-theme='light'] .conversation-node__overview-header .ant-tag-processing {
+  color: #1d4ed8;
+  border-color: rgba(59, 130, 246, 0.24);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+:root[data-theme='light'] .conversation-node__overview-header .ant-tag-error {
+  color: #b91c1c;
+  border-color: rgba(239, 68, 68, 0.24);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 :root[data-theme='light'] .conversation-node__meta--root {

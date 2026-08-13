@@ -2,7 +2,7 @@ import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowPr
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { App as AntdApp, Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
-import { AimOutlined, CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
+import { AimOutlined, CalendarOutlined, CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -276,7 +276,7 @@ function OverviewNodePage({ conversation, searchQuery }: { conversation: Convers
       </div>
 
       <div className="conversation-node__overview-footer">
-        <span className="conversation-node__meta"><MessageOutlined />{conversation.messageCount} 条消息</span>
+        <span className="conversation-node__meta"><CalendarOutlined />{conversation.messageCount} 条消息</span>
         <span className={conversation.parentConversationId ? 'conversation-node__meta' : 'conversation-node__meta conversation-node__meta--root'}>
           {conversation.parentConversationId ? `父节点 ${conversation.parentConversationId}` : '根对话'}
         </span>
@@ -1517,6 +1517,7 @@ function FlowViewport({
   const conversationMessagesCache = useChatWorkbenchStore((state) => state.conversationMessagesCache)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
+  const initializedMobileViewportRef = useRef<string | null>(null)
   const [, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
   const [nodesOutsideViewport, setNodesOutsideViewport] = useState(false)
@@ -1575,6 +1576,43 @@ function FlowViewport({
   }, [searchResults.length])
 
   const overviewLayoutMap = useMemo(() => buildTreeLayout(conversationNodes), [conversationNodes])
+  const rootConversation = useMemo(
+    () => conversationNodes
+      .filter((conversation) => !conversation.parentConversationId)
+      .sort(
+        (left, right) =>
+          (left.createdAt ?? '').localeCompare(right.createdAt ?? '') || left.conversationId.localeCompare(right.conversationId),
+      )[0] ?? null,
+    [conversationNodes],
+  )
+  const initialFitViewOptions = useMemo(
+    () => responsive.isMobile && rootConversation
+      ? { nodes: [{ id: rootConversation.conversationId }], minZoom: 1, maxZoom: 1, padding: 0 }
+      : { maxZoom: 1, padding: 0.1 },
+    [responsive.isMobile, rootConversation],
+  )
+
+  useEffect(() => {
+    if (!responsive.isMobile || !rootConversation || !viewportRef.current) return
+
+    const viewportKey = `${sessionDetail?.id ?? 'session'}:${rootConversation.conversationId}`
+    if (initializedMobileViewportRef.current === viewportKey) return
+    initializedMobileViewportRef.current = viewportKey
+
+    const timer = window.setTimeout(() => {
+      const viewportWidth = viewportRef.current?.clientWidth ?? window.innerWidth
+      const position = resolveConversationPosition(rootConversation, overviewLayoutMap)
+      const nodeWidth = 260
+      const nodeHeight = 172
+      void reactFlow.setViewport({
+        x: (viewportWidth - nodeWidth) / 2 - (position.x - nodeWidth / 2),
+        y: 94 - (position.y - nodeHeight / 2),
+        zoom: 1,
+      })
+    })
+
+    return () => window.clearTimeout(timer)
+  }, [overviewLayoutMap, reactFlow, responsive.isMobile, rootConversation, sessionDetail?.id])
 
   useEffect(() => {
     if (!selectedSearchConversation || focusedConversation) return
@@ -2111,6 +2149,7 @@ function FlowViewport({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView={!focusedConversation}
+        fitViewOptions={initialFitViewOptions}
         panOnDrag={conversationNodes.length > 0}
         panOnScroll={false}
         zoomOnScroll={conversationNodes.length > 0}
