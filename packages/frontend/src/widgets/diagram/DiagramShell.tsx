@@ -1,5 +1,5 @@
 import { App as AntdApp, Button, Checkbox, ConfigProvider, Drawer, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
-import { ApartmentOutlined, FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
+import { FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -247,16 +247,16 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const handleCreateSession = useCallback(async () => {
     try {
       const detail = await createSession()
-      // 新创建的 session 还没有对话，conversations=[]。
-      // 此时调用 enterSessionContext 会因 !summaries.length 立即 resetConversationState，
-      // 属于无效操作。延迟到创建对话后再统一进入上下文。
-      if (detail && detail.conversations && detail.conversations.length > 0) {
-        await runSessionContext(detail)
+      if (!detail) {
+        return
       }
+
+      await runSessionContext(detail)
+      setActiveSidebar(null)
     } catch (caughtError) {
       onRequestError(caughtError)
     }
-  }, [createSession, onRequestError, runSessionContext])
+  }, [createSession, onRequestError, runSessionContext, setActiveSidebar])
 
   const handleDeleteSession = useCallback(
     async (sessionId: SessionId) => {
@@ -553,15 +553,6 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
           </nav>
         ) : (
             <ProductRail product="wb" onSwitch={handleProductSwitch}>
-              <Tooltip title="对话图" placement="right">
-                <Button
-                  type="text"
-                  className={`diagram-shell__rail-button ${activeSidebar === null && !isSettingsRoute ? 'diagram-shell__rail-button--active' : ''}`}
-                  aria-label="对话图"
-                  icon={<ApartmentOutlined />}
-                  onClick={collapseNav}
-                />
-              </Tooltip>
               <Tooltip title="会话历史" placement="right">
                 <Button
                   type="text"

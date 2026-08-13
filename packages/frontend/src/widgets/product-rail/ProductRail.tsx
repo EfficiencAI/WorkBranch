@@ -1,4 +1,4 @@
-import { Button, Tooltip } from 'antd'
+import { Button } from 'antd'
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { useResponsive } from '../../shared/lib'
@@ -71,26 +71,22 @@ export function ProductRail({ product, onSwitch, className = '', children }: Pro
   return (
     <nav ref={railRef} className={navClassName} aria-label="产品切换" aria-expanded={open}>
       <div className="product-switch">
-        <Tooltip title={responsive.isMobile ? null : `${meta.name}（当前产品）`} placement="bottom">
-          <Button
-            type="text"
-            className="diagram-shell__brand is-current"
-            aria-label={`${meta.name}（当前产品）`}
-            onClick={toggleOpen}
-          >
-            {meta.label}
-          </Button>
-        </Tooltip>
-        <Tooltip title={responsive.isMobile ? null : `切换到 ${otherMeta.name}`} placement="bottom">
-          <Button
-            type="text"
-            className="diagram-shell__brand is-alt"
-            aria-label={`切换到 ${otherMeta.name}`}
-            onClick={handleSwitch}
-          >
-            {otherMeta.label}
-          </Button>
-        </Tooltip>
+        <Button
+          type="text"
+          className="diagram-shell__brand is-current"
+          aria-label={`${meta.name}（当前产品）`}
+          onClick={toggleOpen}
+        >
+          {meta.label}
+        </Button>
+        <Button
+          type="text"
+          className="diagram-shell__brand is-alt"
+          aria-label={`切换到 ${otherMeta.name}`}
+          onClick={handleSwitch}
+        >
+          {otherMeta.label}
+        </Button>
       </div>
       {children ? <div className="rail-menu">{children}</div> : null}
     </nav>

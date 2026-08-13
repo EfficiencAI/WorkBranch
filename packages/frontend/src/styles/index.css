@@ -1207,11 +1207,13 @@ button {
 }
 
 .diagram-shell__nav.is-expanded {
-  width: 102px;
+  width: 104px;
+  gap: 0;
 }
 
 .diagram-shell__nav.is-switching {
   width: 54px;
+  gap: 0;
 }
 
 .diagram-shell__brand.is-alt.ant-btn {
@@ -2980,7 +2982,7 @@ button {
   }
 
   .diagram-shell__nav.is-expanded {
-    width: 88px;
+    width: 90px;
   }
 
   .diagram-shell__nav.is-switching {
