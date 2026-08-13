@@ -53,6 +53,10 @@
   box-shadow: var(--app-shadow-sm);
 }
 
+:root[data-theme='light'] .conversation-canvas__return-viewport.ant-btn:hover,
+:root[data-theme='light'] .conversation-canvas__return-viewport.ant-btn:focus-visible {
+  color: #047857;
+}
 :root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn,
 :root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn:hover,
 :root[data-theme='light'] .diagram-shell__rail-button--exit.ant-btn:focus-visible {

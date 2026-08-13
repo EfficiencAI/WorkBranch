@@ -1521,6 +1521,42 @@ button {
   height: 100vh;
   overflow: hidden;
 }
+.conversation-canvas__return-viewport.ant-btn {
+  position: absolute;
+  left: 18px;
+  bottom: max(18px, env(safe-area-inset-bottom, 0px));
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  min-width: 40px;
+  height: 40px;
+  padding: 0;
+  border: 1px solid var(--app-border-strong);
+  border-radius: 6px;
+  color: var(--app-text-muted);
+  background: var(--app-panel-bg-strong);
+  box-shadow: var(--app-shadow-sm);
+}
+
+.conversation-canvas__return-viewport.ant-btn:hover,
+.conversation-canvas__return-viewport.ant-btn:focus-visible {
+  border-color: rgba(52, 211, 153, 0.46);
+  color: #6ee7b7;
+  background: var(--app-panel-bg-strongest);
+}
+
+@media screen and (max-width: 767px) {
+  .conversation-canvas__return-viewport.ant-btn {
+    left: 10px;
+    bottom: max(10px, env(safe-area-inset-bottom, 0px));
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
 .conversation-canvas__flow {
   width: 100%;
   height: 100%;

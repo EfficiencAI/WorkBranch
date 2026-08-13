@@ -2,7 +2,7 @@ import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowPr
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { App as AntdApp, Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
-import { CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
+import { AimOutlined, CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -1519,6 +1519,7 @@ function FlowViewport({
   const savedViewportRef = useRef<{ x: number; y: number; zoom: number } | null>(null)
   const [, setViewportWidth] = useState(() => window.innerWidth)
   const [refreshMaskVisible, setRefreshMaskVisible] = useState(false)
+  const [nodesOutsideViewport, setNodesOutsideViewport] = useState(false)
   const lastZoomRef = useRef<number>(1)
   const isRefreshingRef = useRef(false)
   const zoomDebounceTimerRef = useRef<number | null>(null)
@@ -1824,9 +1825,38 @@ function FlowViewport({
     })
   }, [])
 
+  const updateNodesOutsideViewport = useCallback(() => {
+    const viewportElement = viewportRef.current
+    if (!viewportElement || focusedConversationId || conversationNodes.length === 0) {
+      setNodesOutsideViewport(false)
+      return
+    }
+
+    const viewportRect = viewportElement.getBoundingClientRect()
+    const nodeElements = viewportElement.querySelectorAll('.react-flow__node')
+    const hasVisibleNode = Array.from(nodeElements).some((nodeElement) => {
+      const nodeRect = nodeElement.getBoundingClientRect()
+      return nodeRect.right > viewportRect.left
+        && nodeRect.left < viewportRect.right
+        && nodeRect.bottom > viewportRect.top
+        && nodeRect.top < viewportRect.bottom
+    })
+    setNodesOutsideViewport(!hasVisibleNode)
+  }, [conversationNodes.length, focusedConversationId])
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(updateNodesOutsideViewport)
+    return () => window.cancelAnimationFrame(frame)
+  }, [conversationNodes, updateNodesOutsideViewport])
+
+  const handleReturnToNodes = useCallback(() => {
+    const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 400
+    void reactFlow.fitView({ duration, padding: 0.2 })
+  }, [reactFlow])
 
   useOnViewportChange({
     onChange: (viewport: Viewport) => {
+      window.requestAnimationFrame(updateNodesOutsideViewport)
       if (Math.abs(viewport.zoom - lastZoomRef.current) > 0.01) {
         lastZoomRef.current = viewport.zoom
         if (zoomDebounceTimerRef.current !== null) {
@@ -2121,6 +2151,21 @@ function FlowViewport({
         />
       </ReactFlow>
 
+      {nodesOutsideViewport && !focusedConversation ? (
+        <Tooltip title={responsive.isMobile ? null : '定位全部节点'}>
+          <Button
+            type="text"
+            className="conversation-canvas__return-viewport nodrag nopan"
+            aria-label="定位全部节点"
+            icon={<AimOutlined />}
+            onPointerDown={stopEvent}
+            onClick={(event) => {
+              stopEvent(event)
+              handleReturnToNodes()
+            }}
+          />
+        </Tooltip>
+      ) : null}
 
       {!conversationNodes.length ? (
         sessionDetail ? (
