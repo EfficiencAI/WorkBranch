@@ -142,6 +142,21 @@ function clearLastSavedSeq(conversationId: string): void {
   streamSeqState.delete(conversationId)
 }
 
+let coldStartSessionPromise: Promise<SessionDetail | null> | null = null
+let coldStartHandled = false
+
+async function resolveColdStartSession(): Promise<SessionDetail | null> {
+  const sessionStore = useSessionStore.getState()
+  await sessionStore.loadSessions()
+
+  const currentDetail = useSessionStore.getState().currentSessionDetail
+  if (!currentDetail || (currentDetail.conversations?.length ?? 0) > 0) {
+    return await useSessionStore.getState().createSession()
+  }
+
+  return currentDetail
+}
+
 export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
   conversationDetail: null,
   workspaceDetail: null,
@@ -285,9 +300,25 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
     try {
       set({ loading: true, error: null })
 
-      await useSessionStore.getState().loadSessions(preferredSessionId)
-      const { currentSessionDetail } = useSessionStore.getState()
-      await get().enterSessionContext(currentSessionDetail)
+      if (preferredSessionId !== null && preferredSessionId !== undefined) {
+        await useSessionStore.getState().loadSessions(preferredSessionId)
+        await get().enterSessionContext(useSessionStore.getState().currentSessionDetail)
+        return
+      }
+
+      if (!coldStartHandled) {
+        coldStartSessionPromise ??= resolveColdStartSession()
+        try {
+          await get().enterSessionContext(await coldStartSessionPromise)
+          coldStartHandled = true
+          return
+        } finally {
+          coldStartSessionPromise = null
+        }
+      }
+
+      await useSessionStore.getState().loadSessions()
+      await get().enterSessionContext(useSessionStore.getState().currentSessionDetail)
     } catch (caughtError) {
       set({ error: getErrorMessage(caughtError, '工作台数据加载失败') })
     } finally {

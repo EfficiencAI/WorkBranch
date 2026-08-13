@@ -2,7 +2,7 @@ import { Background, BackgroundVariant, Handle, Position, ReactFlow, ReactFlowPr
 import type { Edge, Node, NodeProps, Viewport } from '@xyflow/react'
 import '@xyflow/react/dist/style.css'
 import { App as AntdApp, Button, Card, Input, Spin, Space, Typography, Tooltip } from 'antd'
-import { CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
+import { CloseOutlined, CopyOutlined, DownOutlined, InfoCircleOutlined, MenuFoldOutlined, MenuUnfoldOutlined, MessageOutlined, PlusOutlined, SearchOutlined, UpOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { ConversationDetail, ConversationNode, MessageNode, SessionDetail, SessionId } from '../../entities'
@@ -1499,11 +1499,11 @@ function FlowViewport({
   messagesError,
   sending,
   selectedAgentId,
+  canCreateConversationOnSend,
   initialLoading,
   onSendMessage,
   onAgentChange,
   onStopMessage,
-  onCreateConversation,
   onCreateSession,
   onNavPathTailChange,
 }: ConversationCanvasProps) {
@@ -1824,6 +1824,7 @@ function FlowViewport({
     })
   }, [])
 
+
   useOnViewportChange({
     onChange: (viewport: Viewport) => {
       if (Math.abs(viewport.zoom - lastZoomRef.current) > 0.01) {
@@ -2080,10 +2081,10 @@ function FlowViewport({
         edges={flowEdges}
         nodeTypes={nodeTypes}
         fitView={!focusedConversation}
-        panOnDrag={true}
+        panOnDrag={conversationNodes.length > 0}
         panOnScroll={false}
-        zoomOnScroll
-        zoomOnPinch
+        zoomOnScroll={conversationNodes.length > 0}
+        zoomOnPinch={conversationNodes.length > 0}
         zoomOnDoubleClick={false}
         nodesConnectable={false}
         elementsSelectable
@@ -2120,30 +2121,43 @@ function FlowViewport({
         />
       </ReactFlow>
 
+
       {!conversationNodes.length ? (
-        <div className="conversation-canvas__focused-empty-state">
-          <EmptyState
-            title="当前 session 暂无对话节点"
-            description={sessionDetail ? '可右键空白处创建根对话，或在已有对话上右键创建子对话。' : '请先创建或切换到一个会话。'}
-            action={
-              sessionDetail ? (
-                <Button onClick={() => void onCreateConversation(null)}>
-                  创建第一个对话节点
-                </Button>
-              ) : onCreateSession ? (
-                <Button
-                  type="primary"
-                  onClick={async () => {
-                    await onCreateSession()
-                    await onCreateConversation(null)
-                  }}
-                >
+        sessionDetail ? (
+          <section className="conversation-canvas__empty-chat" aria-label="开始新对话">
+            <div className="conversation-canvas__empty-welcome">
+              <span className="conversation-canvas__empty-mark" aria-hidden="true"><PlusOutlined /></span>
+              <Typography.Title level={1}>今天想推进什么？</Typography.Title>
+              <Typography.Text type="secondary">从一个问题、想法或任务开始</Typography.Text>
+            </div>
+            <div className="conversation-canvas__empty-composer">
+              <MessageComposer
+                selectedConversationId={null}
+                selectedConversationLabel={null}
+                sending={sending}
+                selectedAgentId={selectedAgentId}
+                allowCreateOnSend={canCreateConversationOnSend}
+                variant="empty"
+                autoFocus
+                onSend={onSendMessage}
+                onAgentChange={onAgentChange}
+                onStop={onStopMessage}
+              />
+            </div>
+          </section>
+        ) : (
+          <div className="conversation-canvas__focused-empty-state">
+            <EmptyState
+              title="当前暂无会话"
+              description="创建会话后即可开始输入。"
+              action={onCreateSession ? (
+                <Button type="primary" onClick={() => void onCreateSession()}>
                   创建新会话
                 </Button>
-              ) : undefined
-            }
-          />
-        </div>
+              ) : undefined}
+            />
+          </div>
+        )
       ) : null}
 
     </div>

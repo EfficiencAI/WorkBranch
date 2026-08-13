@@ -2,6 +2,7 @@ import { Button, Checkbox, Input, Select, Space, Switch, Tag, Tooltip, Typograph
 import { LoadingOutlined, PaperClipOutlined, SendOutlined, StopOutlined, SwapOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
+import type { TextAreaRef } from 'antd/es/input/TextArea'
 import { useSettings } from '../../app/settings'
 import { selectChatWorkbenchWorkspaceDetail, useChatWorkbenchStore } from '../../features/chat-workbench'
 import { uploadWorkspaceFiles } from '../../shared/api/workspace'
@@ -20,6 +21,8 @@ type MessageComposerProps = {
   sending: boolean
   selectedAgentId: AgentId
   allowCreateOnSend?: boolean
+  variant?: 'default' | 'empty'
+  autoFocus?: boolean
   onSend: (message: string, enableContext: boolean) => Promise<boolean>
   onAgentChange: (agentId: AgentId) => void
   onStop?: () => Promise<void> | void
@@ -40,6 +43,8 @@ export function MessageComposer({
   sending,
   selectedAgentId,
   allowCreateOnSend = false,
+  variant = 'default',
+  autoFocus = false,
   onSend,
   onAgentChange,
   onStop,
@@ -57,6 +62,7 @@ export function MessageComposer({
   const [uploading, setUploading] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const textAreaRef = useRef<TextAreaRef>(null)
   const workspaceId = useChatWorkbenchStore(selectChatWorkbenchWorkspaceDetail)?.id ?? null
   const hasSendTarget = selectedConversationId !== null
   const messageSendShortcutsReversed =
@@ -69,7 +75,16 @@ export function MessageComposer({
       setCollapsed(false)
     }
   }, [selectedConversationId])
+  useEffect(() => {
+    if (!autoFocus) {
+      return
+    }
 
+    const frame = window.requestAnimationFrame(() => {
+      textAreaRef.current?.focus({ cursor: 'end', preventScroll: true })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [autoFocus])
   const updateMessage = useCallback((value: string) => {
     setMessage(value)
     saveComposerDraft(selectedConversationId, value)
@@ -143,6 +158,52 @@ export function MessageComposer({
     />
   )
 
+
+  if (!hasSendTarget && variant === 'empty') {
+    return (
+      <div className="message-composer message-composer--empty">
+        <Input.TextArea
+          ref={textAreaRef}
+          rows={2}
+          value={message}
+          onChange={(event) => updateMessage(event.target.value)}
+          onCompositionEnd={(event) => updateMessage(event.currentTarget.value)}
+          onBlur={(event) => { if (event.currentTarget.value) updateMessage(event.currentTarget.value) }}
+          onKeyDown={handleKeyDown}
+          placeholder="给 WorkBranch 发消息"
+          autoSize={{ minRows: 2, maxRows: 5 }}
+        />
+        <div className="message-composer__empty-toolbar">
+          <div className="message-composer__toolbar-left">
+            <Tooltip title="首条消息发送后即可添加附件">
+              <Button
+                type="text"
+                className="message-composer__tool-btn message-composer__tool-btn--icon"
+                aria-label="添加附件"
+                icon={<PaperClipOutlined />}
+                disabled
+              />
+            </Tooltip>
+          </div>
+          <div className="message-composer__toolbar-right">
+            <Space size={5} align="center" wrap={false}>
+              {agentSelect}
+              <Tooltip title="发送">
+                <Button
+                  type="primary"
+                  className="message-composer__send-btn"
+                  aria-label="发送"
+                  icon={<SendOutlined />}
+                  disabled={!message.trim() || !allowCreateOnSend}
+                  onClick={() => void handleSend()}
+                />
+              </Tooltip>
+            </Space>
+          </div>
+        </div>
+      </div>
+    )
+  }
   if (collapsed) {
     return (
       <div className="message-composer message-composer--collapsed">

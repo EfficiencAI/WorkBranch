@@ -137,12 +137,9 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         console.warn('[createSession] API返回无效ID:', detail.id, '使用列表fallback:', resolvedId)
       }
 
-      set({ sessionList: nextSessions, currentSessionId: resolvedId, currentSessionDetail: null })
-
-      // 不在此处调用 loadSessionDetail：新创建的 session 还没有对话，
-      // 拿到的 conversations=[] 会导致 enterSessionContext 立即重置为空状态。
-      // 延迟到创建对话后再统一加载完整 detail。
-      return { ...detail, id: resolvedId, conversations: [] }
+      const createdDetail = { ...detail, id: resolvedId, conversations: [] }
+      set({ sessionList: nextSessions, currentSessionId: resolvedId, currentSessionDetail: createdDetail })
+      return createdDetail
     } catch (caughtError) {
       set({ sessionError: getErrorMessage(caughtError, '会话创建失败') })
       return null
