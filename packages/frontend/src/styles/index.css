@@ -4877,10 +4877,11 @@ button {
 }
 
 .message-composer--empty textarea.ant-input {
+  width: calc(100% - 10px);
   margin: 5px 5px 0;
   min-height: 60px !important;
   max-height: 150px;
-  padding: 13px 14px 6px;
+  padding: 11px 13px 6px;
   border: 0;
   border-radius: 6px;
   outline: 0;
