@@ -173,17 +173,30 @@ export function MessageComposer({
           placeholder="给 WorkBranch 发消息"
           autoSize={{ minRows: 2, maxRows: 5 }}
         />
+
+        {attachments.length > 0 || uploading || attachError ? (
+          <div className="message-composer__attachments" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }}>
+            {attachments.map((name) => (
+              <Tag key={name} closable onClose={() => setAttachments((prev) => prev.filter((n) => n !== name))}>{name}</Tag>
+            ))}
+            {uploading ? <Tag icon={<LoadingOutlined spin />}>上传中…</Tag> : null}
+            {attachError ? <Tag color="error">上传失败：{attachError}</Tag> : null}
+          </div>
+        ) : null}
+
         <div className="message-composer__empty-toolbar">
           <div className="message-composer__toolbar-left">
-            <Tooltip title="首条消息发送后即可添加附件">
+            <Tooltip title={workspaceId ? "添加附件" : "暂无工作区，无法上传附件"}>
               <Button
                 type="text"
                 className="message-composer__tool-btn message-composer__tool-btn--icon"
                 aria-label="添加附件"
                 icon={<PaperClipOutlined />}
-                disabled
+                disabled={!workspaceId || uploading}
+                onClick={() => fileInputRef.current?.click()}
               />
             </Tooltip>
+            <input ref={fileInputRef} type="file" multiple style={{ display: "none" }} onChange={(e) => void handleAttachFiles(e)} />
           </div>
           <div className="message-composer__toolbar-right">
             <Space size={5} align="center" wrap={false}>

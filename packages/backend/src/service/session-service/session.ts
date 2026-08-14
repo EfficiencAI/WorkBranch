@@ -65,6 +65,7 @@ export class SessionService {
       this.deleteConversation(conv.id);
     }
     conversationDAO.deleteSession(sessionId);
+    workspaceService.removeBySessionId(String(sessionId));
     return true;
   }
 

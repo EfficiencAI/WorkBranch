@@ -269,7 +269,13 @@ export const useChatWorkbenchStore = create<ChatWorkbenchStore>((set, get) => ({
 
     const summaries = sessionDetail.conversations ?? (await fetchSessionConversations(sessionDetail.id))
     if (!summaries.length) {
-      get().resetConversationState()
+      set({ conversationDetail: null, conversationNodes: [], conversationMessages: [], messagesError: null })
+      const workspace = sessionDetail.workspaceId
+        ? await fetchWorkspaceDetail(sessionDetail.workspaceId).catch((caughtError) =>
+            isApiError(caughtError) && caughtError.status === 404 ? null : Promise.reject(caughtError),
+          )
+        : null
+      set({ workspaceDetail: workspace })
       return 'empty-session'
     }
 

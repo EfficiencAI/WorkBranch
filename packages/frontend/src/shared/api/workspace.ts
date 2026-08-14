@@ -25,6 +25,7 @@ function toSessionDetail(payload: Record<string, unknown>): SessionDetail {
   return {
     ...toSessionSummary(payload),
     userId: typeof payload.user_id === 'number' ? payload.user_id : undefined,
+    workspaceId: payload.workspace_id ? String(payload.workspace_id) : null,
   }
 }
 

@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { fileStorage } from '../../../data/file-storage';
+import { conversationDAO } from '../../../data';
 
 interface WorkspaceInfo {
   id: string;
@@ -126,7 +127,7 @@ class WorkspaceServiceImpl {
     }
   }
 
-  register(workspaceId?: string, sessionId?: string): string {
+  register(workspaceId?: string, sessionId?: string, status?: string, createdAt?: string): string {
     const wid = workspaceId || uuidv4().slice(0, 8);
     const sid = sessionId || uuidv4().slice(0, 8);
 
@@ -140,8 +141,8 @@ class WorkspaceServiceImpl {
     this.workspaces.set(wid, {
       id: wid,
       session_id: sid,
-      status: 'active',
-      created_at: new Date().toISOString(),
+      status: status || 'active',
+      created_at: createdAt ?? new Date().toISOString(),
     });
 
     const workspacePath = this.getWorkspacePath(sid, wid);
@@ -152,12 +153,71 @@ class WorkspaceServiceImpl {
     return wid;
   }
 
+  loadWorkspacesFromDatabase(): number {
+    let count = 0;
+    for (const session of conversationDAO.listSessionWorkspaceIds()) {
+      if (session.workspace_id) {
+        this.register(session.workspace_id, String(session.id), session.workspace_status ?? 'active', session.created_at);
+        count += 1;
+      }
+    }
+    return count;
+  }
+  removeBySessionId(sessionId: string): string | null {
+    for (const [wid, info] of this.workspaces) {
+      if (info.session_id === sessionId) {
+        this.workspaces.delete(wid);
+        return wid;
+      }
+    }
+    return null;
+  }
+
+  updateStatus(workspaceId: string, status: string): boolean {
+    const info = this.workspaces.get(workspaceId);
+    if (!info) return false;
+    info.status = status;
+    return conversationDAO.updateSessionWorkspaceStatus(workspaceId, status);
+  }
   getWorkspacePath(sessionId: string, workspaceId: string): string {
     return path.join(this.baseDir, sessionId, workspaceId);
   }
 
+  resolveWorkspaceInfo(workspaceId: string): WorkspaceInfo | null {
+    const cached = this.getWorkspaceInfo(workspaceId);
+    if (cached) return cached;
+
+    const sessionById = conversationDAO.getSessionById(Number(workspaceId));
+    if (sessionById?.workspace_id) {
+      this.register(sessionById.workspace_id, String(sessionById.id), sessionById.workspace_status ?? 'active', sessionById.created_at);
+      return this.getWorkspaceInfo(sessionById.workspace_id);
+    }
+
+    const conversation = conversationDAO.getConversationById(workspaceId);
+    if (conversation) {
+      const session = conversationDAO.getSessionById(conversation.session_id);
+      if (session?.workspace_id) {
+        this.register(session.workspace_id, String(session.id), session.workspace_status ?? 'active', session.created_at);
+        return this.getWorkspaceInfo(session.workspace_id);
+      }
+    }
+
+    return null;
+  }
   getWorkspaceInfo(workspaceId: string): WorkspaceInfo | null {
-    return this.workspaces.get(workspaceId) || null;
+    const cached = this.workspaces.get(workspaceId);
+    if (cached) {
+      return cached;
+    }
+
+    // 懒加载：服务重启后内存注册表为空，按 workspace_id 从数据库反查 session 重建注册。
+    const session = conversationDAO.getSessionByWorkspaceId(workspaceId);
+    if (session?.workspace_id) {
+      this.register(session.workspace_id, String(session.id), session.workspace_status ?? 'active', session.created_at);
+      return this.workspaces.get(workspaceId) ?? null;
+    }
+
+    return null;
   }
 
   getWorkspaceBySessionId(sessionId: string): WorkspaceInfo | null {

@@ -12,6 +12,7 @@ export class SessionController {
     return reply.status(201).send(success({
       id: session.id,
       title: session.title,
+      workspace_id: session.workspace_id,
       created_at: session.created_at,
       updated_at: session.updated_at,
     }));
@@ -37,6 +38,7 @@ export class SessionController {
       id: session.id,
       user_id: session.user_id,
       title: session.title,
+      workspace_id: session.workspace_id,
       created_at: session.created_at,
       updated_at: session.updated_at,
     }));

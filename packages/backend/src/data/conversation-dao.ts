@@ -5,6 +5,7 @@ export interface Session {
   user_id: number | null;
   title: string;
   workspace_id: string | null;
+  workspace_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -394,7 +395,7 @@ export class ConversationDAO {
 
   getSessionById(sessionId: number): Session | null {
     const stmt = db.prepare(`
-      SELECT id, user_id, title, workspace_id, created_at, updated_at
+      SELECT id, user_id, title, workspace_id, workspace_status, created_at, updated_at
       FROM sessions
       WHERE id = ?
     `);
@@ -402,9 +403,31 @@ export class ConversationDAO {
     return row ? this.rowToSession(row) : null;
   }
 
+  getSessionByWorkspaceId(workspaceId: string): Session | null {
+    const stmt = db.prepare(`
+      SELECT id, user_id, title, workspace_id, workspace_status, created_at, updated_at
+      FROM sessions
+      WHERE workspace_id = ?
+    `);
+    const row = stmt.get(workspaceId) as SessionRow | undefined;
+    return row ? this.rowToSession(row) : null;
+  }
+  updateSessionWorkspaceStatus(workspaceId: string, status: string): boolean {
+    const stmt = db.prepare('UPDATE sessions SET workspace_status = ? WHERE workspace_id = ?');
+    const result = stmt.run(status, workspaceId);
+    return (result.changes ?? 0) > 0;
+  }
+  listSessionWorkspaceIds(): Array<{ id: number; workspace_id: string | null; workspace_status: string | null; created_at: string }> {
+    const stmt = db.prepare(`
+      SELECT id, workspace_id, workspace_status, created_at
+      FROM sessions
+    `);
+    const rows = stmt.all() as Array<{ id: number; workspace_id: string | null; workspace_status: string | null; created_at: string }>;
+    return rows;
+  }
   listSessionsByUserId(userId: number): Session[] {
     const stmt = db.prepare(`
-      SELECT id, user_id, title, workspace_id, created_at, updated_at
+      SELECT id, user_id, title, workspace_id, workspace_status, created_at, updated_at
       FROM sessions
       WHERE user_id = ?
       ORDER BY updated_at DESC, id DESC
@@ -463,6 +486,7 @@ export class ConversationDAO {
       user_id: row.user_id,
       title: row.title,
       workspace_id: row.workspace_id,
+      workspace_status: row.workspace_status,
       created_at: row.created_at,
       updated_at: row.updated_at,
     };

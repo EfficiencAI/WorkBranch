@@ -2,6 +2,7 @@ import { buildApp } from './app';
 import { logger } from './core/logging';
 import { SQLiteDatabase } from './core/database/sqlite';
 import { sessionService } from './service/session-service';
+import { workspaceService } from './service/agent-service';
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
@@ -16,6 +17,11 @@ async function start() {
 
     console.log('[DEBUG-SERVER] about to call buildApp()');
     const app = await buildApp();
+
+    // 工作区注册表预加载：服务重启后从数据库恢复所有会话的工作区映射。
+    await SQLiteDatabase.getInstance();
+    const loadedWorkspaces = workspaceService.loadWorkspacesFromDatabase();
+    logger.info(`Loaded ${loadedWorkspaces} workspaces from database`);
     console.log('[DEBUG-SERVER] buildApp() returned OK');
 
     // Register shutdown endpoint for Android lifecycle hook

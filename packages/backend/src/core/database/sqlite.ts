@@ -9,6 +9,7 @@ export interface SessionRow {
   user_id: number | null;
   title: string;
   workspace_id: string | null;
+  workspace_status: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -272,11 +273,11 @@ export class SQLiteDatabase {
   static async getInstance(): Promise<SQLiteDatabase> {
     if (!SQLiteDatabase.instance) {
       SQLiteDatabase.instance = new SQLiteDatabase(appConfig.database.path);
-      await SQLiteDatabase.instance.init();
     }
+    // 实例可能由 getInstanceSync 后台创建，这里确保初始化真正完成（init 幂等）。
+    await SQLiteDatabase.instance.init();
     return SQLiteDatabase.instance;
   }
-
   static getInstanceSync(): SQLiteDatabase {
     if (!SQLiteDatabase.instance) {
       SQLiteDatabase.instance = new SQLiteDatabase(appConfig.database.path);
@@ -347,6 +348,7 @@ export class SQLiteDatabase {
         user_id INTEGER,
         title TEXT,
         workspace_id TEXT,
+        workspace_status TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY(user_id) REFERENCES users(id)
@@ -541,6 +543,7 @@ export class SQLiteDatabase {
     logger.info('Database tables created');
 
     this.migrateAddWorkspaceId();
+    this.migrateAddWorkspaceStatus();
     this.migrateAddMessageContentBlocks();
     this.migrateUsersForAuth();
     this.migrateAddChunkEmbedding();
@@ -600,6 +603,18 @@ export class SQLiteDatabase {
     }
   }
 
+  private migrateAddWorkspaceStatus(): void {
+    if (!this.db) return;
+    try {
+      const columns = this.db.pragma('table_info(sessions)');
+      if (!this.hasTableColumn(columns, 'workspace_status')) {
+        this.db.exec('ALTER TABLE sessions ADD COLUMN workspace_status TEXT');
+        logger.info('Migrated sessions table: added workspace_status column');
+      }
+    } catch (e) {
+      logger.warn(`migrateAddWorkspaceStatus skipped: ${e instanceof Error ? e.message : e}`);
+    }
+  }
   private migrateAddAssistantQuickQuestions(): void {
     const dbRef = this.db;
     if (!dbRef) return;

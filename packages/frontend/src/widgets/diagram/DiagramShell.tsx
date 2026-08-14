@@ -192,8 +192,12 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   }
 
   useEffect(() => {
+    if (!viewedConversationId && !hasConversationNodes) {
+      // 空会话：保留 enterSessionContext 设置的会话级工作区（首条消息前即可上传附件）
+      return
+    }
     void syncConversationContext(viewedConversationId)
-  }, [syncConversationContext, viewedConversationId])
+  }, [syncConversationContext, viewedConversationId, hasConversationNodes])
 
   const runSessionContext = useCallback(
     async (detail: Awaited<ReturnType<typeof selectSession>>) => {
