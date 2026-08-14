@@ -898,7 +898,7 @@ button {
   border: 0;
   border-radius: 6px;
   background: rgba(28, 38, 53, 0.78);
-  color: var(--app-text);
+  color: var(--app-text-soft);
   font-size: 12px;
 }
 
@@ -4899,7 +4899,7 @@ button {
 .message-composer--empty .message-composer__agent-select.ant-select {
   height: 24px;
   min-height: 24px;
-  color: var(--app-text);
+  color: var(--app-text-soft);
 }
 
 .message-composer__empty-toolbar {
