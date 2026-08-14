@@ -2,6 +2,7 @@ import type { AgentState, ToolCallSpec, ToolRecord } from '../../state/agent-sta
 import { logger } from '../../../../core/logging';
 import { llmService as defaultLlmService } from '../../service/llm-service';
 import { settingsService as defaultSettingsService } from '../../../settings-service';
+import { SegmentType } from '../../../session-service/canonical';
 import { getAllowedTools } from '../subgraphs/tool-registry';
 import {
   buildTaggedPrompt,
@@ -92,6 +93,10 @@ export function createReasoningNode(options: ReasoningNodeOptions = {}) {
       messages: Array<{ role: string; content: string }>,
       systemPrompt?: string,
     ) => Promise<string>;
+    chatStream?: (
+      messages: Array<{ role: string; content: string }>,
+      systemPrompt?: string,
+    ) => AsyncGenerator<string>;
   };
 
   return async (state: AgentState): Promise<Partial<AgentState>> => {
@@ -150,7 +155,7 @@ export function createReasoningNode(options: ReasoningNodeOptions = {}) {
       };
     }
 
-    if (!llm.chat && !llm.structuredOutput) {
+    if (!llm.chatStream && !llm.structuredOutput) {
       return terminalUpdate('无法自动决策下一步：LLM 服务未配置。');
     }
 
@@ -182,7 +187,31 @@ export function createReasoningNode(options: ReasoningNodeOptions = {}) {
     } catch {
       useStructured = false;
     }
+    const sendThinking = async (
+      type: SegmentType,
+      content: string,
+      metadata: Record<string, unknown> = {},
+    ): Promise<void> => {
+      const sendMessage = (options.messageContext?.send_message as
+        | ((content: string, type: SegmentType, metadata?: Record<string, unknown>) => Promise<void>)
+        | undefined);
+      if (sendMessage) {
+        await sendMessage(content, type, { agent_type: agentType, ...metadata });
+      }
+    };
+
+    const streamChatDeltas = async (): Promise<string> => {
+      let acc = '';
+      const stream = llm.chatStream!([{ role: 'user', content: userMessageText }], systemPrompt);
+      for await (const chunk of stream) {
+        acc += chunk;
+        await sendThinking(SegmentType.THINKING_DELTA, chunk, { is_delta: true });
+      }
+      return acc;
+    };
+
     let rawResponse = '';
+    await sendThinking(SegmentType.THINKING_START, '', { is_start: true });
     try {
       if (useStructured && llm.structuredOutput) {
         try {
@@ -192,17 +221,18 @@ export function createReasoningNode(options: ReasoningNodeOptions = {}) {
             systemPrompt,
           );
           rawResponse = typeof parsedObj === 'string' ? parsedObj : JSON.stringify(parsedObj);
+          await sendThinking(SegmentType.THINKING_DELTA, rawResponse, { is_delta: true });
         } catch (structuredErr) {
           // 结构化输出不受供应商支持（如 thinking 模式的 tool_choice 限制），降级普通 chat + JSON 解析
-          if (!llm.chat) throw structuredErr;
+          if (!llm.chatStream) throw structuredErr;
           logger.warn({
             event: 'v4.reasoning.structured_output_fallback',
             error: String(structuredErr).slice(0, 300),
           });
-          rawResponse = await llm.chat!([{ role: 'user', content: userMessageText }], systemPrompt);
+          rawResponse = await streamChatDeltas();
         }
       } else {
-        rawResponse = await llm.chat!([{ role: 'user', content: userMessageText }], systemPrompt);
+        rawResponse = await streamChatDeltas();
       }
       rawResponse = String(rawResponse ?? '').trim();
       if (!rawResponse) throw new Error('LLM 返回了空响应');
@@ -221,6 +251,8 @@ export function createReasoningNode(options: ReasoningNodeOptions = {}) {
         parse_error_raw: rawFallback,
         _route_target: 'reasoning',
       };
+    } finally {
+      await sendThinking(SegmentType.THINKING_END, '', { is_end: true, result: rawResponse });
     }
 
     logger.info({

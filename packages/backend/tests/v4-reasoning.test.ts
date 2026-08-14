@@ -188,7 +188,7 @@ describe('v4 structured output fallback', () => {
         structuredOutput: async () => {
           throw new Error('tool_choice not supported in thinking mode');
         },
-        chat: async () => '{"type":"text","content":"降级完成"}',
+        chatStream: async function* () { yield '{"type":"text","content":"降级完成"}'; },
       },
       settingsService: {
         get: (key: string) => (key === 'agent:structured_output' ? true : undefined),
@@ -203,14 +203,35 @@ describe('v4 structured output fallback', () => {
     const structured = vi.fn(async () => {
       throw new Error('should not be called');
     });
-    const chat = vi.fn(async () => '{"type":"text","content":"chat完成"}');
+    const chatStream = vi.fn(async function* () { yield '{"type":"text","content":"chat完成"}'; });
     const node = createReasoningNode({
-      llmService: { structuredOutput: structured, chat },
+      llmService: { structuredOutput: structured, chatStream },
     });
     const update = await node(baseState());
     expect(structured).not.toHaveBeenCalled();
-    expect(chat).toHaveBeenCalledTimes(1);
+    expect(chatStream).toHaveBeenCalledTimes(1);
     expect(update.final_reply).toBe('chat完成');
+  });
+});
+
+describe('v4 reasoning thinking streaming', () => {
+  it('emits thinking_start, per-chunk deltas, and thinking_end', async () => {
+    const sent: Array<{ type: string; content: string }> = [];
+    const sendMessage = vi.fn(async (content: string, type: string) => {
+      sent.push({ type, content });
+    });
+    const node = createReasoningNode({
+      llmService: {
+        chatStream: async function* () {
+          yield '{"type":"text","content":"stream done"}';
+        },
+      },
+      messageContext: { send_message: sendMessage as never },
+    });
+    const update = await node(baseState());
+    expect(update.final_reply).toBe('stream done');
+    expect(sent.map((e) => e.type)).toEqual(['thinking_start', 'thinking_delta', 'thinking_end']);
+    expect(sent[1].content).toContain('stream done');
   });
 });
 
