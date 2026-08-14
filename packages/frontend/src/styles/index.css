@@ -794,6 +794,7 @@ button {
 }
 
 .focus-overlay .message-composer--focused textarea {
+  width: calc(100% - 10px);
   margin: 5px 5px 0;
   min-height: 60px !important;
   max-height: 86px;
@@ -4894,7 +4895,7 @@ button {
 
 .message-composer--empty .message-composer__agent-select.ant-select,
 .message-composer--empty .message-composer__agent-select .ant-select-content {
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .message-composer--empty .message-composer__agent-select.ant-select {
@@ -4916,6 +4917,19 @@ button {
   min-width: 26px;
   height: 26px;
   padding: 0;
+}
+
+.message-composer--empty .message-composer__tool-btn.ant-btn {
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+}
+
+.message-composer--empty .message-composer__send-btn svg {
+  width: 10px;
+  height: 10px;
 }
 
 @media screen and (max-width: 767px) {
