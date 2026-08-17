@@ -782,30 +782,31 @@ button {
   overflow: hidden;
   gap: 0;
   padding: 0;
-  border: 1px solid var(--app-border-strong);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
-  background: rgba(18, 25, 38, 0.98);
-  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.24);
+  background: rgba(18, 25, 38, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .focus-overlay .message-composer--focused:focus-within {
-  border-color: rgba(96, 165, 250, 0.62);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1), 0 14px 34px rgba(0, 0, 0, 0.24);
+  border-color: rgba(96, 165, 250, 0.56);
+  background: rgba(18, 25, 38, 0.98);
 }
 
 .focus-overlay .message-composer--focused textarea {
-  width: calc(100% - 10px);
-  margin: 5px 5px 0;
-  min-height: 60px !important;
+  width: 100%;
+  margin: 0;
+  min-height: 56px !important;
   max-height: 86px;
-  padding: 11px 13px 6px;
+  padding: 12px 14px 7px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   outline: 0;
   color: var(--app-text);
-  background: rgba(10, 15, 25, 0.85);
+  background: transparent;
   box-shadow: none;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.5;
 }
 
@@ -814,8 +815,8 @@ button {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  min-height: 39px;
-  padding: 0 5px 3px 7px;
+  min-height: 46px;
+  padding: 4px 6px 6px 7px;
 }
 
 .focus-overlay .message-composer__toolbar-left,
@@ -854,24 +855,33 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
-  padding: 0 6px;
-  color: var(--app-text-muted);
-  font-size: 10px;
+  min-height: 34px;
+  padding: 0 9px;
+  border-radius: 7px;
+  color: rgba(100, 116, 139, 0.92);
+  font-size: 11px;
+  font-weight: 450;
   white-space: nowrap;
   cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.focus-overlay .message-composer__context-toggle:hover,
+.focus-overlay .message-composer__context-toggle:focus-within {
+  color: var(--app-text-soft);
+  background: rgba(148, 163, 184, 0.07);
 }
 
 .message-composer__context-toggle .ant-switch.ant-switch-checked {
-  background: #059669;
+  background: rgba(52, 211, 153, 0.48);
 }
 
 .focus-overlay .message-composer--focused .ant-switch.ant-switch-small {
   --ant-switch-track-height-sm: 14px;
-  --ant-switch-track-min-width-sm: 28px;
+  --ant-switch-track-min-width-sm: 24px;
   --ant-switch-handle-size-sm: 10px;
   height: 14px;
-  min-width: 28px;
+  min-width: 24px;
 }
 
 .focus-overlay .message-composer--focused .ant-switch.ant-switch-small .ant-switch-handle {
@@ -891,37 +901,63 @@ button {
 }
 
 .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select {
-  width: 108px;
-  min-width: 108px !important;
-  height: 24px;
-  min-height: 24px;
+  width: 104px;
+  min-width: 104px !important;
+  height: 34px;
+  min-height: 34px;
   padding-inline: 7px;
   border: 0;
-  border-radius: 6px;
-  background: rgba(28, 38, 53, 0.78);
+  border-radius: 7px;
+  color: var(--app-text-muted);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 500;
+  transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.focus-overlay .message-composer--focused .message-composer__agent-select.ant-select:hover,
+.focus-overlay .message-composer--focused .message-composer__agent-select.ant-select-focused,
+.focus-overlay .message-composer--focused .message-composer__agent-select.ant-select-open {
+  border-color: transparent;
   color: var(--app-text-soft);
-  font-size: 12px;
+  background: rgba(148, 163, 184, 0.07);
 }
 
 .focus-overlay .message-composer__send-btn.ant-btn {
   display: grid;
   place-items: center;
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
   border: 0;
-  border-radius: 6px;
+  border-radius: 7px;
   color: #07120d;
   background: #34d399;
   box-shadow: none;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
-.focus-overlay .message-composer__send-btn.ant-btn:hover,
-.focus-overlay .message-composer__send-btn.ant-btn:focus-visible {
+.focus-overlay .message-composer__send-btn.ant-btn:hover:not(:disabled),
+.focus-overlay .message-composer__send-btn.ant-btn:focus-visible:not(:disabled) {
   color: #07120d;
   background: #6ee7b7;
+}
+
+.focus-overlay .message-composer__send-btn.ant-btn:disabled {
+  color: rgba(100, 116, 139, 0.92);
+  background: rgba(148, 163, 184, 0.09);
+}
+
+.focus-overlay .message-composer__send-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.focus-overlay .message-composer__tool-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .focus-overlay .message-composer__send-btn.ant-btn-dangerous {
@@ -1121,12 +1157,15 @@ button {
   }
 
   .focus-overlay .message-composer__context-toggle {
-    padding-inline: 3px;
+    justify-content: center;
+    width: 34px;
+    min-width: 34px;
+    padding-inline: 0;
   }
 
   .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select {
-    width: 88px;
-    min-width: 88px !important;
+    width: 92px;
+    min-width: 92px !important;
   }
 
   .focus-overlay .message-composer__tool-btn.ant-btn {
@@ -1138,10 +1177,10 @@ button {
   }
 
   .focus-overlay .message-composer__send-btn.ant-btn {
-    width: 26px !important;
-    min-width: 26px !important;
-    height: 26px !important;
-    min-height: 26px !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    height: 34px !important;
+    min-height: 34px !important;
     padding: 0 !important;
   }
 }
@@ -1283,7 +1322,10 @@ button {
 }
 
 .diagram-shell__nav--focused .diagram-shell__rail-button--exit.ant-btn {
+  width: 36px;
+  min-width: 36px;
   height: 36px;
+  min-height: 36px;
 }
 
 .diagram-shell__exit-focus-overlay {
@@ -1327,8 +1369,16 @@ button {
 }
 
 .diagram-shell__nav--focused {
+  top: 9px;
   left: auto;
   right: 14px;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 3px;
 }
 
 .diagram-shell__nav--focused .diagram-shell__nav-head {
@@ -2509,12 +2559,12 @@ button {
 }
 
 .message-composer--focused .message-composer__agent-select .ant-select-content {
-  font-size: inherit;
-  line-height: 1;
+  font-size: 11px;
+  line-height: 17px;
 }
 
 .message-composer--focused .message-composer__agent-select .ant-select-suffix {
-  font-size: 0.9em;
+  font-size: 12px;
 }
 
 .message-composer__agent-select.ant-select:hover,
@@ -3039,9 +3089,15 @@ button {
     width: 46px;
   }
 
-  .diagram-shell__nav--focused {
+  .diagram-shell__nav--focused.diagram-shell__nav--mobile {
+    top: calc(env(safe-area-inset-top, 0px) + 9px);
     left: auto;
     right: 10px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    padding: 3px;
   }
 
   .diagram-shell__brand.ant-btn {
@@ -4860,15 +4916,15 @@ button {
 .message-composer--empty {
   overflow: hidden;
   padding: 0;
-  border: 1px solid var(--app-border-strong);
+  border: 1px solid var(--app-border);
   border-radius: 8px;
   background: var(--app-panel-bg-strongest);
-  box-shadow: var(--app-shadow-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  transition: border-color 150ms ease, background-color 150ms ease;
 }
 
 .message-composer--empty:focus-within {
-  border-color: rgba(96, 165, 250, 0.68);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.11), var(--app-shadow-md);
+  border-color: rgba(96, 165, 250, 0.56);
 }
 
 .message-composer--empty .ant-input-textarea,
@@ -4878,16 +4934,18 @@ button {
 }
 
 .message-composer--empty textarea.ant-input {
-  width: calc(100% - 10px);
-  margin: 5px 5px 0;
-  min-height: 60px !important;
+  width: 100%;
+  margin: 0;
+  min-height: 66px !important;
   max-height: 150px;
-  padding: 11px 13px 6px;
+  padding: 13px 14px 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: 0;
   outline: 0;
   color: var(--app-text);
-  background: rgba(10, 15, 25, 0.85);
+  background: transparent;
+  box-shadow: none;
+  transition: none;
   font-size: 16px;
   line-height: 1.5;
   resize: none;
@@ -4899,37 +4957,70 @@ button {
 }
 
 .message-composer--empty .message-composer__agent-select.ant-select {
-  height: 24px;
-  min-height: 24px;
+  width: 104px;
+  min-width: 104px !important;
+  height: 34px;
+  min-height: 34px;
+  padding-inline: 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--app-text-muted);
+  background: transparent;
+  font-weight: 500;
+  transition: color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.message-composer--empty .message-composer__agent-select.ant-select:hover,
+.message-composer--empty .message-composer__agent-select.ant-select-focused,
+.message-composer--empty .message-composer__agent-select.ant-select-open {
+  border-color: transparent;
   color: var(--app-text-soft);
+  background: rgba(148, 163, 184, 0.07);
 }
 
 .message-composer__empty-toolbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 39px;
-  padding: 0 5px 3px 7px;
+  min-height: 44px;
+  padding: 3px 6px 6px 7px;
 }
 
 .message-composer--empty .message-composer__send-btn.ant-btn {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
+  border: 0;
+  border-radius: 7px;
+  transition: color 150ms ease, background-color 150ms ease;
+}
+
+.message-composer--empty .message-composer__send-btn.ant-btn:disabled {
+  color: rgba(100, 116, 139, 0.92);
+  background: rgba(148, 163, 184, 0.09);
 }
 
 .message-composer--empty .message-composer__tool-btn.ant-btn {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
+  border: 0;
+  border-radius: 7px;
+  transition: color 150ms ease, background-color 150ms ease;
 }
 
 .message-composer--empty .message-composer__send-btn svg {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
+}
+
+.message-composer--empty .message-composer__tool-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 @media screen and (max-width: 767px) {
@@ -4951,10 +5042,10 @@ button {
   }
 
   .message-composer--empty .message-composer__send-btn.ant-btn {
-    width: 26px;
-    min-width: 26px;
-    height: 26px;
-    min-height: 26px;
+    width: 34px;
+    min-width: 34px;
+    height: 34px;
+    min-height: 34px;
   }
 
   .message-composer--empty .message-composer__tool-btn.ant-btn {
@@ -4962,5 +5053,10 @@ button {
     min-width: 34px;
     height: 34px;
     min-height: 34px;
+  }
+
+  .message-composer--empty .message-composer__agent-select.ant-select {
+    width: 92px;
+    min-width: 92px !important;
   }
 }

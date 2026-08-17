@@ -1587,8 +1587,8 @@ function FlowViewport({
   )
   const initialFitViewOptions = useMemo(
     () => responsive.isMobile && rootConversation
-      ? { nodes: [{ id: rootConversation.conversationId }], minZoom: 1, maxZoom: 1, padding: 0 }
-      : { maxZoom: 1, padding: 0.1 },
+      ? { nodes: [{ id: rootConversation.conversationId }], minZoom: 0.753, maxZoom: 0.753, padding: 0 }
+      : { maxZoom: 0.753, padding: 0.1 },
     [responsive.isMobile, rootConversation],
   )
 
@@ -1607,7 +1607,7 @@ function FlowViewport({
       void reactFlow.setViewport({
         x: (viewportWidth - nodeWidth) / 2 - (position.x - nodeWidth / 2),
         y: 94 - (position.y - nodeHeight / 2),
-        zoom: 1,
+        zoom: 0.753,
       })
     })
 

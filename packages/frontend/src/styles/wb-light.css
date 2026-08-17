@@ -169,12 +169,13 @@
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer--focused {
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 14px 34px rgba(30, 41, 59, 0.12);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer--focused:focus-within {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12), 0 14px 34px rgba(30, 41, 59, 0.12);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer__tool-btn--active.ant-btn {
@@ -183,15 +184,39 @@
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select {
-  background: rgba(241, 245, 249, 0.9);
+  background: transparent;
+}
+
+:root[data-theme='light'] .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select:hover,
+:root[data-theme='light'] .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select-focused,
+:root[data-theme='light'] .focus-overlay .message-composer--focused .message-composer__agent-select.ant-select-open,
+:root[data-theme='light'] .focus-overlay .message-composer__context-toggle:hover,
+:root[data-theme='light'] .focus-overlay .message-composer__context-toggle:focus-within {
+  background: rgba(15, 23, 42, 0.05);
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer--focused textarea {
-  background: rgba(226, 232, 240, 0.72);
+  background: transparent;
 }
 
-:root[data-theme='light'] .message-composer--empty textarea.ant-input {
-  background: rgba(226, 232, 240, 0.72);
+:root[data-theme='light'] .message-composer--empty {
+  box-shadow: 0 8px 24px rgba(30, 41, 59, 0.08);
+}
+
+:root[data-theme='light'] .message-composer--empty .message-composer__agent-select.ant-select {
+  background: transparent;
+}
+
+:root[data-theme='light'] .message-composer--empty .message-composer__agent-select.ant-select:hover,
+:root[data-theme='light'] .message-composer--empty .message-composer__agent-select.ant-select-focused,
+:root[data-theme='light'] .message-composer--empty .message-composer__agent-select.ant-select-open {
+  background: rgba(15, 23, 42, 0.05);
+}
+
+:root[data-theme='light'] .message-composer--empty .message-composer__send-btn.ant-btn:disabled,
+:root[data-theme='light'] .focus-overlay .message-composer__send-btn.ant-btn:disabled {
+  color: rgba(71, 85, 105, 0.72);
+  background: rgba(100, 116, 139, 0.1);
 }
 
 :root[data-theme='light'] .focus-overlay .message-composer__send-btn.ant-btn-dangerous {
