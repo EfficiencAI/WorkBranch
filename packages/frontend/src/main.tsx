@@ -7,6 +7,7 @@ import { frontendLogger } from './shared/logging/logger'
 import { AUTH_TOKEN_KEY, LOCAL_OFFLINE_TOKEN, waitForBackendReady } from './shared/api/config'
 import './styles/index.css'
 import './styles/wb-light.css'
+import './styles/canvas-guide.css'
 import './styles/workassistant.css'
 import './styles/onboarding.css'
 

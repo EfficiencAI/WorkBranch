@@ -11,6 +11,7 @@ export type OnboardingStep = 'api_key' | 'base_url' | 'model'
 type OnboardingContextValue = {
   visible: boolean
   currentStep: OnboardingStep
+  closeSignal: number
   showOnboarding: () => void
   completeOnboarding: () => void
   skipOnboarding: () => void
@@ -46,6 +47,7 @@ export function OnboardingProvider({ children }: PropsWithChildren) {
   const [step, setStep] = useState<OnboardingStep>('api_key')
   const [completed, setCompleted] = useState(() => getStorageBool(ONBOARDING_COMPLETED_KEY, false))
   const [skipped, setSkipped] = useState(() => getStorageBool(ONBOARDING_SKIPPED_KEY, false))
+  const [closeSignal, setCloseSignal] = useState(0)
   const configured = isLlmConfigured(settings)
 
   const shouldShow = !loading && !completed && !skipped && !configured
@@ -60,19 +62,21 @@ export function OnboardingProvider({ children }: PropsWithChildren) {
     setCompleted(true)
     setSkipped(false)
     hideForced()
+    setCloseSignal((signal) => signal + 1)
   }, [hideForced])
 
   const skipOnboarding = useCallback(() => {
     localStorage.setItem(ONBOARDING_SKIPPED_KEY, 'true')
     setSkipped(true)
     hideForced()
+    setCloseSignal((signal) => signal + 1)
   }, [hideForced])
 
   const goToStep = useCallback((s: OnboardingStep) => setStep(s), [])
 
   const value = useMemo<OnboardingContextValue>(
-    () => ({ visible, currentStep: step, showOnboarding, completeOnboarding, skipOnboarding, goToStep }),
-    [visible, step, showOnboarding, completeOnboarding, skipOnboarding, goToStep],
+    () => ({ visible, currentStep: step, closeSignal, showOnboarding, completeOnboarding, skipOnboarding, goToStep }),
+    [visible, step, closeSignal, showOnboarding, completeOnboarding, skipOnboarding, goToStep],
   )
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>

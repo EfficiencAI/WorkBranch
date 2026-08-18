@@ -1,5 +1,5 @@
 import { App as AntdApp, Button, Checkbox, ConfigProvider, Drawer, Space, Tooltip, Typography, theme as antdTheme } from 'antd'
-import { FullscreenExitOutlined, HistoryOutlined, SettingOutlined } from '@ant-design/icons'
+import { FullscreenExitOutlined, HistoryOutlined, QuestionCircleOutlined, SettingOutlined } from '@ant-design/icons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useSettings } from '../../app/settings'
@@ -32,6 +32,8 @@ import { SettingsPage } from '../../pages/settings/SettingsPage'
 import { useResponsive } from '../../shared/lib'
 import { frontendLogger } from '../../shared/logging/logger'
 import { ConversationCanvas, buildTreeLayout } from './ConversationCanvas'
+import { CanvasGuide } from './CanvasGuide'
+import type { CanvasGuideStep } from './CanvasGuide'
 import { SessionSidebar } from './SessionSidebar'
 import { ProductRail } from '../product-rail/ProductRail'
 import type { ProductId } from '../product-rail/ProductRail'
@@ -58,7 +60,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const location = useLocation()
   const navigate = useNavigate()
   const { settings } = useSettings()
-  const { showOnboarding } = useOnboarding()
+  const { showOnboarding, closeSignal } = useOnboarding()
   const responsive = useResponsive()
   const sessions = useSessionStore(selectSessionList)
   const selectedSessionId = useSessionStore(selectCurrentSessionId)
@@ -91,10 +93,28 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
   const [activeSidebar, setActiveSidebar] = useState<SidebarMode | null>(view === 'settings' ? 'settings' : null)
   const [navPathTailId, setNavPathTailId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<AgentId>('builtin')
+  const [canvasGuideStep, setCanvasGuideStep] = useState<CanvasGuideStep>('idle')
 
   const isSettingsRoute = location.pathname === '/settings'
   const showWorkspaceHud = settings?.ui && typeof settings.ui === 'object' && 'show_workspace_hud' in settings.ui ? settings.ui.show_workspace_hud !== false : true
   const isFocused = focusedConversationId !== null
+
+  useEffect(() => {
+    if (closeSignal === 0) return
+    const timer = window.setTimeout(() => {
+      setActiveSidebar(null)
+      setCanvasGuideStep('nudge')
+    }, 280)
+    return () => window.clearTimeout(timer)
+  }, [closeSignal])
+
+  useEffect(() => {
+    if (!isFocused) return
+    const frame = window.requestAnimationFrame(() => {
+      setCanvasGuideStep('idle')
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [isFocused])
 
   // 安卓返回键：优先关闭侧栏/设置页，其次退出聚焦回概览，最后二次确认退出
   useEffect(() => {
@@ -555,7 +575,7 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
               />
             </Tooltip>
           </nav>
-        ) : (
+        ) : canvasGuideStep === 'complete' ? null : (
             <ProductRail product="wb" onSwitch={handleProductSwitch}>
               <Tooltip title="会话历史" placement="right">
                 <Button
@@ -575,8 +595,30 @@ export function DiagramShell({ onSendError, onRequestError, view, initialLoading
                   onClick={() => openSidebar('settings')}
                 />
               </Tooltip>
+              <span className="diagram-shell__rail-divider" aria-hidden="true" />
+              <Tooltip title={responsive.isMobile ? null : '\u65b0\u624b\u5f15\u5bfc'} placement="right">
+                <Button
+                  type="text"
+                  data-testid="canvas-guide-button"
+                  className={`diagram-shell__rail-button diagram-shell__rail-button--guide ${canvasGuideStep !== 'idle' ? 'diagram-shell__rail-button--active' : ''}`}
+                  aria-label={'\u5f00\u59cb\u65b0\u624b\u5f15\u5bfc'}
+                  icon={<QuestionCircleOutlined />}
+                  onClick={() => {
+                    setActiveSidebar(null)
+                    setCanvasGuideStep('nudge')
+                  }}
+                />
+              </Tooltip>
             </ProductRail>
         )}
+
+        {!isFocused ? (
+          <CanvasGuide
+            step={canvasGuideStep}
+            isMobile={responsive.isMobile}
+            onStepChange={setCanvasGuideStep}
+          />
+        ) : null}
 
         {!isFocused ? (
           <Drawer
